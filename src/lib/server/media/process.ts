@@ -38,6 +38,18 @@ const DEMUXERS: Record<string, string> = {
 	'video/webm': 'matroska,webm'
 };
 
+const FFMPEG_TIMEOUT_MS = 15_000;
+
+async function runFfmpeg(bin: string, args: string[]): Promise<void> {
+	try {
+		await run(bin, args, { timeout: FFMPEG_TIMEOUT_MS });
+	} catch (e) {
+		const err = e as Error & { stderr?: string; killed?: boolean };
+		const detail = err.killed ? 'timed out' : err.stderr?.trim() || err.message;
+		throw new Error(`ffmpeg failed: ${detail}`, { cause: e });
+	}
+}
+
 async function extractVideoFrame(buf: Buffer): Promise<Buffer> {
 	const sniffed = await sniffMedia(buf);
 	const demuxer = sniffed?.kind === 'video' ? DEMUXERS[sniffed.mime] : undefined;
@@ -48,7 +60,7 @@ async function extractVideoFrame(buf: Buffer): Promise<Buffer> {
 		const input = join(dir, 'input');
 		const frame = join(dir, 'frame.png');
 		await writeFile(input, buf);
-		await run(ffmpegPath, [
+		await runFfmpeg(ffmpegPath, [
 			'-v',
 			'error',
 			'-nostdin',
@@ -65,7 +77,11 @@ async function extractVideoFrame(buf: Buffer): Promise<Buffer> {
 			'-y',
 			frame
 		]);
-		return await readFile(frame);
+		try {
+			return await readFile(frame);
+		} catch {
+			throw new Error('no video frame extracted');
+		}
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
