@@ -19,6 +19,7 @@ let rotatedJpg: Buffer;
 let png: Buffer;
 let gif: Buffer;
 let mp4: Buffer;
+let webm: Buffer;
 
 beforeAll(async () => {
 	dir = await mkdtemp(join(tmpdir(), 'loki-fixtures-'));
@@ -46,6 +47,20 @@ beforeAll(async () => {
 		out
 	]);
 	mp4 = await readFile(out);
+	const outWebm = join(dir, 'v.webm');
+	await run(ffmpegPath!, [
+		'-v',
+		'error',
+		'-f',
+		'lavfi',
+		'-i',
+		'color=c=black:s=160x90:d=0.2:r=10',
+		'-c:v',
+		'libvpx',
+		'-y',
+		outWebm
+	]);
+	webm = await readFile(outWebm);
 });
 
 afterAll(() => rm(dir, { recursive: true, force: true }));
@@ -98,5 +113,25 @@ describe('processMedia', () => {
 		const r = await processMedia(mp4, 'video');
 		expect((await fileTypeFromBuffer(r.thumb))?.mime).toBe('image/webp');
 		expect(r).toMatchObject({ width: 320, height: 180 });
+	});
+
+	it('extracts a WebP poster from a webm video', async () => {
+		const r = await processMedia(webm, 'video');
+		expect((await fileTypeFromBuffer(r.thumb))?.mime).toBe('image/webp');
+		expect(r).toMatchObject({ width: 160, height: 90 });
+	});
+
+	it('rejects a buffer that sniffs as mp4 but is not decodable', async () => {
+		const fake = Buffer.concat([
+			Buffer.from([0, 0, 0, 0x18]),
+			Buffer.from('ftypmp42\0\0\0\0mp42isom'),
+			Buffer.from('#EXTM3U\n#EXTINF:1,\nfile:///etc/passwd\n')
+		]);
+		expect(await sniffMedia(fake)).toMatchObject({ kind: 'video' });
+		await expect(processMedia(fake, 'video')).rejects.toThrow();
+	});
+
+	it('rejects video kind for non-video bytes', async () => {
+		await expect(processMedia(jpg, 'video')).rejects.toThrow();
 	});
 });

@@ -32,14 +32,39 @@ export async function sniffMedia(
 	return type && kind ? { kind, mime: type.mime, ext: type.ext } : null;
 }
 
+// Demuxer names ffmpeg must use, so a file cannot be auto-probed as another format (e.g. HLS).
+const DEMUXERS: Record<string, string> = {
+	'video/mp4': 'mp4',
+	'video/webm': 'matroska,webm'
+};
+
 async function extractVideoFrame(buf: Buffer): Promise<Buffer> {
+	const sniffed = await sniffMedia(buf);
+	const demuxer = sniffed?.kind === 'video' ? DEMUXERS[sniffed.mime] : undefined;
+	if (!demuxer) throw new Error('not a supported video container');
 	if (!ffmpegPath) throw new Error('ffmpeg binary not available for this platform');
 	const dir = await mkdtemp(join(tmpdir(), 'loki-media-'));
 	try {
 		const input = join(dir, 'input');
 		const frame = join(dir, 'frame.png');
 		await writeFile(input, buf);
-		await run(ffmpegPath, ['-v', 'error', '-i', input, '-ss', '0', '-frames:v', '1', '-y', frame]);
+		await run(ffmpegPath, [
+			'-v',
+			'error',
+			'-nostdin',
+			'-protocol_whitelist',
+			'file,pipe',
+			'-f',
+			demuxer,
+			'-i',
+			input,
+			'-ss',
+			'0',
+			'-frames:v',
+			'1',
+			'-y',
+			frame
+		]);
 		return await readFile(frame);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
