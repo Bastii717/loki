@@ -10,7 +10,37 @@
 		resolve(`/meme/${item.id}` as '/') /* route arrives with the detail page */
 	);
 	const hidden = $derived(item.blurred !== null && !revealed);
-	const scoreLabel = $derived(item.score > 0 ? `+${item.score}` : String(item.score));
+	// svelte-ignore state_referenced_locally
+	let score = $state(item.score);
+	// svelte-ignore state_referenced_locally
+	let userVote = $state<-1 | 0 | 1>(item.userVote);
+	let pending = false;
+	const scoreLabel = $derived(score > 0 ? `+${score}` : String(score));
+
+	async function vote(dir: 1 | -1) {
+		if (pending) return;
+		pending = true;
+		const prev = { score, userVote };
+		const next = userVote === dir ? 0 : dir;
+		score += next - userVote;
+		userVote = next;
+		try {
+			const res = await fetch(`/api/memes/${item.id}/vote`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ value: next })
+			});
+			if (!res.ok) throw new Error(String(res.status));
+			const data = (await res.json()) as { score: number; userVote: -1 | 0 | 1 };
+			score = data.score;
+			userVote = data.userVote;
+		} catch {
+			score = prev.score;
+			userVote = prev.userVote;
+		} finally {
+			pending = false;
+		}
+	}
 </script>
 
 <article class="card">
@@ -61,17 +91,19 @@
 			<button
 				type="button"
 				class="arrow up"
-				class:active={item.userVote === 1}
+				class:active={userVote === 1}
 				aria-label="Upvote"
-				aria-pressed={item.userVote === 1}>▲</button
+				aria-pressed={userVote === 1}
+				onclick={() => vote(1)}>▲</button
 			>
-			<b class="score" class:pos={item.score > 0} class:neg={item.score < 0}>{scoreLabel}</b>
+			<b class="score" class:pos={score > 0} class:neg={score < 0}>{scoreLabel}</b>
 			<button
 				type="button"
 				class="arrow down"
-				class:active={item.userVote === -1}
+				class:active={userVote === -1}
 				aria-label="Downvote"
-				aria-pressed={item.userVote === -1}>▼</button
+				aria-pressed={userVote === -1}
+				onclick={() => vote(-1)}>▼</button
 			>
 		</div>
 	</div>
