@@ -14,7 +14,8 @@ export const SESSION_COOKIE_OPTIONS = {
 	path: '/',
 	httpOnly: true,
 	secure: true,
-	sameSite: 'lax'
+	sameSite: 'lax',
+	maxAge: 30 * 24 * 60 * 60 // seconds, matches the session row TTL
 } as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -36,6 +37,13 @@ export async function createSession(userId: number): Promise<string> {
 
 /** Returns the session's user, or null if unknown/expired. Renews sessions nearing expiry. */
 export async function validateSession(token: string): Promise<SessionUser | null> {
+	return (await resolveSession(token))?.user ?? null;
+}
+
+/** Like validateSession, but also reports whether the expiry was extended (cookie must be re-set). */
+export async function resolveSession(
+	token: string
+): Promise<{ user: SessionUser; renewed: boolean } | null> {
 	if (!token) return null;
 	const tokenHash = hashToken(token);
 	const [row] = await db
@@ -55,13 +63,17 @@ export async function validateSession(token: string): Promise<SessionUser | null
 		await db.delete(sessions).where(eq(sessions.tokenHash, tokenHash));
 		return null;
 	}
-	if (remaining < RENEW_BELOW_MS) {
+	const renewed = remaining < RENEW_BELOW_MS;
+	if (renewed) {
 		await db
 			.update(sessions)
 			.set({ expiresAt: new Date(Date.now() + SESSION_TTL_MS) })
 			.where(eq(sessions.tokenHash, tokenHash));
 	}
-	return { id: row.id, username: row.username, role: row.role as SessionUser['role'] };
+	return {
+		user: { id: row.id, username: row.username, role: row.role as SessionUser['role'] },
+		renewed
+	};
 }
 
 export async function destroySession(token: string): Promise<void> {
