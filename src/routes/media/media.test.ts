@@ -6,9 +6,13 @@ import { createSession } from '../../lib/server/auth/session';
 import { resetDb, setupDb, testUser } from '../../lib/server/db/test-utils';
 import { env } from '../../lib/server/env';
 import { deleteObjects, putObject } from '../../lib/server/storage';
+import { ensureBucket } from '../../lib/server/storage-test-utils';
 import { GET } from './[...key]/+server';
 
-beforeAll(setupDb);
+beforeAll(async () => {
+	await setupDb();
+	await ensureBucket();
+});
 beforeEach(resetDb);
 
 const BYTES = 'MEDIA-BYTES-FIXTURE';

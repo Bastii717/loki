@@ -1,16 +1,9 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { CreateBucketCommand } from '@aws-sdk/client-s3';
-import { deleteObjects, getPresignedUrl, mediaKey, putObject, s3Client } from './storage';
-import { env } from './env';
+import { deleteObjects, getPresignedUrl, mediaKey, putObject } from './storage';
+import { ensureBucket } from './storage-test-utils';
 
 describe('storage', () => {
-	beforeAll(async () => {
-		try {
-			await s3Client().send(new CreateBucketCommand({ Bucket: env.S3_BUCKET }));
-		} catch (e) {
-			if ((e as Error).name !== 'BucketAlreadyOwnedByYou') throw e;
-		}
-	});
+	beforeAll(ensureBucket);
 
 	it('mediaKey is namespaced per user and unguessable', () => {
 		const a = mediaKey(7, 'png');

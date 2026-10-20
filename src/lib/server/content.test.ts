@@ -52,6 +52,34 @@ describe('content', () => {
 		expect(c.html).not.toContain('javascript:');
 	});
 
+	it('strips style, form and input tags but keeps benign markup', async () => {
+		const admin = await userWithRole('admin');
+		await saveContent(
+			admin,
+			'rules',
+			[
+				'# Titel',
+				'',
+				'- Punkt eins',
+				'- Punkt zwei',
+				'',
+				'[Link](https://example.com/regeln)',
+				'',
+				'<style>body{display:none}</style>',
+				'',
+				'<form action="https://evil.test"><input name="pw" type="password"><button>Go</button></form>'
+			].join('\n')
+		);
+		const { html } = await getContent('rules');
+		expect(html).not.toMatch(/<style/i);
+		expect(html).not.toMatch(/<form/i);
+		expect(html).not.toMatch(/<input/i);
+		expect(html).not.toContain('display:none');
+		expect(html).toContain('<h1>Titel</h1>');
+		expect(html).toContain('<li>Punkt eins</li>');
+		expect(html).toContain('<a href="https://example.com/regeln">Link</a>');
+	});
+
 	it.each(['member', 'moderator'] as const)('rejects saving as %s', async (role) => {
 		const u = await userWithRole(role);
 		await expect(saveContent(u, 'rules', 'x')).rejects.toBeInstanceOf(ContentPermissionError);

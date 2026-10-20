@@ -15,6 +15,16 @@
 	} = $props();
 
 	let editing = $state(false);
+	// The textarea is reset to the saved markdown every time the editor opens, so a rejected
+	// draft (still echoed in `form`) never resurfaces after cancelling.
+	let draft = $state('');
+	let submitted = $state(false);
+
+	function openEditor() {
+		draft = data.markdown ?? '';
+		submitted = false;
+		editing = true;
+	}
 </script>
 
 <svelte:head>
@@ -25,7 +35,7 @@
 	<header>
 		<h1>{title}</h1>
 		{#if data.canEdit && !editing}
-			<button type="button" onclick={() => (editing = true)}>
+			<button type="button" onclick={openEditor}>
 				<Pencil size={16} aria-hidden="true" /> Bearbeiten
 			</button>
 		{/if}
@@ -35,19 +45,17 @@
 		<form
 			method="POST"
 			action="?/save"
-			use:enhance={() =>
-				async ({ result, update }) => {
+			use:enhance={() => {
+				submitted = true;
+				return async ({ result, update }) => {
 					await update({ reset: false });
 					if (result.type === 'success') editing = false;
-				}}
+				};
+			}}
 		>
 			<label class="sr-only" for="markdown">{title} (Markdown)</label>
-			<textarea
-				id="markdown"
-				name="markdown"
-				rows="16"
-				value={form?.markdown ?? data.markdown ?? ''}></textarea>
-			{#if form?.error}<p class="error" role="alert">{form.error}</p>{/if}
+			<textarea id="markdown" name="markdown" rows="16" bind:value={draft}></textarea>
+			{#if submitted && form?.error}<p class="error" role="alert">{form.error}</p>{/if}
 			<div class="actions">
 				<button type="submit" class="primary">
 					<Save size={16} aria-hidden="true" /> Speichern

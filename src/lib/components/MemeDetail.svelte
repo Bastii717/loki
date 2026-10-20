@@ -11,10 +11,12 @@
 	import Ellipsis from 'lucide-svelte/icons/ellipsis';
 	import Eye from 'lucide-svelte/icons/eye';
 	import EyeOff from 'lucide-svelte/icons/eye-off';
+	import MessageCircle from 'lucide-svelte/icons/message-circle';
 	import Star from 'lucide-svelte/icons/star';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import { relativeTime } from '../time';
+	import { createVoter } from '../vote';
 	import type { CommentItem } from '../server/comments';
 	import type { FeedItem } from '../server/feed';
 
@@ -40,10 +42,13 @@
 	let userVote = $state<-1 | 0 | 1>(item.userVote);
 	// svelte-ignore state_referenced_locally
 	let comments = $state<CommentItem[]>(initialComments);
+	// svelte-ignore state_referenced_locally
+	let commentCount = $state(item.commentCount);
+	// svelte-ignore state_referenced_locally
+	let viewCount = $state(item.viewCount);
 	let text = $state('');
 	let sending = $state(false);
 	let commentError = $state('');
-	let voting = false;
 	// svelte-ignore state_referenced_locally
 	let favorited = $state(item.userFavorite);
 	// svelte-ignore state_referenced_locally
@@ -59,13 +64,35 @@
 	const prevId = $derived(feedIds && index > 0 ? feedIds[index - 1] : null);
 	const nextId = $derived(feedIds && index >= 0 ? (feedIds[index + 1] ?? null) : null);
 
-	function go(id: number | null) {
-		if (id === null) return;
+	let navigating = false;
+
+	/** Returns whether a navigation started; ignored at the feed edges and while one is in flight. */
+	function go(id: number | null): boolean {
+		if (id === null || navigating) return false;
+		navigating = true;
 		// replaceState keeps "back" pointing at the feed instead of at every swiped meme
 		void goto(resolve('/meme/[id]', { id: String(id) }), {
 			replaceState: true,
 			state: { feedIds }
-		});
+		}).finally(() => (navigating = false));
+		return true;
+	}
+
+	// Left/right arrows page through the feed; typing and media controls keep their own arrows.
+	function onKeydown(e: KeyboardEvent) {
+		if (!feedIds || e.defaultPrevented) return;
+		if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+		if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+		const target = e.target;
+		if (
+			target instanceof HTMLElement &&
+			(target.isContentEditable ||
+				['INPUT', 'TEXTAREA', 'SELECT', 'VIDEO'].includes(target.tagName))
+		) {
+			return;
+		}
+		// only swallow the key when it navigates, so horizontal scroll still works at the feed edges
+		if (go(e.key === 'ArrowLeft' ? prevId : nextId)) e.preventDefault();
 	}
 
 	const SWIPE_THRESHOLD = 60;
@@ -95,34 +122,24 @@
 
 	// ---- seen
 	onMount(() => {
-		void fetch(`/api/memes/${item.id}/seen`, { method: 'POST' }).catch(() => {});
+		void fetch(`/api/memes/${item.id}/seen`, { method: 'POST' })
+			.then(async (res) => {
+				if (!res.ok) return;
+				// only a first view counts server-side; once per mount as the component is keyed by id
+				if (((await res.json()) as { counted: boolean }).counted) viewCount += 1;
+			})
+			.catch(() => {});
 	});
 
 	// ---- voting
-	async function vote(dir: 1 | -1) {
-		if (voting) return;
-		voting = true;
-		const prev = { score, userVote };
-		const next = userVote === dir ? 0 : dir;
-		score += next - userVote;
-		userVote = next;
-		try {
-			const res = await fetch(`/api/memes/${item.id}/vote`, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ value: next })
-			});
-			if (!res.ok) throw new Error(String(res.status));
-			const data = (await res.json()) as { score: number; userVote: -1 | 0 | 1 };
-			score = data.score;
-			userVote = data.userVote;
-		} catch {
-			score = prev.score;
-			userVote = prev.userVote;
-		} finally {
-			voting = false;
+	const vote = createVoter(
+		() => item.id,
+		() => ({ score, userVote }),
+		(s) => {
+			score = s.score;
+			userVote = s.userVote;
 		}
-	}
+	);
 
 	// ---- favorite
 	async function toggleFavorite() {
@@ -188,6 +205,7 @@
 			});
 			if (!res.ok) throw new Error(String(res.status));
 			comments.unshift((await res.json()) as CommentItem);
+			commentCount += 1;
 			text = '';
 		} catch {
 			commentError = 'Kommentar konnte nicht gesendet werden.';
@@ -201,12 +219,15 @@
 		try {
 			const res = await fetch(`/api/comments/${c.id}`, { method: 'DELETE' });
 			if (!res.ok && res.status !== 404) throw new Error(String(res.status));
+			if (comments.some((x) => x.id === c.id)) commentCount = Math.max(0, commentCount - 1);
 			comments = comments.filter((x) => x.id !== c.id);
 		} catch {
 			commentError = 'Kommentar konnte nicht gelöscht werden.';
 		}
 	}
 </script>
+
+<svelte:window onkeydown={onKeydown} />
 
 <header class="bar">
 	<button type="button" class="icon-btn" onclick={back} aria-label="Zurück"
@@ -298,7 +319,13 @@
 					von {item.uploader} ·
 					<time datetime={item.createdAt}>{relativeTime(item.createdAt)}</time>
 					·
-					<span class="views"><Eye size={14} aria-hidden="true" /> {item.viewCount}</span>
+					<span class="views" aria-label="{viewCount} Aufrufe"
+						><Eye size={14} aria-hidden="true" /> {viewCount}</span
+					>
+					·
+					<span class="views" aria-label="{commentCount} Kommentare"
+						><MessageCircle size={14} aria-hidden="true" /> {commentCount}</span
+					>
 				</p>
 			</div>
 			<button

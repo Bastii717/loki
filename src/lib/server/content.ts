@@ -21,9 +21,14 @@ export interface SiteContent {
 	updatedAt: Date | null;
 }
 
+/** DOMPurify's default allows these; they have no place in rules/FAQ text (UI redress, fake forms). */
+const FORBIDDEN_TAGS = ['style', 'form', 'input'];
+
 /** Markdown -> HTML, sanitized so the result is safe to render with {@html}. */
 function render(markdown: string): string {
-	return DOMPurify.sanitize(marked.parse(markdown, { async: false }));
+	return DOMPurify.sanitize(marked.parse(markdown, { async: false }), {
+		FORBID_TAGS: FORBIDDEN_TAGS
+	});
 }
 
 export async function getContent(key: ContentKey): Promise<SiteContent> {

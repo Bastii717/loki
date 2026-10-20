@@ -10,6 +10,7 @@
 	import Star from 'lucide-svelte/icons/star';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import { relativeTime } from '../time';
+	import { createVoter } from '../vote';
 	import type { FeedItem } from '../server/feed';
 
 	let { item, feedIds }: { item: FeedItem; feedIds?: number[] } = $props();
@@ -29,7 +30,6 @@
 	let score = $state(item.score);
 	// svelte-ignore state_referenced_locally
 	let userVote = $state<-1 | 0 | 1>(item.userVote);
-	let pending = false;
 	// svelte-ignore state_referenced_locally
 	let favorited = $state(item.userFavorite);
 	let favPending = false;
@@ -51,30 +51,14 @@
 		}
 	}
 
-	async function vote(dir: 1 | -1) {
-		if (pending) return;
-		pending = true;
-		const prev = { score, userVote };
-		const next = userVote === dir ? 0 : dir;
-		score += next - userVote;
-		userVote = next;
-		try {
-			const res = await fetch(`/api/memes/${item.id}/vote`, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ value: next })
-			});
-			if (!res.ok) throw new Error(String(res.status));
-			const data = (await res.json()) as { score: number; userVote: -1 | 0 | 1 };
-			score = data.score;
-			userVote = data.userVote;
-		} catch {
-			score = prev.score;
-			userVote = prev.userVote;
-		} finally {
-			pending = false;
+	const vote = createVoter(
+		() => item.id,
+		() => ({ score, userVote }),
+		(s) => {
+			score = s.score;
+			userVote = s.userVote;
 		}
-	}
+	);
 </script>
 
 <article class="card">

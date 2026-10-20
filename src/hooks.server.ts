@@ -4,7 +4,7 @@ import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, resolveSession } from './lib/se
 import { runMigrations } from './lib/server/db';
 import { env } from './lib/server/env';
 import { startJobs } from './lib/server/jobs';
-import { rateLimit } from './lib/server/rate-limit';
+import { rateLimitRetryMs } from './lib/server/rate-limit';
 
 /** Runs once at server start so misconfiguration fails at boot, not on the first request. */
 export const init: ServerInit = async () => {
@@ -33,18 +33,37 @@ const SEEN_PATH = /^\/api\/memes\/\d+\/seen$/;
 const WRITE_METHODS = new Set(['POST', 'PATCH', 'DELETE']);
 const RATE_LIMITED_MESSAGE = 'Langsam, Lord! Zu viele Anfragen.';
 
-/** Per-user limits for state-changing requests (in-memory, see rate-limit.ts). */
-function limited(method: string, path: string, userId: number): boolean {
-	if (!WRITE_METHODS.has(method)) return false;
+/** Per-user limits for state-changing requests (in-memory, see rate-limit.ts). Returns the seconds to wait, or 0 when allowed. */
+function retryAfterSeconds(method: string, path: string, userId: number): number {
+	if (!WRITE_METHODS.has(method)) return 0;
+	const wait = (key: string, limit: number, windowMs: number) =>
+		Math.ceil(rateLimitRetryMs(`${key}:${userId}`, limit, windowMs) / 1000);
 	// Seen-tracking fires once per swiped slide; fast swiping must not eat the write budget.
-	if (method === 'POST' && SEEN_PATH.test(path)) {
-		return !rateLimit(`seen:${userId}`, 300, 60_000);
-	}
-	if (!rateLimit(`write:${userId}`, 60, 60_000)) return true;
+	if (method === 'POST' && SEEN_PATH.test(path)) return wait('seen', 300, 60_000);
+	const writes = wait('write', 60, 60_000);
+	if (writes > 0) return writes;
 	if (method === 'POST' && (path === '/upload' || path.startsWith('/upload/'))) {
-		return !rateLimit(`upload:${userId}`, 10, 5 * 60_000);
+		return wait('upload', 10, 5 * 60_000);
 	}
-	return false;
+	return 0;
+}
+
+/**
+ * 429 for a `use:enhance` form action. The client's `deserialize` only understands the
+ * ActionResult JSON (`data` is devalue-encoded), so a plain-text body would surface as a
+ * generic error instead of the German message in the form's error slot.
+ */
+function actionRateLimited(retryAfter: number): Response {
+	return json(
+		// devalue encoding of { message, error } (equal values share one slot): the upload form
+		// reads `form.message`, quotes and the rules/FAQ editor read `form.error`
+		{
+			type: 'failure',
+			status: 429,
+			data: JSON.stringify([{ message: 1, error: 1 }, RATE_LIMITED_MESSAGE])
+		},
+		{ status: 429, headers: { 'retry-after': String(retryAfter) } }
+	);
 }
 
 /**
@@ -106,15 +125,23 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 		return secure(new Response(null, { status: 303, headers: { location: '/login' } }));
 	}
-	if (event.locals.user && limited(event.request.method, path, event.locals.user.id)) {
+	const retryAfter = event.locals.user
+		? retryAfterSeconds(event.request.method, path, event.locals.user.id)
+		: 0;
+	if (retryAfter > 0) {
 		const status = 429;
+		const headers = { 'retry-after': String(retryAfter) };
+		if (path === '/api' || path.startsWith('/api/')) {
+			return secure(json({ error: RATE_LIMITED_MESSAGE }, { status, headers }));
+		}
+		if (event.request.headers.get('x-sveltekit-action') === 'true') {
+			return secure(actionRateLimited(retryAfter));
+		}
 		return secure(
-			path === '/api' || path.startsWith('/api/')
-				? json({ error: RATE_LIMITED_MESSAGE }, { status })
-				: new Response(RATE_LIMITED_MESSAGE, {
-						status,
-						headers: { 'content-type': 'text/plain; charset=utf-8', 'retry-after': '60' }
-					})
+			new Response(RATE_LIMITED_MESSAGE, {
+				status,
+				headers: { ...headers, 'content-type': 'text/plain; charset=utf-8' }
+			})
 		);
 	}
 	return secure(await resolve(event));

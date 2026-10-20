@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { CreateBucketCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { HeadObjectCommand } from '@aws-sdk/client-s3';
 import { db } from './db';
 import { comments, favorites, media, votes } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
@@ -8,15 +8,12 @@ import { env } from './env';
 import { getFeedPage } from './feed';
 import { deleteMedia, MediaPermissionError, setFlags, toggleFavorite } from './memes';
 import { mediaKey, putObject, s3Client } from './storage';
+import { ensureBucket } from './storage-test-utils';
 import { MediaNotFoundError } from './votes';
 
 beforeAll(async () => {
 	await setupDb();
-	try {
-		await s3Client().send(new CreateBucketCommand({ Bucket: env.S3_BUCKET }));
-	} catch (e) {
-		if ((e as Error).name !== 'BucketAlreadyOwnedByYou') throw e;
-	}
+	await ensureBucket();
 });
 beforeEach(resetDb);
 afterAll(resetDb);

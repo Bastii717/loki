@@ -8,7 +8,9 @@ export const GET: RequestHandler = ({ locals }) => {
 	if (!file) error(404, 'Nichts geteilt');
 	return new Response(new Uint8Array(file.data), {
 		headers: {
-			'content-type': file.type,
+			'content-type': file.type, // sniffed at stash time, never client-declared
+			'x-content-type-options': 'nosniff',
+			'content-security-policy': 'sandbox',
 			'x-shared-name': encodeURIComponent(file.name),
 			'cache-control': 'no-store'
 		}
