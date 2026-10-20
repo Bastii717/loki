@@ -19,7 +19,7 @@ Build the image yourself with `docker build -t ghcr.io/bastii717/loki:latest .`.
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `ORIGIN` | yes | Public URL, e.g. `https://loki.example.com` (no trailing slash). Used for CSRF checks and the OIDC redirect URI. |
+| `ORIGIN` | yes | Public URL, e.g. `https://loki.example.com` (no trailing slash). Used for the OIDC redirect URI. adapter-node ignores it: SvelteKit's CSRF check compares the `Origin` header with the origin built from `PROTOCOL_HEADER`/`HOST_HEADER` (default protocol `https`), so set those behind a proxy. |
 | `POSTGRES_PASSWORD` | compose | Password of the bundled `db` service; compose derives `DATABASE_URL` from it. |
 | `DATABASE_URL` | yes (non-compose) | Overridden by `compose.prod.yml` to point at the `db` service. |
 | `S3_ENDPOINT` | yes | R2: `https://<account-id>.r2.cloudflarestorage.com` |
@@ -133,3 +133,14 @@ Set `ADDRESS_HEADER=x-forwarded-for`. nginx overwrites the header with `$remote_
 - Health: `curl http://127.0.0.1:3000/healthz` returns `ok`.
 - Update: `docker compose -f compose.prod.yml pull && docker compose -f compose.prod.yml up -d` (migrations run on start).
 - Postgres data lives in the `db-data` volume.
+
+## PWA share target
+
+`POST /share` (the Android share sheet) is a multipart form POST, so SvelteKit's CSRF check
+applies: it is rejected with 403 when the `Origin` header is missing or `null`, and accepted
+when it equals the app's own origin. Verified against a production build (`node build`);
+`trustedOrigins` is deliberately not widened. Share-Target erfordert daher, dass der Browser
+beim Teilen einen `Origin`-Header mit der öffentlichen URL sendet (Chrome auf Android tut das
+nach unserem Kenntnisstand; auf echten Geräten prüfen). Bleibt das Teilen mit 403 hängen, ist
+das eine Betreiber-Entscheidung, nicht ein Konfigurationsfehler.
+
