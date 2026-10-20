@@ -16,6 +16,9 @@ export default defineConfig({
 				mode: 'nonce',
 				directives: {
 					'default-src': ['self'],
+					// inline style attributes (SvelteKit's display:contents wrapper and route
+					// announcer) cannot carry a nonce, so they need 'unsafe-inline'
+					'style-src': ['self', 'unsafe-inline'],
 					'img-src': ['self', 'data:', 'blob:'],
 					'media-src': ['self', 'blob:']
 				}
