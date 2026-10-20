@@ -64,13 +64,18 @@
 	const prevId = $derived(feedIds && index > 0 ? feedIds[index - 1] : null);
 	const nextId = $derived(feedIds && index >= 0 ? (feedIds[index + 1] ?? null) : null);
 
-	function go(id: number | null) {
-		if (id === null) return;
+	let navigating = false;
+
+	/** Returns whether a navigation started; ignored at the feed edges and while one is in flight. */
+	function go(id: number | null): boolean {
+		if (id === null || navigating) return false;
+		navigating = true;
 		// replaceState keeps "back" pointing at the feed instead of at every swiped meme
 		void goto(resolve('/meme/[id]', { id: String(id) }), {
 			replaceState: true,
 			state: { feedIds }
-		});
+		}).finally(() => (navigating = false));
+		return true;
 	}
 
 	// Left/right arrows page through the feed; typing and media controls keep their own arrows.
@@ -86,8 +91,8 @@
 		) {
 			return;
 		}
-		e.preventDefault();
-		go(e.key === 'ArrowLeft' ? prevId : nextId);
+		// only swallow the key when it navigates, so horizontal scroll still works at the feed edges
+		if (go(e.key === 'ArrowLeft' ? prevId : nextId)) e.preventDefault();
 	}
 
 	const SWIPE_THRESHOLD = 60;

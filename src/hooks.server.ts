@@ -55,8 +55,13 @@ function retryAfterSeconds(method: string, path: string, userId: number): number
  */
 function actionRateLimited(retryAfter: number): Response {
 	return json(
-		// devalue encoding of { message: RATE_LIMITED_MESSAGE }
-		{ type: 'failure', status: 429, data: JSON.stringify([{ message: 1 }, RATE_LIMITED_MESSAGE]) },
+		// devalue encoding of { message, error } (equal values share one slot): the upload form
+		// reads `form.message`, quotes and the rules/FAQ editor read `form.error`
+		{
+			type: 'failure',
+			status: 429,
+			data: JSON.stringify([{ message: 1, error: 1 }, RATE_LIMITED_MESSAGE])
+		},
 		{ status: 429, headers: { 'retry-after': String(retryAfter) } }
 	);
 }

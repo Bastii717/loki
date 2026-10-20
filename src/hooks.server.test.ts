@@ -240,7 +240,11 @@ describe('429 responses', () => {
 		expect(res.status).toBe(429);
 		expect(res.headers.get('content-type')).toContain('application/json');
 		const result = deserialize(await res.text());
-		expect(result).toEqual({ type: 'failure', status: 429, data: { message: MESSAGE } });
+		expect(result).toEqual({
+			type: 'failure',
+			status: 429,
+			data: { message: MESSAGE, error: MESSAGE }
+		});
 	});
 
 	it('keeps text/plain for a plain (non-enhanced) form post', async () => {

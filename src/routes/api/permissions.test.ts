@@ -10,6 +10,7 @@ import { resetRateLimits } from '../../lib/server/rate-limit';
 import { callRoute } from '../../lib/server/test-request';
 import { DELETE as deleteComment } from './comments/[id]/+server';
 import { DELETE as deleteMeme, PATCH as patchMeme } from './memes/[id]/+server';
+import { POST as seenMeme } from './memes/[id]/seen/+server';
 import { POST as voteMeme } from './memes/[id]/vote/+server';
 import { DELETE as deleteQuote } from './quotes/[id]/+server';
 import { POST as voteQuote } from './quotes/[id]/vote/+server';
@@ -300,6 +301,35 @@ describe('vote endpoints', () => {
 			session: w.sessions.other
 		});
 		expect(missing.response.status).toBe(404);
+	});
+});
+
+describe('POST /api/memes/[id]/seen', () => {
+	const seen = (memeId: string, session: string) =>
+		callRoute({
+			handler: seenMeme,
+			path: `/api/memes/${memeId}/seen`,
+			method: 'POST',
+			params: { id: memeId },
+			session
+		});
+
+	it('answers {counted:true} for a first view and {counted:false} for a repeat', async () => {
+		const w = await world();
+		const first = await seen(String(w.memeId), w.sessions.other);
+		expect(first.response.status).toBe(200);
+		expect(await first.response.json()).toEqual({ counted: true });
+		const second = await seen(String(w.memeId), w.sessions.other);
+		expect(second.response.status).toBe(200);
+		expect(await second.response.json()).toEqual({ counted: false });
+		// a different viewer still counts
+		const other = await seen(String(w.memeId), w.sessions.mod);
+		expect(await other.response.json()).toEqual({ counted: true });
+	});
+
+	it('answers 404 for a missing meme', async () => {
+		const w = await world();
+		expect((await seen(MISSING, w.sessions.other)).response.status).toBe(404);
 	});
 });
 
