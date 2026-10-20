@@ -61,11 +61,14 @@
 		takeFile(e.dataTransfer?.files[0]);
 	}
 
-	function addTag(raw: string) {
+	/** Commits `raw` as a chip; returns the tag when it was newly added. */
+	function addTag(raw: string): string | undefined {
 		const tag = raw.trim().toLowerCase().replace(/^#/, '');
-		if (TAG_PATTERN.test(tag) && !tags.includes(tag) && tags.length < MAX_TAGS) tags.push(tag);
+		const added = TAG_PATTERN.test(tag) && !tags.includes(tag) && tags.length < MAX_TAGS;
+		if (added) tags.push(tag);
 		tagInput = '';
 		suggestions = [];
+		return added ? tag : undefined;
 	}
 
 	function onTagKey(e: KeyboardEvent) {
@@ -115,8 +118,10 @@
 	<form
 		method="POST"
 		enctype="multipart/form-data"
-		use:enhance={() => {
-			if (tagInput.trim()) addTag(tagInput);
+		use:enhance={({ formData }) => {
+			// FormData is built before this callback runs, so a still-pending tag must be appended here
+			const pending = tagInput.trim() ? addTag(tagInput) : undefined;
+			if (pending) formData.append('tag', pending);
 			submitting = true;
 			return async ({ update }) => {
 				await update({ reset: false });
