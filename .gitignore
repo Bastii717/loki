@@ -1,0 +1,10 @@
+# Brainstorming-Mockups (Superpowers visual companion)
+.superpowers/
+
+# OS
+.DS_Store
+
+# Env & Secrets
+.env
+.env.*
+!.env.example
