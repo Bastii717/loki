@@ -70,8 +70,7 @@
 			placeholder="Zitat"
 			aria-label="Zitat"
 			required
-			value={form?.text ?? ''}
-		></textarea>
+			value={form?.text ?? ''}></textarea>
 		<div class="row">
 			<input
 				name="author"
@@ -101,12 +100,7 @@
 							{#if confirmingId === q.id}
 								<div class="confirm">
 									<span>Zitat wirklich löschen?</span>
-									<button
-										type="button"
-										class="danger"
-										disabled={busy}
-										onclick={() => remove(q.id)}
-									>
+									<button type="button" class="danger" disabled={busy} onclick={() => remove(q.id)}>
 										<Check size={16} /> Löschen
 									</button>
 									<button type="button" onclick={() => (confirmingId = null)}>

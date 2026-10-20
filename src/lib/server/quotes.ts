@@ -53,7 +53,11 @@ const toItem = (r: {
 	createdAt: Date;
 	score: number;
 	userVote: number;
-}): QuoteItem => ({ ...r, createdAt: r.createdAt.toISOString(), userVote: r.userVote as VoteValue });
+}): QuoteItem => ({
+	...r,
+	createdAt: r.createdAt.toISOString(),
+	userVote: r.userVote as VoteValue
+});
 
 /** All quotes, newest first, with the viewer's own vote. */
 export async function listQuotes(userId: number): Promise<QuoteItem[]> {
@@ -111,6 +115,9 @@ export async function voteQuote(
 /** Moderators and admins only (old-app rule); votes cascade. */
 export async function deleteQuote(user: SessionUser, quoteId: number): Promise<void> {
 	if (user.role !== 'moderator' && user.role !== 'admin') throw new QuotePermissionError();
-	const deleted = await db.delete(quotes).where(eq(quotes.id, quoteId)).returning({ id: quotes.id });
+	const deleted = await db
+		.delete(quotes)
+		.where(eq(quotes.id, quoteId))
+		.returning({ id: quotes.id });
 	if (deleted.length === 0) throw new QuoteNotFoundError();
 }
