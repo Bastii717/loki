@@ -40,7 +40,15 @@ Build the image yourself with `docker build -t ghcr.io/bastii717/loki:latest .`.
 | `HOST_HEADER` | behind proxy | `x-forwarded-host` |
 | `ADDRESS_HEADER` | behind proxy | `x-forwarded-for` (client IP, used for rate limiting). Only set it when a trusted proxy overwrites that header. |
 | `TUNNEL_TOKEN` | tunnel only | Cloudflare Tunnel token for the `cloudflared` sidecar |
-| Backup variables | later | Placeholder: the backup job (Task 20) will document its variables here. |
+| `BACKUP_S3_ENDPOINT` | backups | S3 endpoint of the separate backup bucket (not the media bucket) |
+| `BACKUP_S3_BUCKET` | backups | Name of the backup bucket |
+| `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` | backups | Credentials for the backup bucket only; keep them separate from the media bucket's `S3_*` credentials |
+| `BACKUP_S3_REGION` | no | Region of the backup bucket (`auto` for R2) |
+| `BACKUP_CRYPT_PASSWORD` / `BACKUP_CRYPT_SALT` | backups | rclone crypt keys. Store them outside the server (password manager): without them backups cannot be decrypted. |
+| `BACKUP_CRON` | no | Schedule of the `backup` service, default `0 3 * * *` |
+| `BACKUP_RETENTION_DAYS` | no | Dumps older than this are deleted, default `30` |
+
+The `backup` service in `compose.prod.yml` is commented out by default; uncomment it after setting the variables above. Restore procedure: [`backup/README.md`](../backup/README.md).
 
 ## Authentik setup
 
