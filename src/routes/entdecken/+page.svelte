@@ -6,6 +6,11 @@
 
 	let { data }: PageProps = $props();
 
+	/** Share of a slide that must be visible before it counts as the active one. */
+	const ACTIVE_RATIO = 0.6;
+	/** Most recent loaded ids sent as `exclude`; the API keeps the same window. */
+	const EXCLUDE_MAX = 500;
+
 	type Entry = { kind: 'meme'; item: FeedItem } | { kind: 'break' };
 
 	let entries = $state<Entry[]>([]);
@@ -16,7 +21,9 @@
 	const marked = new SvelteSet<number>();
 
 	function append(items: FeedItem[], caughtUp: boolean) {
-		if (items.length === 0) {
+		const fresh = items.filter((item) => !loaded.has(item.id));
+		// Nothing new (empty or all duplicates of ids the exclude window forgot): stop refilling.
+		if (fresh.length === 0) {
 			exhausted = true;
 			return;
 		}
@@ -24,8 +31,7 @@
 			replaying = true;
 			entries.push({ kind: 'break' });
 		}
-		for (const item of items) {
-			if (loaded.has(item.id)) continue;
+		for (const item of fresh) {
 			loaded.add(item.id);
 			entries.push({ kind: 'meme', item });
 		}
@@ -39,7 +45,7 @@
 		if (loading || exhausted) return;
 		loading = true;
 		try {
-			const res = await fetch(`/api/discover?exclude=${[...loaded].join(',')}`);
+			const res = await fetch(`/api/discover?exclude=${[...loaded].slice(-EXCLUDE_MAX).join(',')}`);
 			if (!res.ok) throw new Error(String(res.status));
 			const batch = (await res.json()) as { items: FeedItem[]; caughtUp: boolean };
 			append(batch.items, batch.caughtUp);
@@ -62,13 +68,14 @@
 			? new IntersectionObserver(
 					(hits) => {
 						for (const hit of hits) {
-							if (!hit.isIntersecting) continue;
+							// callbacks also fire when a slide merely starts to peek in; only count real activation
+							if (!hit.isIntersecting || hit.intersectionRatio < ACTIVE_RATIO) continue;
 							const el = hit.target as HTMLElement;
 							if (el.dataset.id) markSeen(Number(el.dataset.id));
 							if (Number(el.dataset.index) >= entries.length - 3) void loadMore();
 						}
 					},
-					{ threshold: 0.6 }
+					{ threshold: ACTIVE_RATIO }
 				)
 			: null;
 

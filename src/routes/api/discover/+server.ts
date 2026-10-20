@@ -8,6 +8,6 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		.split(',')
 		.map(Number)
 		.filter((n) => Number.isSafeInteger(n) && n > 0)
-		.slice(0, 500);
+		.slice(-500); // most recent ids; the client sends oldest first
 	return json(await getDiscoverBatch(locals.user.id, undefined, exclude));
 };
