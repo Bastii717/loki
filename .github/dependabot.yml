@@ -7,7 +7,15 @@ updates:
     groups:
       all:
         patterns: ['*']
+    ignore:
+      # @types/node majors must follow the Node runtime (24, pinned in
+      # engines, .nvmrc, Dockerfile and CI); bump them together by hand.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
