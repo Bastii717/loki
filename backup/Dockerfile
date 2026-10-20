@@ -1,4 +1,4 @@
-FROM alpine:3.22
+FROM alpine:3.24
 RUN apk add --no-cache postgresql17-client rclone tzdata ca-certificates
 COPY lib.sh backup.sh restore.sh entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/*.sh
