@@ -15,6 +15,7 @@
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import { relativeTime } from '../time';
+	import { createVoter } from '../vote';
 	import type { CommentItem } from '../server/comments';
 	import type { FeedItem } from '../server/feed';
 
@@ -43,7 +44,6 @@
 	let text = $state('');
 	let sending = $state(false);
 	let commentError = $state('');
-	let voting = false;
 	// svelte-ignore state_referenced_locally
 	let favorited = $state(item.userFavorite);
 	// svelte-ignore state_referenced_locally
@@ -99,30 +99,14 @@
 	});
 
 	// ---- voting
-	async function vote(dir: 1 | -1) {
-		if (voting) return;
-		voting = true;
-		const prev = { score, userVote };
-		const next = userVote === dir ? 0 : dir;
-		score += next - userVote;
-		userVote = next;
-		try {
-			const res = await fetch(`/api/memes/${item.id}/vote`, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ value: next })
-			});
-			if (!res.ok) throw new Error(String(res.status));
-			const data = (await res.json()) as { score: number; userVote: -1 | 0 | 1 };
-			score = data.score;
-			userVote = data.userVote;
-		} catch {
-			score = prev.score;
-			userVote = prev.userVote;
-		} finally {
-			voting = false;
+	const vote = createVoter(
+		() => item.id,
+		() => ({ score, userVote }),
+		(s) => {
+			score = s.score;
+			userVote = s.userVote;
 		}
-	}
+	);
 
 	// ---- favorite
 	async function toggleFavorite() {
