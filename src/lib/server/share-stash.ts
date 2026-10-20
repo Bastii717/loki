@@ -6,6 +6,8 @@
  * by the upload page right after the redirect. Single-container limitation applies, like
  * the rate limiter.
  */
+import { sniffMedia } from './media/process';
+
 export const SHARE_TTL_MS = 2 * 60 * 1000;
 
 export type SharedFile = { name: string; type: string; data: Buffer };
@@ -35,4 +37,19 @@ export function takeShared(userId: number): SharedFile | null {
 	const file = peekShared(userId);
 	stash.delete(userId);
 	return file;
+}
+
+/**
+ * Validates a shared file by its bytes (never by the client-declared type, which could claim
+ * `image/svg+xml`) and stashes it under the sniffed MIME. Returns false when the content is
+ * not an allowed image/video.
+ */
+export async function stashSharedFile(
+	userId: number,
+	file: { name: string; data: Buffer }
+): Promise<boolean> {
+	const sniffed = await sniffMedia(file.data);
+	if (!sniffed) return false;
+	putShared(userId, { name: file.name, type: sniffed.mime, data: file.data });
+	return true;
 }
