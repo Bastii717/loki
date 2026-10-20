@@ -1,0 +1,15 @@
+node_modules
+build
+.svelte-kit
+.git
+.env
+.env.*
+!.env.example
+.superpowers
+.claude
+docs
+*.md
+compose*.yml
+Dockerfile
+.vscode
+restore.env

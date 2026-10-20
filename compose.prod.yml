@@ -1,0 +1,77 @@
+# Production stack. Configuration comes from ./.env (see docs/deployment.md).
+# TLS terminates outside this stack: Cloudflare Tunnel (cloudflared) or an external nginx.
+services:
+  app:
+    image: ghcr.io/bastii717/loki:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # adapter-node rejects larger bodies (default 512K); keep >= MAX_UPLOAD_MB
+      BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-60M}
+      # overrides any DATABASE_URL in .env so the app always talks to the bundled db
+      DATABASE_URL: postgres://loki:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/loki
+    depends_on:
+      db:
+        condition: service_healthy
+    # nginx path: publish on loopback only; not needed with the cloudflared sidecar
+    ports:
+      - '127.0.0.1:3000:3000'
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: loki
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: loki
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U loki -d loki']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Cloudflare Tunnel sidecar (alternative to nginx). Set TUNNEL_TOKEN in .env, point the
+  # tunnel's public hostname at http://app:3000, and drop the `ports:` entry of `app`.
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   restart: unless-stopped
+  #   command: tunnel --no-autoupdate run
+  #   environment:
+  #     TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN}
+  #   depends_on:
+  #     - app
+
+  # Encrypted nightly backups (Postgres dump + media bucket) to a separate S3 bucket.
+  # Commented out by default because it needs ./backup.env (copy backup.env.example).
+  # It deliberately uses its OWN env file: the app must never see the backup credentials or
+  # crypt keys, and the backup job needs neither the OIDC secret nor the session secret.
+  # See docs/deployment.md and backup/README.md (also: restore runbook).
+  # backup:
+  #   build: ./backup
+  #   restart: unless-stopped
+  #   env_file: backup.env
+  #   environment:
+  #     BACKUP_DATABASE_URL: postgres://loki:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/loki
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+
+  # Self-host fallback instead of Cloudflare R2: uncomment and set in .env
+  #   S3_ENDPOINT=http://minio:9000  S3_FORCE_PATH_STYLE=true  S3_REGION=us-east-1
+  #   S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY = MINIO_ROOT_USER / MINIO_ROOT_PASSWORD
+  # Create the bucket once (e.g. with `mc mb`) and keep it private.
+  # minio:
+  #   image: cgr.dev/chainguard/minio:latest
+  #   restart: unless-stopped
+  #   command: server /data
+  #   environment:
+  #     MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+  #     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+  #   volumes:
+  #     - minio-data:/data
+
+volumes:
+  db-data:
+  # minio-data:

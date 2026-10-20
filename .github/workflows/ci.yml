@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prettier --check .
+      - run: npx eslint .
+      - run: npm run check
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: loki
+          POSTGRES_PASSWORD: loki
+          POSTGRES_DB: loki
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U loki -d loki"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ORIGIN: http://localhost:5173
+      DATABASE_URL: postgres://loki:loki@localhost:5432/loki
+      S3_ENDPOINT: http://localhost:9000
+      S3_BUCKET: loki
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadmin
+      S3_REGION: auto
+      S3_FORCE_PATH_STYLE: 'true'
+      OIDC_ISSUER: http://localhost:8080/loki
+      OIDC_CLIENT_ID: loki
+      OIDC_CLIENT_SECRET: ci-secret
+      OIDC_GROUPS_CLAIM: groups
+      OIDC_GROUP_MEMBERS: loki-members
+      OIDC_GROUP_MODS: loki-mods
+      OIDC_GROUP_ADMINS: loki-admins
+      MAX_UPLOAD_MB: '50'
+      AUTO_BLUR_SCORE: '-3'
+      SESSION_ABSOLUTE_MAX_DAYS: '90'
+    steps:
+      - uses: actions/checkout@v4
+      # MinIO runs as a plain container: service containers cannot pass the
+      # `server /data` command the image needs. Upstream minio images are no
+      # longer publicly pullable (Docker Hub and quay.io), and Chainguard's
+      # free tier only publishes `latest`, so no version pin is possible. The
+      # dev compose stack uses the same image.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            cgr.dev/chainguard/minio:latest server /data
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:9000/minio/health/live && exit 0
+            sleep 2
+          done
+          docker logs minio
+          exit 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
