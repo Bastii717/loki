@@ -40,15 +40,26 @@ Build the image yourself with `docker build -t ghcr.io/bastii717/loki:latest .`.
 | `HOST_HEADER` | behind proxy | `x-forwarded-host` |
 | `ADDRESS_HEADER` | behind proxy | `x-forwarded-for` (client IP, used for rate limiting). Only set it when a trusted proxy overwrites that header. |
 | `TUNNEL_TOKEN` | tunnel only | Cloudflare Tunnel token for the `cloudflared` sidecar |
-| `BACKUP_S3_ENDPOINT` | backups | S3 endpoint of the separate backup bucket (not the media bucket) |
-| `BACKUP_S3_BUCKET` | backups | Name of the backup bucket |
-| `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` | backups | Credentials for the backup bucket only; keep them separate from the media bucket's `S3_*` credentials |
-| `BACKUP_S3_REGION` | no | Region of the backup bucket (`auto` for R2) |
-| `BACKUP_CRYPT_PASSWORD` / `BACKUP_CRYPT_SALT` | backups | rclone crypt keys. Store them outside the server (password manager): without them backups cannot be decrypted. |
-| `BACKUP_CRON` | no | Schedule of the `backup` service, default `0 3 * * *` |
-| `BACKUP_RETENTION_DAYS` | no | Dumps older than this are deleted, default `30` |
 
-The `backup` service in `compose.prod.yml` is commented out by default; uncomment it after setting the variables above. Restore procedure: [`backup/README.md`](../backup/README.md).
+### Backup variables (`backup.env`, not `.env`)
+
+The `backup` service reads its own `backup.env` (template: `backup.env.example`), never `.env`. Reason: `.env` is loaded by the `app` container; if the backup credentials or crypt keys lived there, a compromised app could read, delete or decrypt the backups, and the backup job would in turn receive secrets it does not need (OIDC, session secret). Rules:
+
+- The backup bucket uses its **own credentials, scoped to that bucket only**. The app's `S3_*` token must have **no access** to the backup bucket.
+- Give the backup job a **read-only token for the media bucket** (`S3_*` in `backup.env`), not the app's read/write token.
+- `BACKUP_CRYPT_PASSWORD` / `BACKUP_CRYPT_SALT` are kept outside the server too (password manager): without them backups cannot be decrypted.
+
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | backups | Media bucket to back up (read-only token recommended) |
+| `BACKUP_S3_ENDPOINT`, `BACKUP_S3_BUCKET`, `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, `BACKUP_S3_REGION` | backups | Separate backup bucket and its credentials |
+| `BACKUP_CRYPT_PASSWORD` / `BACKUP_CRYPT_SALT` | backups | rclone crypt keys |
+| `BACKUP_CRON` | no | Schedule, default `0 3 * * *` |
+| `BACKUP_RETENTION_DAYS` | no | Dumps and `media-deleted/` folders older than this are removed, default `30` |
+| `BACKUP_MAX_DELETE` | no | A run that would delete more than this many media objects from the mirror aborts, default `200` |
+| `BACKUP_MAX_AGE_HOURS` | no | Container healthcheck turns unhealthy when no backup succeeded for this long, default `48` |
+
+The `backup` service in `compose.prod.yml` is commented out by default; uncomment it after creating `backup.env`. Operations and restore procedure: [`backup/README.md`](../backup/README.md).
 
 ## Authentik setup
 

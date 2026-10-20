@@ -42,12 +42,14 @@ services:
   #     - app
 
   # Encrypted nightly backups (Postgres dump + media bucket) to a separate S3 bucket.
-  # Commented out by default because it needs the BACKUP_* variables (docs/deployment.md);
-  # uncomment once they are set in .env. Restore runbook: backup/README.md.
+  # Commented out by default because it needs ./backup.env (copy backup.env.example).
+  # It deliberately uses its OWN env file: the app must never see the backup credentials or
+  # crypt keys, and the backup job needs neither the OIDC secret nor the session secret.
+  # See docs/deployment.md and backup/README.md (also: restore runbook).
   # backup:
   #   build: ./backup
   #   restart: unless-stopped
-  #   env_file: .env # S3_* (media bucket source) and BACKUP_* (target, crypt keys, schedule)
+  #   env_file: backup.env
   #   environment:
   #     BACKUP_DATABASE_URL: postgres://loki:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/loki
   #   depends_on:

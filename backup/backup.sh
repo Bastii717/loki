@@ -21,9 +21,19 @@ echo "[$STAMP] upload dump"
 rclone copy "$DUMP" VAULT:db/
 
 echo "[$STAMP] sync media"
-rclone sync "MEDIA:${S3_BUCKET}" VAULT:media/ --fast-list --stats-one-line -v
+# Deleted/overwritten objects are moved to media-deleted/<stamp>/ instead of being destroyed,
+# and a run that would delete more than BACKUP_MAX_DELETE objects aborts (mass-delete guard).
+rclone sync "MEDIA:${S3_BUCKET}" VAULT:media/ --backup-dir "VAULT:media-deleted/${STAMP}" \
+  --max-delete "${BACKUP_MAX_DELETE:-200}" --fast-list --stats-one-line -v
 
-echo "[$STAMP] retention: delete dumps older than ${RETENTION}d"
+echo "[$STAMP] retention: delete dumps and media-deleted folders older than ${RETENTION}d"
 rclone delete VAULT:db/ --min-age "${RETENTION}d" -v
+# moved objects keep their original mtime, so prune media-deleted/ by the folder's stamp name
+CUTOFF="$(date -u -d "@$(( $(date +%s) - RETENTION * 86400 ))" +%Y%m%dT%H%M%SZ)"
+rclone lsf VAULT:media-deleted/ --dirs-only 2>/dev/null | while read -r d; do
+  d="${d%/}"
+  if [ -n "$d" ] && [ "$d" \< "$CUTOFF" ]; then rclone purge "VAULT:media-deleted/$d" -v; fi
+done
 
+touch /var/run/backup.ok # healthcheck marker: only reached when every step above succeeded
 echo "[$STAMP] done"
