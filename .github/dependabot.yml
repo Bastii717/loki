@@ -30,6 +30,10 @@ updates:
       timezone: 'Europe/Berlin'
     labels:
       - 'dependencies'
+    ignore:
+      # Same rule as @types/node: the Node major is pinned project-wide.
+      - dependency-name: 'node'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: 'github-actions'
     directory: '/'
