@@ -26,14 +26,24 @@ echo "[$STAMP] sync media"
 rclone sync "MEDIA:${S3_BUCKET}" VAULT:media/ --backup-dir "VAULT:media-deleted/${STAMP}" \
   --max-delete "${BACKUP_MAX_DELETE:-200}" --fast-list --stats-one-line -v
 
-echo "[$STAMP] retention: delete dumps and media-deleted folders older than ${RETENTION}d"
-rclone delete VAULT:db/ --min-age "${RETENTION}d" -v
-# moved objects keep their original mtime, so prune media-deleted/ by the folder's stamp name
-CUTOFF="$(date -u -d "@$(( $(date +%s) - RETENTION * 86400 ))" +%Y%m%dT%H%M%SZ)"
-rclone lsf VAULT:media-deleted/ --dirs-only 2>/dev/null | while read -r d; do
-  d="${d%/}"
-  if [ -n "$d" ] && [ "$d" \< "$CUTOFF" ]; then rclone purge "VAULT:media-deleted/$d" -v; fi
-done
+# Dump and sync succeeded: that is what the healthcheck measures. Retention below is
+# best-effort, so a backup token without delete permission must not make every run unhealthy.
+touch /var/run/backup.ok
 
-touch /var/run/backup.ok # healthcheck marker: only reached when every step above succeeded
+echo "[$STAMP] retention: delete dumps and media-deleted folders older than ${RETENTION}d"
+rclone delete VAULT:db/ --min-age "${RETENTION}d" -v \
+  || echo "WARN: [$STAMP] pruning old dumps failed (token without delete permission?); old dumps are NOT being removed" >&2
+# moved objects keep their original mtime, so prune media-deleted/ by the folder's stamp name
+if CUTOFF="$(date -u -d "@$(( $(date +%s) - RETENTION * 86400 ))" +%Y%m%dT%H%M%SZ)"; then
+  rclone lsf VAULT:media-deleted/ --dirs-only 2>/dev/null | while read -r d; do
+    d="${d%/}"
+    if [ -n "$d" ] && [ "$d" \< "$CUTOFF" ]; then
+      rclone purge "VAULT:media-deleted/$d" -v \
+        || echo "WARN: [$STAMP] pruning media-deleted/$d failed (token without delete permission?); it is NOT being removed" >&2
+    fi
+  done
+else
+  echo "WARN: [$STAMP] could not compute the retention cutoff; media-deleted/ is NOT being pruned" >&2
+fi
+
 echo "[$STAMP] done"
