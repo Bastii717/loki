@@ -34,6 +34,8 @@ export interface FeedOptions {
 	id?: number;
 	/** Restrict to these memes (discover hydrates its own selection); ordering is the caller's job. */
 	ids?: number[];
+	/** Profile lists: only memes uploaded by `uploaderId` / favorited by `favoriteOf` (viewer state stays the viewer's). */
+	filter?: { uploaderId?: number; favoriteOf?: number };
 }
 
 export class InvalidCursorError extends Error {
@@ -102,7 +104,8 @@ interface Row extends Record<string, unknown> {
 
 /**
  * One page of the feed. A single statement with lateral aggregates (no per-row queries);
- * keyset pagination on (sort key, id). `created_at` travels in the cursor as Postgres' own
+ * keyset pagination on (sort key, id). Optional filters (`tag`, `id`, `ids`, `filter.uploaderId`,
+ * `filter.favoriteOf`) only narrow the row set; ordering and cursors are unaffected. `created_at` travels in the cursor as Postgres' own
  * text form so microsecond precision survives (a JS Date would truncate to milliseconds).
  */
 export async function getFeedPage(opts: FeedOptions): Promise<{
@@ -139,6 +142,17 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 				)})`
 			: sql``;
 
+	const uploaderFilter =
+		opts.filter?.uploaderId !== undefined
+			? sql`AND m.uploader_id = ${opts.filter.uploaderId}`
+			: sql``;
+	const favoriteFilter =
+		opts.filter?.favoriteOf !== undefined
+			? sql`AND EXISTS (
+				SELECT 1 FROM favorites ff WHERE ff.media_id = m.id AND ff.user_id = ${opts.filter.favoriteOf}
+			)`
+			: sql``;
+
 	const rows = await db.execute<Row>(sql`
 		SELECT m.id, m.title, m.kind, m.object_key, m.thumb_key, m.width, m.height,
 			m.nsfw, m.spoiler, m.score, m.view_count, m.hot_score, m.created_at,
@@ -164,7 +178,7 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 		) fc ON true
 		LEFT JOIN votes v ON v.media_id = m.id AND v.user_id = ${opts.viewerId}
 		LEFT JOIN favorites uf ON uf.media_id = m.id AND uf.user_id = ${opts.viewerId}
-		WHERE true ${after} ${tagFilter} ${idFilter} ${idsFilter}
+		WHERE true ${after} ${tagFilter} ${idFilter} ${idsFilter} ${uploaderFilter} ${favoriteFilter}
 		ORDER BY ${keyCol} DESC, m.id DESC
 		LIMIT ${limit + 1}
 	`);

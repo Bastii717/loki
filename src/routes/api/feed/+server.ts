@@ -9,7 +9,14 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			viewerId: locals.user.id,
 			sort: parseSort(url.searchParams.get('sort')),
 			tag: parseTag(url.searchParams.get('tag')),
-			cursor: url.searchParams.get('cursor') ?? undefined
+			cursor: url.searchParams.get('cursor') ?? undefined,
+			// profile lists page through the same endpoint: ?list=mine | favorites (always the viewer's own)
+			filter:
+				url.searchParams.get('list') === 'mine'
+					? { uploaderId: locals.user.id }
+					: url.searchParams.get('list') === 'favorites'
+						? { favoriteOf: locals.user.id }
+						: undefined
 		});
 		return json(page);
 	} catch (e) {
