@@ -50,7 +50,11 @@ afterAll(async () => {
 	if (created.length) await deleteObjects(created);
 });
 
-const asUploader = (u: { id: number; username: string; role: 'member' | 'moderator' | 'admin' }) => ({
+const asUploader = (u: {
+	id: number;
+	username: string;
+	role: 'member' | 'moderator' | 'admin';
+}) => ({
 	id: u.id,
 	username: u.username,
 	role: u.role

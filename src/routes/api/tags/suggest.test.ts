@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { db } from '#lib/server/db';
-import { tags } from '#lib/server/db/schema';
-import { resetDb, setupDb } from '#lib/server/db/test-utils';
+import { db } from '../../../lib/server/db';
+import { tags } from '../../../lib/server/db/schema';
+import { resetDb, setupDb } from '../../../lib/server/db/test-utils';
 import { GET } from './suggest/+server';
 
 const call = async (q?: string) => {
@@ -16,10 +16,12 @@ beforeEach(resetDb);
 
 describe('GET /api/tags/suggest', () => {
 	it('returns prefix matches, case-insensitive, capped at 10', async () => {
-		await db.insert(tags).values([
-			...Array.from({ length: 12 }, (_, i) => ({ name: `kat${String(i).padStart(2, '0')}` })),
-			{ name: 'hund' }
-		]);
+		await db
+			.insert(tags)
+			.values([
+				...Array.from({ length: 12 }, (_, i) => ({ name: `kat${String(i).padStart(2, '0')}` })),
+				{ name: 'hund' }
+			]);
 		const { tags: found } = await call('#KAT');
 		expect(found).toHaveLength(10);
 		expect(found.every((t: string) => t.startsWith('kat'))).toBe(true);

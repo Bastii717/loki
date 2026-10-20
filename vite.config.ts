@@ -16,8 +16,8 @@ export default defineConfig({
 				mode: 'nonce',
 				directives: {
 					'default-src': ['self'],
-					'img-src': ['self', 'data:'],
-					'media-src': ['self']
+					'img-src': ['self', 'data:', 'blob:'],
+					'media-src': ['self', 'blob:']
 				}
 			}
 		})
