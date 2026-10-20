@@ -21,7 +21,7 @@
 	const links = [
 		{ href: '/profil/memes', label: 'Meine Memes', icon: Images },
 		{ href: '/profil/favoriten', label: 'Favoriten', icon: Star },
-		{ href: '/statistiken', label: 'Statistiken', icon: ChartColumn },
+		{ href: '/profil/statistiken', label: 'Statistiken', icon: ChartColumn },
 		{ href: '/regeln', label: 'Regeln', icon: BookOpen },
 		{ href: '/faq', label: 'FAQ', icon: CircleQuestionMark }
 	] as const;
