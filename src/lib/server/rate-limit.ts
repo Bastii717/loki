@@ -11,18 +11,27 @@ let lastSweep = 0;
 const SWEEP_EVERY_MS = 60_000;
 const MAX_WINDOW_MS = 60 * 60 * 1000;
 
-/** Returns true if the call is allowed (and records it), false if `key` exceeded `limit` per `windowMs`. */
-export function rateLimit(key: string, limit: number, windowMs: number): boolean {
+/**
+ * Records a call for `key` unless it exceeded `limit` per `windowMs`. Returns 0 when the call
+ * is allowed, otherwise the milliseconds until the window has room again.
+ */
+export function rateLimitRetryMs(key: string, limit: number, windowMs: number): number {
 	const now = Date.now();
 	sweep(now);
 	const recent = (hits.get(key) ?? []).filter((t) => now - t < windowMs);
 	if (recent.length >= limit) {
 		hits.set(key, recent);
-		return false;
+		// room opens once enough old hits have left the window to get back under the limit
+		return Math.max(1, recent[recent.length - limit] + windowMs - now);
 	}
 	recent.push(now);
 	hits.set(key, recent);
-	return true;
+	return 0;
+}
+
+/** Returns true if the call is allowed (and records it), false if `key` exceeded `limit` per `windowMs`. */
+export function rateLimit(key: string, limit: number, windowMs: number): boolean {
+	return rateLimitRetryMs(key, limit, windowMs) === 0;
 }
 
 /** Drops stale keys so the map cannot grow without bound. */

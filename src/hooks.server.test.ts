@@ -1,28 +1,40 @@
+import { deserialize } from '$app/forms';
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Handle } from '@sveltejs/kit/hooks';
 import { eq } from 'drizzle-orm';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { env } from './lib/server/env';
 import { createSession } from './lib/server/auth/session';
 import { db } from './lib/server/db';
 import { sessions } from './lib/server/db/schema';
 import { resetDb, setupDb, testUser } from './lib/server/db/test-utils';
+// the real client-side parser; kit initializes its transport at app start, tests must do it by hand
+// @ts-expect-error kit's internal module ships no declarations
+import { init_transport } from '../node_modules/@sveltejs/kit/src/runtime/app/internal/transport.js';
+import { resetRateLimits } from './lib/server/rate-limit';
 import { handle, mediaOrigin } from './hooks.server';
 
-beforeAll(setupDb);
-beforeEach(resetDb);
+beforeAll(async () => {
+	init_transport({});
+	await setupDb();
+});
+beforeEach(async () => {
+	resetRateLimits();
+	await resetDb();
+});
 
 function run(
 	path: string,
 	cookie?: string,
 	resolved: Response = new Response('ok'),
-	method = 'GET'
+	method = 'GET',
+	headers: Record<string, string> = {}
 ) {
 	const deleted: string[] = [];
 	const set: { name: string; value: string; opts: Record<string, unknown> }[] = [];
 	const event = {
 		url: new URL(`https://loki.test${path}`),
-		request: new Request(`https://loki.test${path}`, { method }),
+		request: new Request(`https://loki.test${path}`, { method, headers }),
 		cookies: {
 			get: (name: string) => (name === 'loki_session' ? cookie : undefined),
 			delete: (name: string) => void deleted.push(name),
@@ -207,5 +219,65 @@ describe('write rate limits', () => {
 			last = (await run('/api/memes/1/vote', token, new Response('ok'), 'POST').response).status;
 		}
 		expect(last).toBe(429);
+	});
+});
+
+describe('429 responses', () => {
+	const MESSAGE = 'Langsam, Lord! Zu viele Anfragen.';
+
+	async function tripUpload(headers: Record<string, string> = {}) {
+		const user = await testUser();
+		const token = await createSession(user.id);
+		for (let i = 0; i < 10; i++) {
+			const ok = await run('/upload', token, new Response('ok'), 'POST', headers).response;
+			expect(ok.status).toBe(200);
+		}
+		return run('/upload', token, new Response('ok'), 'POST', headers).response;
+	}
+
+	it('answers a use:enhance action with an ActionResult the client can deserialize', async () => {
+		const res = await tripUpload({ 'x-sveltekit-action': 'true' });
+		expect(res.status).toBe(429);
+		expect(res.headers.get('content-type')).toContain('application/json');
+		const result = deserialize(await res.text());
+		expect(result).toEqual({ type: 'failure', status: 429, data: { message: MESSAGE } });
+	});
+
+	it('keeps text/plain for a plain (non-enhanced) form post', async () => {
+		const res = await tripUpload();
+		expect(res.status).toBe(429);
+		expect(res.headers.get('content-type')).toContain('text/plain');
+		expect(await res.text()).toBe(MESSAGE);
+	});
+
+	it('reports the remaining window in Retry-After (upload bucket is 5 minutes)', async () => {
+		const res = await tripUpload();
+		expect(res.headers.get('retry-after')).toBe(String(5 * 60));
+	});
+
+	it('shrinks Retry-After as the window slides', async () => {
+		vi.useFakeTimers({ toFake: ['Date'] });
+		try {
+			const user = await testUser();
+			const token = await createSession(user.id);
+			for (let i = 0; i < 10; i++) await run('/upload', token, new Response('ok'), 'POST').response;
+			vi.advanceTimersByTime(100_000);
+			const res = await run('/upload', token, new Response('ok'), 'POST').response;
+			expect(res.status).toBe(429);
+			expect(res.headers.get('retry-after')).toBe('200');
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('uses the 60s window for the general write bucket, also on API paths', async () => {
+		const user = await testUser();
+		const token = await createSession(user.id);
+		for (let i = 0; i < 60; i++)
+			await run('/api/memes/1/vote', token, new Response('ok'), 'POST').response;
+		const res = await run('/api/memes/1/vote', token, new Response('ok'), 'POST').response;
+		expect(res.status).toBe(429);
+		expect(res.headers.get('retry-after')).toBe('60');
+		expect(await res.json()).toEqual({ error: MESSAGE });
 	});
 });
