@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/Bastii717/loki/compare/v1.0.0...v1.0.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* exclude release-please CHANGELOG.md from prettier ([d00811f](https://github.com/Bastii717/loki/commit/d00811f23e6a9c456646423ad5a344415dd5fac3))
+
 ## 1.0.0 (2026-10-20)
 
 
