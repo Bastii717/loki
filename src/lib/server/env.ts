@@ -6,6 +6,7 @@ export interface Env {
 	S3_ACCESS_KEY_ID: string;
 	S3_SECRET_ACCESS_KEY: string;
 	S3_REGION: string;
+	S3_FORCE_PATH_STYLE: boolean;
 	OIDC_ISSUER: string;
 	OIDC_CLIENT_ID: string;
 	OIDC_CLIENT_SECRET: string;
@@ -56,6 +57,15 @@ export function loadEnv(): Env {
 		return parsed;
 	};
 
+	const boolean = (name: string, fallback: boolean): boolean => {
+		const raw = source[name];
+		if (raw === undefined || raw === '') return fallback;
+		if (raw === 'true') return true;
+		if (raw === 'false') return false;
+		problems.push(`${name} (not "true" or "false": "${raw}")`);
+		return fallback;
+	};
+
 	const env: Env = {
 		ORIGIN: required('ORIGIN'),
 		DATABASE_URL: required('DATABASE_URL'),
@@ -64,6 +74,7 @@ export function loadEnv(): Env {
 		S3_ACCESS_KEY_ID: required('S3_ACCESS_KEY_ID'),
 		S3_SECRET_ACCESS_KEY: required('S3_SECRET_ACCESS_KEY'),
 		S3_REGION: optional('S3_REGION', 'auto'),
+		S3_FORCE_PATH_STYLE: boolean('S3_FORCE_PATH_STYLE', true),
 		OIDC_ISSUER: required('OIDC_ISSUER'),
 		OIDC_CLIENT_ID: required('OIDC_CLIENT_ID'),
 		OIDC_CLIENT_SECRET: required('OIDC_CLIENT_SECRET'),

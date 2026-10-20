@@ -29,6 +29,7 @@ describe('loadEnv', () => {
 		const env = loadEnv();
 		expect(env.DATABASE_URL).toBe(REQUIRED.DATABASE_URL);
 		expect(env.S3_REGION).toBe('auto');
+		expect(env.S3_FORCE_PATH_STYLE).toBe(true);
 		expect(env.OIDC_GROUPS_CLAIM).toBe('groups');
 		expect(env.OIDC_GROUP_MEMBERS).toBe('loki-members');
 		expect(env.OIDC_GROUP_MODS).toBe('loki-mods');
@@ -43,6 +44,13 @@ describe('loadEnv', () => {
 		const env = loadEnv();
 		expect(env.MAX_UPLOAD_MB).toBe(10);
 		expect(env.AUTO_BLUR_SCORE).toBe(-5);
+	});
+
+	it('parses S3_FORCE_PATH_STYLE and rejects junk', () => {
+		process.env.S3_FORCE_PATH_STYLE = 'false';
+		expect(loadEnv().S3_FORCE_PATH_STYLE).toBe(false);
+		process.env.S3_FORCE_PATH_STYLE = 'maybe';
+		expect(() => loadEnv()).toThrow(/S3_FORCE_PATH_STYLE/);
 	});
 
 	it('requires ORIGIN', () => {
