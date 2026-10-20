@@ -16,6 +16,7 @@ export interface Env {
 	OIDC_GROUP_ADMINS: string;
 	MAX_UPLOAD_MB: number;
 	AUTO_BLUR_SCORE: number;
+	SESSION_ABSOLUTE_MAX_DAYS: number;
 }
 
 type RequiredName =
@@ -83,7 +84,8 @@ export function loadEnv(): Env {
 		OIDC_GROUP_MODS: optional('OIDC_GROUP_MODS', 'loki-mods'),
 		OIDC_GROUP_ADMINS: optional('OIDC_GROUP_ADMINS', 'loki-admins'),
 		MAX_UPLOAD_MB: number('MAX_UPLOAD_MB', 50),
-		AUTO_BLUR_SCORE: number('AUTO_BLUR_SCORE', -3)
+		AUTO_BLUR_SCORE: number('AUTO_BLUR_SCORE', -3),
+		SESSION_ABSOLUTE_MAX_DAYS: number('SESSION_ABSOLUTE_MAX_DAYS', 90)
 	};
 
 	if (problems.length > 0) {

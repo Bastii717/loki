@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../db';
 import { sessions } from '../db/schema';
+import { env } from '../env';
 import { resetDb, setupDb, testUser } from '../db/test-utils';
 import { createSession, destroySession, validateSession } from './session';
 
@@ -72,5 +73,36 @@ describe('sessions', () => {
 		const token = await createSession(user.id);
 		await destroySession(token);
 		expect(await validateSession(token)).toBeNull();
+	});
+
+	describe('absolute cap', () => {
+		const capMs = () => env.SESSION_ABSOLUTE_MAX_DAYS * DAY;
+
+		it('does not renew past createdAt + cap', async () => {
+			const user = await testUser();
+			const token = await createSession(user.id);
+			const createdAt = new Date(Date.now() - capMs() + 2 * DAY);
+			await db
+				.update(sessions)
+				.set({ createdAt, expiresAt: new Date(Date.now() + DAY) })
+				.where(eq(sessions.tokenHash, hash(token)));
+			expect(await validateSession(token)).not.toBeNull();
+			const [row] = await db.select().from(sessions);
+			expect(row.expiresAt.getTime()).toBe(createdAt.getTime() + capMs());
+		});
+
+		it('treats a session older than the cap as expired and deletes it', async () => {
+			const user = await testUser();
+			const token = await createSession(user.id);
+			await db
+				.update(sessions)
+				.set({
+					createdAt: new Date(Date.now() - capMs() - DAY),
+					expiresAt: new Date(Date.now() + 20 * DAY)
+				})
+				.where(eq(sessions.tokenHash, hash(token)));
+			expect(await validateSession(token)).toBeNull();
+			expect(await db.select().from(sessions)).toHaveLength(0);
+		});
 	});
 });

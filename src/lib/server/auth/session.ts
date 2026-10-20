@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
+import { env } from '../env';
 import { sessions, users } from '../db/schema';
 
 export type SessionUser = {
@@ -49,6 +50,7 @@ export async function resolveSession(
 	const [row] = await db
 		.select({
 			expiresAt: sessions.expiresAt,
+			createdAt: sessions.createdAt,
 			id: users.id,
 			username: users.username,
 			role: users.role
@@ -58,16 +60,19 @@ export async function resolveSession(
 		.where(eq(sessions.tokenHash, tokenHash));
 	if (!row) return null;
 
-	const remaining = row.expiresAt.getTime() - Date.now();
+	// Absolute cap: sliding renewal can never keep a session (and stale roles) alive past it.
+	const hardExpiry = row.createdAt.getTime() + env.SESSION_ABSOLUTE_MAX_DAYS * DAY_MS;
+	const remaining = Math.min(row.expiresAt.getTime(), hardExpiry) - Date.now();
 	if (remaining <= 0) {
 		await db.delete(sessions).where(eq(sessions.tokenHash, tokenHash));
 		return null;
 	}
-	const renewed = remaining < RENEW_BELOW_MS;
+	const renewedExpiry = Math.min(Date.now() + SESSION_TTL_MS, hardExpiry);
+	const renewed = remaining < RENEW_BELOW_MS && renewedExpiry > row.expiresAt.getTime();
 	if (renewed) {
 		await db
 			.update(sessions)
-			.set({ expiresAt: new Date(Date.now() + SESSION_TTL_MS) })
+			.set({ expiresAt: new Date(renewedExpiry) })
 			.where(eq(sessions.tokenHash, tokenHash));
 	}
 	return {
