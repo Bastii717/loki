@@ -107,6 +107,13 @@ describe('markSeen', () => {
 		expect(m.v).toBe(1);
 	});
 
+	it('reports whether the call counted a new view', async () => {
+		const u = await testUser();
+		const id = await addMedia(u.id);
+		expect(await markSeen(u.id, id)).toBe(true);
+		expect(await markSeen(u.id, id)).toBe(false);
+	});
+
 	it('counts each distinct user once, also under concurrency', async () => {
 		const users = await Promise.all([testUser(), testUser(), testUser()]);
 		const id = await addMedia(users[0].id);

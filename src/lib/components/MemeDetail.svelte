@@ -11,6 +11,7 @@
 	import Ellipsis from 'lucide-svelte/icons/ellipsis';
 	import Eye from 'lucide-svelte/icons/eye';
 	import EyeOff from 'lucide-svelte/icons/eye-off';
+	import MessageCircle from 'lucide-svelte/icons/message-circle';
 	import Star from 'lucide-svelte/icons/star';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
@@ -41,6 +42,10 @@
 	let userVote = $state<-1 | 0 | 1>(item.userVote);
 	// svelte-ignore state_referenced_locally
 	let comments = $state<CommentItem[]>(initialComments);
+	// svelte-ignore state_referenced_locally
+	let commentCount = $state(item.commentCount);
+	// svelte-ignore state_referenced_locally
+	let viewCount = $state(item.viewCount);
 	let text = $state('');
 	let sending = $state(false);
 	let commentError = $state('');
@@ -66,6 +71,23 @@
 			replaceState: true,
 			state: { feedIds }
 		});
+	}
+
+	// Left/right arrows page through the feed; typing and media controls keep their own arrows.
+	function onKeydown(e: KeyboardEvent) {
+		if (!feedIds || e.defaultPrevented) return;
+		if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+		if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+		const target = e.target;
+		if (
+			target instanceof HTMLElement &&
+			(target.isContentEditable ||
+				['INPUT', 'TEXTAREA', 'SELECT', 'VIDEO'].includes(target.tagName))
+		) {
+			return;
+		}
+		e.preventDefault();
+		go(e.key === 'ArrowLeft' ? prevId : nextId);
 	}
 
 	const SWIPE_THRESHOLD = 60;
@@ -95,7 +117,13 @@
 
 	// ---- seen
 	onMount(() => {
-		void fetch(`/api/memes/${item.id}/seen`, { method: 'POST' }).catch(() => {});
+		void fetch(`/api/memes/${item.id}/seen`, { method: 'POST' })
+			.then(async (res) => {
+				if (!res.ok) return;
+				// only a first view counts server-side; once per mount as the component is keyed by id
+				if (((await res.json()) as { counted: boolean }).counted) viewCount += 1;
+			})
+			.catch(() => {});
 	});
 
 	// ---- voting
@@ -172,6 +200,7 @@
 			});
 			if (!res.ok) throw new Error(String(res.status));
 			comments.unshift((await res.json()) as CommentItem);
+			commentCount += 1;
 			text = '';
 		} catch {
 			commentError = 'Kommentar konnte nicht gesendet werden.';
@@ -185,12 +214,15 @@
 		try {
 			const res = await fetch(`/api/comments/${c.id}`, { method: 'DELETE' });
 			if (!res.ok && res.status !== 404) throw new Error(String(res.status));
+			if (comments.some((x) => x.id === c.id)) commentCount = Math.max(0, commentCount - 1);
 			comments = comments.filter((x) => x.id !== c.id);
 		} catch {
 			commentError = 'Kommentar konnte nicht gelöscht werden.';
 		}
 	}
 </script>
+
+<svelte:window onkeydown={onKeydown} />
 
 <header class="bar">
 	<button type="button" class="icon-btn" onclick={back} aria-label="Zurück"
@@ -282,7 +314,13 @@
 					von {item.uploader} ·
 					<time datetime={item.createdAt}>{relativeTime(item.createdAt)}</time>
 					·
-					<span class="views"><Eye size={14} aria-hidden="true" /> {item.viewCount}</span>
+					<span class="views" aria-label="{viewCount} Aufrufe"
+						><Eye size={14} aria-hidden="true" /> {viewCount}</span
+					>
+					·
+					<span class="views" aria-label="{commentCount} Kommentare"
+						><MessageCircle size={14} aria-hidden="true" /> {commentCount}</span
+					>
 				</p>
 			</div>
 			<button

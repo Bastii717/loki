@@ -94,11 +94,12 @@ export async function deleteComment(user: SessionUser, commentId: number): Promi
  * Records that the user has seen a meme. The single seen-write (detail view and
  * Entdecken): inserts the mediaViews row and bumps media.viewCount only when the
  * row was new, in one transaction, so repeats and races never double-count.
+ * Returns whether this call counted a new view.
  */
-export async function markSeen(userId: number, mediaId: number): Promise<void> {
+export async function markSeen(userId: number, mediaId: number): Promise<boolean> {
 	const [m] = await db.select({ id: media.id }).from(media).where(eq(media.id, mediaId));
 	if (!m) throw new MediaNotFoundError();
-	await db.transaction(async (tx) => {
+	return db.transaction(async (tx) => {
 		const inserted = await tx
 			.insert(mediaViews)
 			.values({ userId, mediaId })
@@ -110,5 +111,6 @@ export async function markSeen(userId: number, mediaId: number): Promise<void> {
 				.set({ viewCount: sql`${media.viewCount} + 1` })
 				.where(eq(media.id, mediaId));
 		}
+		return inserted.length > 0;
 	});
 }
