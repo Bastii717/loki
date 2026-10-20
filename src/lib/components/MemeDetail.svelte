@@ -316,7 +316,7 @@
 					type="button"
 					class="arrow up"
 					class:active={userVote === 1}
-					aria-label="Upvote"
+					aria-label="Hochwählen"
 					aria-pressed={userVote === 1}
 					onclick={() => vote(1)}
 					><ArrowBigUp
@@ -330,7 +330,7 @@
 					type="button"
 					class="arrow down"
 					class:active={userVote === -1}
-					aria-label="Downvote"
+					aria-label="Runterwählen"
 					aria-pressed={userVote === -1}
 					onclick={() => vote(-1)}
 					><ArrowBigDown
