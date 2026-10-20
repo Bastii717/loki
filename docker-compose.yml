@@ -48,7 +48,7 @@ services:
   # Encrypted nightly backups (Postgres dump + media bucket) to a separate S3 bucket.
   # Commented out by default because it needs ./backup.env (copy backup.env.example).
   # It deliberately uses its OWN env file: the app must never see the backup credentials or
-  # crypt keys, and the backup job needs neither the OIDC secret nor the session secret.
+  # crypt keys, and the backup job must not see the app's secrets (OIDC client secret etc.).
   # See docs/deployment.md and backup/README.md (also: restore runbook).
   # backup:
   #   build: ./backup
