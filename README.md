@@ -17,6 +17,17 @@ Planned and being built. The UI is German; code and docs are English.
 - **Rules and FAQ**, editable by admins in the app.
 - **PWA** with a share target, so memes can be sent straight from the share sheet.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/feed-mobile.png" alt="Feed auf dem Smartphone: Meme-Karten mit Abstimmung, Kommentaren und Hashtags, unten die Tab-Leiste" width="45%">
+  <img src="docs/screenshots/detail-mobile.png" alt="Detailansicht eines Memes auf dem Smartphone mit Hashtags und Kommentaren" width="45%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/feed-desktop.png" alt="Feed im Desktop-Browser im dunklen Design" width="100%">
+</p>
+
 ## Security model
 
 - Sign-in is Authentik OIDC only. Access is gated on group membership; a valid Authentik login alone is not enough. Member, moderator and admin roles come from groups.
