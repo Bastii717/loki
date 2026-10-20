@@ -171,7 +171,6 @@
 				type="file"
 				name="file"
 				accept="image/*,video/*"
-				capture="environment"
 				required
 				onchange={() => setPreview(fileInput?.files?.[0])}
 			/>
