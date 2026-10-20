@@ -67,13 +67,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # MinIO runs as a plain container: service containers cannot pass the
-      # `server /data` command the image needs. The tag is pinned by hand
-      # because Dependabot cannot bump an image inside a `run` script.
+      # `server /data` command the image needs. Upstream minio images are no
+      # longer publicly pullable (Docker Hub and quay.io), and Chainguard's
+      # free tier only publishes `latest`, so no version pin is possible. The
+      # dev compose stack uses the same image.
       - name: Start MinIO
         run: |
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+            cgr.dev/chainguard/minio:latest server /data
           for i in $(seq 1 30); do
             curl -sf http://localhost:9000/minio/health/live && exit 0
             sleep 2
