@@ -157,7 +157,7 @@ $ docker compose -p loki-restore -f restore-compose.yml up -d     # postgres:17-
 $ rclone mkdir R:loki                                              # empty media bucket in the restore MinIO
 
 $ docker run --rm --network loki-restore_default --env-file backup.env --env-file restore.env loki-backup:local restore.sh
-refusing: set RESTORE_CONFIRM=yes to restore into postgres://loki:restore@... and bucket loki
+refusing: set RESTORE_CONFIRM=yes to restore into db:5432/loki and bucket loki
 
 $ ... -e RESTORE_CONFIRM=yes loki-backup:local restore.sh
 restoring database from loki-20261020T161400Z.dump

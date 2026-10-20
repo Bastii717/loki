@@ -8,7 +8,7 @@ set -eu
 : "${DATABASE_URL:?}"
 . /usr/local/bin/lib.sh
 
-[ "${RESTORE_CONFIRM:-}" = "yes" ] || { echo "refusing: set RESTORE_CONFIRM=yes to restore into ${DATABASE_URL%%@*}@... and bucket ${S3_BUCKET}" >&2; exit 1; }
+[ "${RESTORE_CONFIRM:-}" = "yes" ] || { echo "refusing: set RESTORE_CONFIRM=yes to restore into ${DATABASE_URL#*@} and bucket ${S3_BUCKET}" >&2; exit 1; }
 TABLES="$(psql "$DATABASE_URL" -Atc "select count(*) from information_schema.tables where table_schema='public'")"
 if [ "$TABLES" != "0" ] && [ "${RESTORE_FORCE:-}" != "1" ]; then
   echo "refusing: target database already has $TABLES tables (set RESTORE_FORCE=1 to overwrite)" >&2; exit 1
