@@ -1,9 +1,15 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { env } from '../../lib/server/env';
 import { UploadError, createMedia } from '../../lib/server/media/create';
-import type { Actions } from './$types';
+import { peekShared } from '../../lib/server/share-stash';
+import type { Actions, PageServerLoad } from './$types';
 
 const TITLE_MAX = 150;
+
+/** `?shared=1` after the PWA share target: tells the page a file is waiting in the stash. */
+export const load: PageServerLoad = ({ url, locals }) => ({
+	hasShared: url.searchParams.get('shared') === '1' && peekShared(locals.user!.id) !== null
+});
 
 export const actions: Actions = {
 	default: async ({ request, locals }) => {

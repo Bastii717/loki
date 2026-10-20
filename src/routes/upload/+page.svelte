@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import X from 'lucide-svelte/icons/x';
-	import type { ActionData } from './$types';
+	import { onMount } from 'svelte';
+	import type { ActionData, PageData } from './$types';
 
-	let { form }: { form: ActionData } = $props();
+	let { form, data }: { form: ActionData; data: PageData } = $props();
 
 	const TAG_PATTERN = /^[a-z0-9äöüß-]{2,30}$/;
 	const MAX_TAGS = 10;
@@ -47,6 +48,20 @@
 		fileInput.files = transfer.files;
 		setPreview(file);
 	}
+
+	// file handed over by the PWA share target (stashed server-side for two minutes)
+	onMount(async () => {
+		if (!data.hasShared) return;
+		try {
+			const res = await fetch('/share/file');
+			if (!res.ok) return;
+			const blob = await res.blob();
+			const name = decodeURIComponent(res.headers.get('x-shared-name') ?? 'geteilt');
+			takeFile(new File([blob], name, { type: blob.type }));
+		} catch {
+			// the user can still pick the file manually
+		}
+	});
 
 	function onPaste(e: ClipboardEvent) {
 		const file = [...(e.clipboardData?.files ?? [])].find((f) => /^(image|video)\//.test(f.type));

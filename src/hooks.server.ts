@@ -3,11 +3,14 @@ import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, resolveSession } from './lib/server/auth/session';
 import { runMigrations } from './lib/server/db';
 import { env } from './lib/server/env';
+import { startJobs } from './lib/server/jobs';
+import { rateLimit } from './lib/server/rate-limit';
 
 /** Runs once at server start so misconfiguration fails at boot, not on the first request. */
 export const init: ServerInit = async () => {
 	void env.DATABASE_URL; // validate the whole environment eagerly
 	await runMigrations();
+	startJobs();
 };
 
 const PUBLIC_PATHS = new Set([
@@ -21,7 +24,23 @@ const PUBLIC_PATHS = new Set([
 ]);
 
 const isPublic = (path: string) =>
-	PUBLIC_PATHS.has(path) || path.startsWith('/_app/immutable/') || path === '/_app/version.json';
+	PUBLIC_PATHS.has(path) ||
+	path.startsWith('/icons/') || // PWA install fetches icons without credentials
+	path.startsWith('/_app/immutable/') ||
+	path === '/_app/version.json';
+
+const WRITE_METHODS = new Set(['POST', 'PATCH', 'DELETE']);
+const RATE_LIMITED_MESSAGE = 'Langsam, Lord! Zu viele Anfragen.';
+
+/** Per-user limits for state-changing requests (in-memory, see rate-limit.ts). */
+function limited(method: string, path: string, userId: number): boolean {
+	if (!WRITE_METHODS.has(method)) return false;
+	if (!rateLimit(`write:${userId}`, 60, 60_000)) return true;
+	if (method === 'POST' && (path === '/upload' || path.startsWith('/upload/'))) {
+		return !rateLimit(`upload:${userId}`, 10, 5 * 60_000);
+	}
+	return false;
+}
 
 /** Adds `origin` to the sources of `directive` in a CSP header value. */
 function addSource(csp: string, directive: string, origin: string): string {
@@ -69,6 +88,17 @@ export const handle: Handle = async ({ event, resolve }) => {
 			return secure(json({ error: 'Unauthorized' }, { status: 401 }));
 		}
 		return secure(new Response(null, { status: 303, headers: { location: '/login' } }));
+	}
+	if (event.locals.user && limited(event.request.method, path, event.locals.user.id)) {
+		const status = 429;
+		return secure(
+			path === '/api' || path.startsWith('/api/')
+				? json({ error: RATE_LIMITED_MESSAGE }, { status })
+				: new Response(RATE_LIMITED_MESSAGE, {
+						status,
+						headers: { 'content-type': 'text/plain; charset=utf-8', 'retry-after': '60' }
+					})
+		);
 	}
 	return secure(await resolve(event));
 };
