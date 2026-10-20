@@ -44,7 +44,7 @@ Requires Node and Docker.
 
 ```sh
 cp .env.example .env
-docker compose -f compose.dev.yml up -d   # Postgres, MinIO, mock OIDC provider
+docker compose -f docker-compose.dev.yml up -d   # Postgres, MinIO, mock OIDC provider
 npm install
 npm run dev
 ```

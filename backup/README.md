@@ -1,6 +1,6 @@
 # Backups and restore runbook
 
-What the `backup` service (`compose.prod.yml`, commented out by default) saves, by default every night at 03:00:
+What the `backup` service (`docker-compose.yml`, commented out by default) saves, by default every night at 03:00:
 
 | What                              | How                                          | Where (in the backup bucket, through the rclone crypt remote `VAULT:`)                                                   |
 | --------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -23,16 +23,16 @@ Files: `Dockerfile` (alpine, `postgresql17-client`, `rclone`, healthcheck), `bac
 
 ```sh
 cp backup.env.example backup.env && chmod 600 backup.env   # fill in
-# uncomment `backup:` in compose.prod.yml, then
-docker compose -f compose.prod.yml up -d --build backup
-docker compose -f compose.prod.yml logs backup             # "backup: schedule '0 3 * * *' (UTC), ..."
-docker compose -f compose.prod.yml exec backup backup.sh   # one backup right now
+# uncomment `backup:` in docker-compose.yml, then
+docker compose up -d --build backup
+docker compose logs backup             # "backup: schedule '0 3 * * *' (UTC), ..."
+docker compose exec backup backup.sh   # one backup right now
 ```
 
-**Failure visibility.** A successful run touches `/var/run/backup.ok`; the container is `unhealthy` when that file is older than `BACKUP_MAX_AGE_HOURS` (default 48, i.e. two daily intervals; set it to 2x your `BACKUP_CRON` interval). Check with `docker compose -f compose.prod.yml ps backup` (or alert on the health state) and, at least weekly, look at the newest dump:
+**Failure visibility.** A successful run touches `/var/run/backup.ok`; the container is `unhealthy` when that file is older than `BACKUP_MAX_AGE_HOURS` (default 48, i.e. two daily intervals; set it to 2x your `BACKUP_CRON` interval). Check with `docker compose ps backup` (or alert on the health state) and, at least weekly, look at the newest dump:
 
 ```sh
-docker compose -f compose.prod.yml exec backup sh -c '. /usr/local/bin/lib.sh; rclone lsf VAULT:db/ | sort | tail -n 1'
+docker compose exec backup sh -c '. /usr/local/bin/lib.sh; rclone lsf VAULT:db/ | sort | tail -n 1'
 ```
 
 The file name contains the UTC timestamp of the dump; it must be younger than a day or two.
