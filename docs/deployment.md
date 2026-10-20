@@ -147,6 +147,16 @@ To release, tag a commit on `main` and push the tag, or create a release with a 
 git tag v1.2.3 && git push origin v1.2.3
 ```
 
+### Image signatures
+
+Every published image is signed with [cosign](https://docs.sigstore.dev/) (keyless: the signing identity is this repo's `Docker` workflow via GitHub OIDC, recorded in the Rekor transparency log). Images published before v1.1.0 are unsigned. Verify a pulled image with:
+
+```bash
+cosign verify ghcr.io/bastii717/loki:latest \
+  --certificate-identity-regexp 'https://github\.com/Bastii717/loki/\.github/workflows/docker_publish\.yml@refs/(heads/main|tags/v.*)' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
 ## PWA share target
 
 `POST /share` (the Android share sheet) is a multipart form POST, so SvelteKit's CSRF check

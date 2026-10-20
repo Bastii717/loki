@@ -24,10 +24,18 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Needed to complete the identity challenge with sigstore/fulcio when
+      # signing the pushed image (keyless, outside of PRs).
+      id-token: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Install cosign for keyless image signing (except on PR)
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       # Login against a Docker registry except on PR
       - name: Log into registry ${{ env.REGISTRY }}
@@ -56,7 +64,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      # Build on every PR (no push); build and push on main and release tags
+      # Build on every PR (no push, amd64 only); build and push multi-arch on
+      # main and release tags
       - name: Build and push Docker image
         id: build-and-push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -65,6 +74,17 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Sign the resulting image digest (covers every tag pushed above).
+      # Keyless: the GitHub OIDC identity of this workflow run is recorded in
+      # the Rekor transparency log; verification is documented in
+      # docs/deployment.md.
+      - name: Sign the published Docker image
+        if: github.event_name != 'pull_request'
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+        run: echo "$TAGS" | xargs -I {} cosign sign --yes {}@$DIGEST
