@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadEnv } from './env';
 
 const REQUIRED = {
+	ORIGIN: 'http://localhost:5173',
 	DATABASE_URL: 'postgres://loki:loki@localhost:5432/loki',
 	S3_ENDPOINT: 'http://localhost:9000',
 	S3_BUCKET: 'loki',
@@ -42,6 +43,12 @@ describe('loadEnv', () => {
 		const env = loadEnv();
 		expect(env.MAX_UPLOAD_MB).toBe(10);
 		expect(env.AUTO_BLUR_SCORE).toBe(-5);
+	});
+
+	it('requires ORIGIN', () => {
+		expect(loadEnv().ORIGIN).toBe(REQUIRED.ORIGIN);
+		delete process.env.ORIGIN;
+		expect(() => loadEnv()).toThrow(/ORIGIN/);
 	});
 
 	it('throws naming the missing variable', () => {

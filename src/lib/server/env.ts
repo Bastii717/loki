@@ -1,4 +1,5 @@
 export interface Env {
+	ORIGIN: string;
 	DATABASE_URL: string;
 	S3_ENDPOINT: string;
 	S3_BUCKET: string;
@@ -17,6 +18,7 @@ export interface Env {
 }
 
 type RequiredName =
+	| 'ORIGIN'
 	| 'DATABASE_URL'
 	| 'S3_ENDPOINT'
 	| 'S3_BUCKET'
@@ -55,6 +57,7 @@ export function loadEnv(): Env {
 	};
 
 	const env: Env = {
+		ORIGIN: required('ORIGIN'),
 		DATABASE_URL: required('DATABASE_URL'),
 		S3_ENDPOINT: required('S3_ENDPOINT'),
 		S3_BUCKET: required('S3_BUCKET'),

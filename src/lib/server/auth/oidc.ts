@@ -65,8 +65,7 @@ export function getConfiguration(): Promise<client.Configuration> {
 
 export { client };
 
-export const redirectUri = (requestUrl: URL) =>
-	`${process.env.ORIGIN ?? requestUrl.origin}/auth/callback`;
+export const redirectUri = () => `${env.ORIGIN}/auth/callback`;
 
 export const STATE_COOKIE = 'loki_oidc_state';
 export const VERIFIER_COOKIE = 'loki_oidc_verifier';

@@ -15,7 +15,7 @@ export const load: PageServerLoad = ({ locals, url }) => {
 };
 
 export const actions: Actions = {
-	default: async ({ cookies, url }) => {
+	default: async ({ cookies }) => {
 		const config = await getConfiguration();
 		const state = client.randomState();
 		const verifier = client.randomPKCECodeVerifier();
@@ -23,7 +23,7 @@ export const actions: Actions = {
 		cookies.set(VERIFIER_COOKIE, verifier, FLOW_COOKIE_OPTIONS);
 
 		const target = client.buildAuthorizationUrl(config, {
-			redirect_uri: redirectUri(url),
+			redirect_uri: redirectUri(),
 			scope: 'openid profile groups',
 			state,
 			code_challenge: await client.calculatePKCECodeChallenge(verifier),
