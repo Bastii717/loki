@@ -1,8 +1,19 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
+	import ArrowBigDown from 'lucide-svelte/icons/arrow-big-down';
+	import ArrowBigUp from 'lucide-svelte/icons/arrow-big-up';
+	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
+	import ChevronLeft from 'lucide-svelte/icons/chevron-left';
+	import ChevronRight from 'lucide-svelte/icons/chevron-right';
+	import Ellipsis from 'lucide-svelte/icons/ellipsis';
+	import Eye from 'lucide-svelte/icons/eye';
+	import EyeOff from 'lucide-svelte/icons/eye-off';
+	import Star from 'lucide-svelte/icons/star';
+	import Trash2 from 'lucide-svelte/icons/trash-2';
+	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import { relativeTime } from '../time';
 	import type { CommentItem } from '../server/comments';
 	import type { FeedItem } from '../server/feed';
@@ -10,11 +21,14 @@
 	let {
 		item,
 		comments: initialComments,
-		viewer
+		viewer,
+		flags
 	}: {
 		item: FeedItem;
 		comments: CommentItem[];
 		viewer: { id: number; canModerate: boolean };
+		/** Raw flags when the viewer may delete/flag this meme (uploader or moderator), else null. */
+		flags: { nsfw: boolean; spoiler: boolean } | null;
 	} = $props();
 
 	// The parent keys this component by meme id, so initial props are the whole state.
@@ -30,6 +44,13 @@
 	let sending = $state(false);
 	let commentError = $state('');
 	let voting = false;
+	// svelte-ignore state_referenced_locally
+	let favorited = $state(item.userFavorite);
+	// svelte-ignore state_referenced_locally
+	let favCount = $state(item.favoriteCount);
+	let favPending = false;
+	let menuOpen = $state(false);
+	let menuError = $state('');
 	const scoreLabel = $derived(score > 0 ? `+${score}` : String(score));
 
 	// ---- swipe / arrow navigation between feed neighbours
@@ -103,6 +124,55 @@
 		}
 	}
 
+	// ---- favorite
+	async function toggleFavorite() {
+		if (favPending) return;
+		favPending = true;
+		const prev = { favorited, favCount };
+		favorited = !prev.favorited;
+		favCount += favorited ? 1 : -1;
+		try {
+			const res = await fetch(`/api/memes/${item.id}/favorite`, { method: 'POST' });
+			if (!res.ok) throw new Error(String(res.status));
+			const data = (await res.json()) as { favorited: boolean; count: number };
+			favorited = data.favorited;
+			favCount = data.count;
+		} catch {
+			favorited = prev.favorited;
+			favCount = prev.favCount;
+		} finally {
+			favPending = false;
+		}
+	}
+
+	// ---- delete / flags (uploader or moderator)
+	async function deleteMeme() {
+		if (!confirm('Dieses Meme endgültig löschen?')) return;
+		menuError = '';
+		try {
+			const res = await fetch(`/api/memes/${item.id}`, { method: 'DELETE' });
+			if (!res.ok && res.status !== 404) throw new Error(String(res.status));
+			await goto(resolve('/'), { invalidateAll: true });
+		} catch {
+			menuError = 'Meme konnte nicht gelöscht werden.';
+		}
+	}
+
+	async function setFlag(flag: 'nsfw' | 'spoiler', value: boolean) {
+		menuError = '';
+		try {
+			const res = await fetch(`/api/memes/${item.id}`, {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ [flag]: value })
+			});
+			if (!res.ok) throw new Error(String(res.status));
+			await invalidateAll();
+		} catch {
+			menuError = 'Markierung konnte nicht geändert werden.';
+		}
+	}
+
 	// ---- comments
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
@@ -139,7 +209,9 @@
 </script>
 
 <header class="bar">
-	<button type="button" class="icon-btn" onclick={back} aria-label="Zurück">←</button>
+	<button type="button" class="icon-btn" onclick={back} aria-label="Zurück"
+		><ArrowLeft size={22} aria-hidden="true" /></button
+	>
 	<span class="bar-title">{item.title || 'Ohne Titel'}</span>
 	{#if feedIds}
 		<div class="pager">
@@ -148,15 +220,53 @@
 				class="icon-btn"
 				disabled={prevId === null}
 				onclick={() => go(prevId)}
-				aria-label="Vorheriges Meme">‹</button
+				aria-label="Vorheriges Meme"><ChevronLeft size={24} aria-hidden="true" /></button
 			>
 			<button
 				type="button"
 				class="icon-btn"
 				disabled={nextId === null}
 				onclick={() => go(nextId)}
-				aria-label="Nächstes Meme">›</button
+				aria-label="Nächstes Meme"><ChevronRight size={24} aria-hidden="true" /></button
 			>
+		</div>
+	{/if}
+	{#if flags}
+		<div class="menu">
+			<button
+				type="button"
+				class="icon-btn"
+				aria-label="Weitere Aktionen"
+				aria-haspopup="menu"
+				aria-expanded={menuOpen}
+				onclick={() => (menuOpen = !menuOpen)}><Ellipsis size={22} aria-hidden="true" /></button
+			>
+			{#if menuOpen}
+				<div class="popover" role="menu">
+					<button
+						type="button"
+						role="menuitemcheckbox"
+						aria-checked={flags.nsfw}
+						onclick={() => setFlag('nsfw', !flags.nsfw)}
+					>
+						<EyeOff size={18} aria-hidden="true" />
+						{flags.nsfw ? 'NSFW-Markierung entfernen' : 'Als NSFW markieren'}
+					</button>
+					<button
+						type="button"
+						role="menuitemcheckbox"
+						aria-checked={flags.spoiler}
+						onclick={() => setFlag('spoiler', !flags.spoiler)}
+					>
+						<TriangleAlert size={18} aria-hidden="true" />
+						{flags.spoiler ? 'Spoiler-Markierung entfernen' : 'Als Spoiler markieren'}
+					</button>
+					<button type="button" role="menuitem" class="danger" onclick={deleteMeme}>
+						<Trash2 size={18} aria-hidden="true" /> Meme löschen
+					</button>
+					{#if menuError}<p class="error" role="alert">{menuError}</p>{/if}
+				</div>
+			{/if}
 		</div>
 	{/if}
 </header>
@@ -171,9 +281,11 @@
 		{/if}
 		{#if !revealed}
 			<button type="button" class="reveal" onclick={() => (revealed = true)}>
-				{item.blurred === 'nsfw'
-					? '🔞 Antippen zum Anzeigen'
-					: '⚠️ Spoiler — Antippen zum Anzeigen'}
+				{#if item.blurred === 'nsfw'}
+					<EyeOff size={20} aria-hidden="true" /> Antippen zum Anzeigen
+				{:else}
+					<TriangleAlert size={20} aria-hidden="true" /> Spoiler — Antippen zum Anzeigen
+				{/if}
 			</button>
 		{/if}
 	</div>
@@ -185,16 +297,19 @@
 				<p class="meta">
 					von {item.uploader} ·
 					<time datetime={item.createdAt}>{relativeTime(item.createdAt)}</time>
-					· 👁 {item.viewCount}
+					·
+					<span class="views"><Eye size={14} aria-hidden="true" /> {item.viewCount}</span>
 				</p>
 			</div>
-			<span
+			<button
+				type="button"
 				class="star"
-				class:on={item.userFavorite}
-				role="img"
-				aria-label="{item.favoriteCount} Favoriten{item.userFavorite
-					? ', von dir favorisiert'
-					: ''}">{item.userFavorite ? '★' : '☆'} {item.favoriteCount}</span
+				class:on={favorited}
+				aria-pressed={favorited}
+				aria-label={favorited ? 'Favorit entfernen' : 'Als Favorit speichern'}
+				onclick={toggleFavorite}
+				><Star size={22} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true" />
+				<span>{favCount}</span></button
 			>
 			<div class="votes">
 				<button
@@ -203,7 +318,12 @@
 					class:active={userVote === 1}
 					aria-label="Upvote"
 					aria-pressed={userVote === 1}
-					onclick={() => vote(1)}>▲</button
+					onclick={() => vote(1)}
+					><ArrowBigUp
+						size={26}
+						fill={userVote === 1 ? 'currentColor' : 'none'}
+						aria-hidden="true"
+					/></button
 				>
 				<b class="score" class:pos={score > 0} class:neg={score < 0}>{scoreLabel}</b>
 				<button
@@ -212,7 +332,12 @@
 					class:active={userVote === -1}
 					aria-label="Downvote"
 					aria-pressed={userVote === -1}
-					onclick={() => vote(-1)}>▼</button
+					onclick={() => vote(-1)}
+					><ArrowBigDown
+						size={26}
+						fill={userVote === -1 ? 'currentColor' : 'none'}
+						aria-hidden="true"
+					/></button
 				>
 			</div>
 		</div>
@@ -240,7 +365,7 @@
 			<p class="error" role="alert">{commentError}</p>
 		{/if}
 		{#if comments.length === 0}
-			<p class="empty">Noch keine Kommentare — sei der Erste! 🎤</p>
+			<p class="empty">Noch keine Kommentare — sei der Erste!</p>
 		{:else}
 			<ul class="list">
 				{#each comments as c (c.id)}
@@ -295,8 +420,9 @@
 		height: 44px;
 		border: 0;
 		background: none;
-		font-size: 24px;
-		line-height: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		cursor: pointer;
 	}
 
@@ -340,6 +466,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		gap: 8px;
 		padding: 16px;
 		border: 0;
 		background: var(--overlay);
@@ -376,8 +503,67 @@
 	}
 
 	.star {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		min-width: 44px;
+		padding: 4px 0;
+		border: 0;
+		background: none;
 		color: var(--text-muted);
-		font-size: 14px;
+		font-size: 12px;
+		cursor: pointer;
+	}
+
+	.views {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		vertical-align: bottom;
+	}
+
+	.menu {
+		position: relative;
+	}
+
+	.popover {
+		position: absolute;
+		top: 100%;
+		right: 0;
+		z-index: 6;
+		display: flex;
+		flex-direction: column;
+		min-width: 230px;
+		padding: 4px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface-raised);
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+	}
+
+	.popover button {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-height: 44px;
+		padding: 0 12px;
+		border: 0;
+		border-radius: 8px;
+		background: none;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.popover button:hover {
+		background: var(--surface);
+	}
+
+	.popover .danger {
+		color: var(--down);
+	}
+
+	.popover .error {
+		margin: 4px 12px 8px;
 	}
 
 	.star.on {
@@ -397,8 +583,10 @@
 		padding: 0;
 		border: 0;
 		background: none;
-		font-size: 16px;
-		line-height: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: inherit;
 		cursor: pointer;
 	}
 

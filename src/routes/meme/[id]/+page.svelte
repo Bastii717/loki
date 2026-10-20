@@ -11,5 +11,5 @@
 
 <!-- keyed so swiping to another meme starts with fresh vote/comment/blur state -->
 {#key data.item.id}
-	<MemeDetail item={data.item} comments={data.comments} viewer={data.viewer} />
+	<MemeDetail item={data.item} comments={data.comments} viewer={data.viewer} flags={data.flags} />
 {/key}

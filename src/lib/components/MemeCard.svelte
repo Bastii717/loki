@@ -1,6 +1,14 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import ArrowBigDown from 'lucide-svelte/icons/arrow-big-down';
+	import ArrowBigUp from 'lucide-svelte/icons/arrow-big-up';
+	import Eye from 'lucide-svelte/icons/eye';
+	import EyeOff from 'lucide-svelte/icons/eye-off';
+	import MessageCircle from 'lucide-svelte/icons/message-circle';
+	import Play from 'lucide-svelte/icons/play';
+	import Star from 'lucide-svelte/icons/star';
+	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import { relativeTime } from '../time';
 	import type { FeedItem } from '../server/feed';
 
@@ -22,7 +30,26 @@
 	// svelte-ignore state_referenced_locally
 	let userVote = $state<-1 | 0 | 1>(item.userVote);
 	let pending = false;
+	// svelte-ignore state_referenced_locally
+	let favorited = $state(item.userFavorite);
+	let favPending = false;
 	const scoreLabel = $derived(score > 0 ? `+${score}` : String(score));
+
+	async function toggleFavorite() {
+		if (favPending) return;
+		favPending = true;
+		const prev = favorited;
+		favorited = !prev;
+		try {
+			const res = await fetch(`/api/memes/${item.id}/favorite`, { method: 'POST' });
+			if (!res.ok) throw new Error(String(res.status));
+			favorited = ((await res.json()) as { favorited: boolean }).favorited;
+		} catch {
+			favorited = prev;
+		} finally {
+			favPending = false;
+		}
+	}
 
 	async function vote(dir: 1 | -1) {
 		if (pending) return;
@@ -70,13 +97,26 @@
 			/>
 		</a>
 		{#if item.kind !== 'image'}
-			<span class="badge">{item.kind === 'video' ? '▶ Video' : 'GIF'}</span>
+			<span class="badge">
+				{#if item.kind === 'video'}<Play size={11} fill="currentColor" aria-hidden="true" /> Video{:else}GIF{/if}
+			</span>
 		{/if}
+		<button
+			type="button"
+			class="fav"
+			class:on={favorited}
+			aria-label={favorited ? 'Favorit entfernen' : 'Als Favorit speichern'}
+			aria-pressed={favorited}
+			onclick={toggleFavorite}
+			><Star size={20} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true" /></button
+		>
 		{#if hidden}
 			<button type="button" class="reveal" onclick={() => (revealed = true)}>
-				{item.blurred === 'nsfw'
-					? '🔞 Antippen zum Anzeigen'
-					: '⚠️ Spoiler — Antippen zum Anzeigen'}
+				{#if item.blurred === 'nsfw'}
+					<EyeOff size={20} aria-hidden="true" /> Antippen zum Anzeigen
+				{:else}
+					<TriangleAlert size={20} aria-hidden="true" /> Spoiler — Antippen zum Anzeigen
+				{/if}
 			</button>
 		{/if}
 	</div>
@@ -93,8 +133,12 @@
 			{/if}
 			<p class="meta">
 				<span>von {item.uploader}</span>
-				<span aria-label="{item.commentCount} Kommentare">💬 {item.commentCount}</span>
-				<span aria-label="{item.viewCount} Aufrufe">👁 {item.viewCount}</span>
+				<span class="stat" aria-label="{item.commentCount} Kommentare"
+					><MessageCircle size={14} aria-hidden="true" /> {item.commentCount}</span
+				>
+				<span class="stat" aria-label="{item.viewCount} Aufrufe"
+					><Eye size={14} aria-hidden="true" /> {item.viewCount}</span
+				>
 				<time datetime={item.createdAt}>{relativeTime(item.createdAt)}</time>
 			</p>
 		</div>
@@ -106,7 +150,12 @@
 				class:active={userVote === 1}
 				aria-label="Upvote"
 				aria-pressed={userVote === 1}
-				onclick={() => vote(1)}>▲</button
+				onclick={() => vote(1)}
+				><ArrowBigUp
+					size={26}
+					fill={userVote === 1 ? 'currentColor' : 'none'}
+					aria-hidden="true"
+				/></button
 			>
 			<b class="score" class:pos={score > 0} class:neg={score < 0}>{scoreLabel}</b>
 			<button
@@ -115,7 +164,12 @@
 				class:active={userVote === -1}
 				aria-label="Downvote"
 				aria-pressed={userVote === -1}
-				onclick={() => vote(-1)}>▼</button
+				onclick={() => vote(-1)}
+				><ArrowBigDown
+					size={26}
+					fill={userVote === -1 ? 'currentColor' : 'none'}
+					aria-hidden="true"
+				/></button
 			>
 		</div>
 	</div>
@@ -154,7 +208,37 @@
 		transform: scale(1.1);
 	}
 
+	.fav {
+		position: absolute;
+		top: 6px;
+		right: 6px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 40px;
+		height: 40px;
+		padding: 0;
+		border: 0;
+		border-radius: 50%;
+		background: rgba(0, 0, 0, 0.55);
+		color: #fff;
+		cursor: pointer;
+	}
+
+	.fav.on {
+		color: #ffd24a;
+	}
+
+	.stat {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+	}
+
 	.badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
 		position: absolute;
 		top: 8px;
 		left: 8px;
@@ -173,6 +257,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		gap: 8px;
 		padding: 16px;
 		border: 0;
 		background: var(--overlay);
@@ -240,8 +325,10 @@
 		padding: 0;
 		border: 0;
 		background: none;
-		font-size: 16px;
-		line-height: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: inherit;
 		cursor: pointer;
 	}
 
