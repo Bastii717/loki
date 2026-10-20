@@ -11,8 +11,12 @@ export async function setupDb(): Promise<void> {
 	await runMigrations();
 }
 
-/** Truncates every table and restarts identity sequences. */
+/**
+ * Truncates every table and restarts identity sequences. Refuses to run outside vitest, so a
+ * misconfigured DATABASE_URL can never wipe a real database.
+ */
 export async function resetDb(): Promise<void> {
+	if (!process.env.VITEST) throw new Error('resetDb() may only run under vitest');
 	const names = Object.values(schema)
 		.filter((v) => is(v, PgTable))
 		.map((t) => `"${getTableName(t as PgTable)}"`);

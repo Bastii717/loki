@@ -47,12 +47,16 @@ export function loadEnv(): Env {
 		const value = source[name];
 		return value === undefined || value === '' ? fallback : value;
 	};
-	const number = (name: string, fallback: number): number => {
+	const number = (name: string, fallback: number, opts: { min?: number } = {}): number => {
 		const raw = source[name];
 		if (raw === undefined || raw === '') return fallback;
 		const parsed = Number(raw);
 		if (!Number.isFinite(parsed)) {
 			problems.push(`${name} (not a number: "${raw}")`);
+			return fallback;
+		}
+		if (opts.min !== undefined && (!Number.isInteger(parsed) || parsed < opts.min)) {
+			problems.push(`${name} (must be an integer >= ${opts.min}: "${raw}")`);
 			return fallback;
 		}
 		return parsed;
@@ -83,9 +87,9 @@ export function loadEnv(): Env {
 		OIDC_GROUP_MEMBERS: optional('OIDC_GROUP_MEMBERS', 'loki-members'),
 		OIDC_GROUP_MODS: optional('OIDC_GROUP_MODS', 'loki-mods'),
 		OIDC_GROUP_ADMINS: optional('OIDC_GROUP_ADMINS', 'loki-admins'),
-		MAX_UPLOAD_MB: number('MAX_UPLOAD_MB', 50),
+		MAX_UPLOAD_MB: number('MAX_UPLOAD_MB', 50, { min: 1 }),
 		AUTO_BLUR_SCORE: number('AUTO_BLUR_SCORE', -3),
-		SESSION_ABSOLUTE_MAX_DAYS: number('SESSION_ABSOLUTE_MAX_DAYS', 90)
+		SESSION_ABSOLUTE_MAX_DAYS: number('SESSION_ABSOLUTE_MAX_DAYS', 90, { min: 1 })
 	};
 
 	if (problems.length > 0) {

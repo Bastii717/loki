@@ -75,4 +75,27 @@ describe('loadEnv', () => {
 		process.env.MAX_UPLOAD_MB = 'lots';
 		expect(() => loadEnv()).toThrow(/MAX_UPLOAD_MB/);
 	});
+
+	it.each(['0', '-1', '1.5'])('rejects MAX_UPLOAD_MB=%s (positive integer required)', (value) => {
+		process.env.MAX_UPLOAD_MB = value;
+		expect(() => loadEnv()).toThrow(/MAX_UPLOAD_MB/);
+	});
+
+	it.each(['0', '-30', '0.5'])(
+		'rejects SESSION_ABSOLUTE_MAX_DAYS=%s (would expire every session)',
+		(value) => {
+			process.env.SESSION_ABSOLUTE_MAX_DAYS = value;
+			expect(() => loadEnv()).toThrow(/SESSION_ABSOLUTE_MAX_DAYS/);
+		}
+	);
+
+	it('accepts 1 as the lower bound and keeps AUTO_BLUR_SCORE signed', () => {
+		process.env.MAX_UPLOAD_MB = '1';
+		process.env.SESSION_ABSOLUTE_MAX_DAYS = '1';
+		process.env.AUTO_BLUR_SCORE = '-10';
+		const env = loadEnv();
+		expect([env.MAX_UPLOAD_MB, env.SESSION_ABSOLUTE_MAX_DAYS, env.AUTO_BLUR_SCORE]).toEqual([
+			1, 1, -10
+		]);
+	});
 });
