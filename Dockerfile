@@ -9,7 +9,7 @@ RUN npm ci
 COPY . .
 # SvelteKit's postbuild analysis imports server modules, which validate env at load time.
 # These placeholders exist only for this RUN step and are not part of the final image.
-RUN ORIGIN=http://localhost:3000 SESSION_SECRET=build-placeholder-build-placeholder-0000 \
+RUN ORIGIN=http://localhost:3000 \
     DATABASE_URL=postgres://build:build@localhost:5432/build \
     S3_ENDPOINT=http://localhost:9000 S3_BUCKET=build S3_ACCESS_KEY_ID=build S3_SECRET_ACCESS_KEY=build \
     OIDC_ISSUER=http://localhost:8080/build OIDC_CLIENT_ID=build OIDC_CLIENT_SECRET=build \

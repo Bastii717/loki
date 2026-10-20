@@ -20,7 +20,6 @@ Build the image yourself with `docker build -t ghcr.io/bastii717/loki:latest .`.
 | Variable | Required | Notes |
 | --- | --- | --- |
 | `ORIGIN` | yes | Public URL, e.g. `https://loki.example.com` (no trailing slash). Used for CSRF checks and the OIDC redirect URI. |
-| `SESSION_SECRET` | yes | `openssl rand -hex 32` |
 | `POSTGRES_PASSWORD` | compose | Password of the bundled `db` service; compose derives `DATABASE_URL` from it. |
 | `DATABASE_URL` | yes (non-compose) | Overridden by `compose.prod.yml` to point at the `db` service. |
 | `S3_ENDPOINT` | yes | R2: `https://<account-id>.r2.cloudflarestorage.com` |
@@ -83,7 +82,8 @@ To self-host storage instead, uncomment the `minio` block in `compose.prod.yml` 
 
 TLS terminates in front of the container; in both cases set `ORIGIN` to the public https URL,
 `PROTOCOL_HEADER=x-forwarded-proto` and `HOST_HEADER=x-forwarded-host`, and
-`BODY_SIZE_LIMIT` >= `MAX_UPLOAD_MB`.
+`BODY_SIZE_LIMIT` >= `MAX_UPLOAD_MB` (`compose.prod.yml` defaults it to `60M`). With nginx,
+`client_max_body_size` must match it, otherwise nginx answers 413 before the app sees the upload.
 
 ### Option A: Cloudflare Tunnel
 
@@ -104,7 +104,7 @@ server {
     ssl_certificate     /etc/letsencrypt/live/loki.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/loki.example.com/privkey.pem;
 
-    # must be at least MAX_UPLOAD_MB (plus multipart overhead)
+    # must be at least MAX_UPLOAD_MB (plus multipart overhead) and match BODY_SIZE_LIMIT
     client_max_body_size 60m;
 
     location / {

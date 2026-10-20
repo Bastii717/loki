@@ -26,7 +26,7 @@ Planned and being built. The UI is German; code and docs are English.
 
 ## Tech stack
 
-- SvelteKit 2 (Svelte 5) with TypeScript
+- SvelteKit 3 (Svelte 5) with TypeScript
 - PostgreSQL via Drizzle ORM
 - S3-compatible storage: Cloudflare R2 in production, MinIO in development
 - Docker (Compose), self-hosted

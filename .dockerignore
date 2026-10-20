@@ -12,3 +12,4 @@ docs
 compose*.yml
 Dockerfile
 .vscode
+restore.env

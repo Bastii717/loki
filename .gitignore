@@ -25,3 +25,4 @@ vite.config.ts.timestamp-*
 # Brainstorming-Mockups (Superpowers visual companion)
 .superpowers/
 backup.env
+restore.env

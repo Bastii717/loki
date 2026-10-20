@@ -6,6 +6,8 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
+      # adapter-node rejects larger bodies (default 512K); keep >= MAX_UPLOAD_MB
+      BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-60M}
       # overrides any DATABASE_URL in .env so the app always talks to the bundled db
       DATABASE_URL: postgres://loki:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/loki
     depends_on:

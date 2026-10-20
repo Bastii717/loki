@@ -46,7 +46,6 @@ jobs:
           --health-retries 10
     env:
       ORIGIN: http://localhost:5173
-      SESSION_SECRET: ci-secret-ci-secret-ci-secret-ci-secret
       DATABASE_URL: postgres://loki:loki@localhost:5432/loki
       S3_ENDPOINT: http://localhost:9000
       S3_BUCKET: loki
