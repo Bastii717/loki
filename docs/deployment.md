@@ -136,9 +136,16 @@ Set `ADDRESS_HEADER=x-forwarded-for`. nginx overwrites the header with `$remote_
 
 ## Releases
 
-Pushes to `main` run [release-please](https://github.com/googleapis/release-please-action), which keeps one release PR open. Merging it tags the version and publishes `ghcr.io/bastii717/loki:<version>` and `:latest`.
+The `Docker` workflow builds the image for every pull request (without pushing) and publishes it on pushes to `main` and on release tags:
 
-One-time repository setup: Settings > Actions > General > Workflow permissions: enable **Allow GitHub Actions to create and approve pull requests**.
+- push to `main`: `ghcr.io/bastii717/loki:main`
+- tag `v1.2.3`: `ghcr.io/bastii717/loki:1.2.3`, `:1.2`, `:v1` and `:latest`
+
+To release, tag a commit on `main` and push the tag, or create a release with a new `v*.*.*` tag in the GitHub UI:
+
+```bash
+git tag v1.2.3 && git push origin v1.2.3
+```
 
 ## PWA share target
 

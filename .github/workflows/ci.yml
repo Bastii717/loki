@@ -17,15 +17,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
-      - run: npx prettier --check .
-      - run: npx eslint .
-      - run: npm run check
+      - name: Install dependencies
+        run: npm ci
+      - name: Check formatting
+        run: npx prettier --check .
+      - name: Lint
+        run: npx eslint .
+      - name: Type-check
+        run: npm run check
 
   test:
     runs-on: ubuntu-latest
@@ -64,7 +70,8 @@ jobs:
       AUTO_BLUR_SCORE: '-3'
       SESSION_ABSOLUTE_MAX_DAYS: '90'
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # MinIO runs as a plain container: service containers cannot pass the
       # `server /data` command the image needs. Upstream minio images are no
       # longer publicly pullable (Docker Hub and quay.io), and Chainguard's
@@ -81,12 +88,15 @@ jobs:
           done
           docker logs minio
           exit 1
-      - uses: actions/setup-node@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
-      - run: npm test
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test
 
   gitleaks:
     runs-on: ubuntu-latest
@@ -95,22 +105,11 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+      - name: Scan for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max

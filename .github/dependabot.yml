@@ -1,21 +1,46 @@
 version: 2
 updates:
-  - package-ecosystem: npm
-    directory: /
+  - package-ecosystem: 'npm'
+    directory: '/'
     schedule:
-      interval: weekly
+      interval: 'weekly'
+      day: 'monday'
+      time: '06:00'
+      timezone: 'Europe/Berlin'
+    labels:
+      - 'dependencies'
     groups:
-      all:
-        patterns: ['*']
+      npm:
+        patterns:
+          - '*'
     ignore:
       # @types/node majors must follow the Node runtime (24, pinned in
       # engines, .nvmrc, Dockerfile and CI); bump them together by hand.
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
-  - package-ecosystem: github-actions
-    directory: /
+
+  - package-ecosystem: 'docker'
+    directories:
+      - '/'
+      - '/backup'
     schedule:
-      interval: monthly
+      interval: 'weekly'
+      day: 'monday'
+      time: '06:00'
+      timezone: 'Europe/Berlin'
+    labels:
+      - 'dependencies'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '06:00'
+      timezone: 'Europe/Berlin'
+    labels:
+      - 'dependencies'
     groups:
-      actions:
-        patterns: ['*']
+      github-actions:
+        patterns:
+          - '*'
