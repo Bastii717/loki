@@ -1,15 +1,20 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import Compass from 'lucide-svelte/icons/compass';
+	import House from 'lucide-svelte/icons/house';
+	import Plus from 'lucide-svelte/icons/plus';
+	import Quote from 'lucide-svelte/icons/quote';
+	import User from 'lucide-svelte/icons/user';
 	let { pathname }: { pathname: string } = $props();
 
 	// Entdecken, Quotes and Profil arrive in later tasks; their links 404 until then.
 	const left = [
-		{ href: '/', label: 'Feed', icon: '🏠' },
-		{ href: '/entdecken', label: 'Entdecken', icon: '🔥' }
+		{ href: '/', label: 'Feed', icon: House },
+		{ href: '/entdecken', label: 'Entdecken', icon: Compass }
 	];
 	const right = [
-		{ href: '/quotes', label: 'Quotes', icon: '💬' },
-		{ href: '/profil', label: 'Profil', icon: '👤' }
+		{ href: '/quotes', label: 'Quotes', icon: Quote },
+		{ href: '/profil', label: 'Profil', icon: User }
 	];
 
 	const isActive = (href: string) =>
@@ -23,18 +28,20 @@
 			class="tab"
 			aria-current={isActive(tab.href) ? 'page' : undefined}
 		>
-			<span class="icon" aria-hidden="true">{tab.icon}</span>
+			<tab.icon size={22} aria-hidden="true" />
 			<span class="label">{tab.label}</span>
 		</a>
 	{/each}
-	<a href={resolve('/upload')} class="fab" aria-label="Meme hochladen">+</a>
+	<a href={resolve('/upload')} class="fab" aria-label="Meme hochladen"
+		><Plus size={26} strokeWidth={2.5} aria-hidden="true" /></a
+	>
 	{#each right as tab (tab.href)}
 		<a
 			href={resolve(tab.href as '/')}
 			class="tab"
 			aria-current={isActive(tab.href) ? 'page' : undefined}
 		>
-			<span class="icon" aria-hidden="true">{tab.icon}</span>
+			<tab.icon size={22} aria-hidden="true" />
 			<span class="label">{tab.label}</span>
 		</a>
 	{/each}
@@ -69,15 +76,6 @@
 		color: var(--text);
 	}
 
-	.tab:not([aria-current='page']) .icon {
-		opacity: 0.6;
-	}
-
-	.icon {
-		font-size: 19px;
-		line-height: 1;
-	}
-
 	.fab {
 		justify-self: center;
 		display: flex;
@@ -89,9 +87,6 @@
 		border-radius: 50%;
 		background: var(--accent);
 		color: var(--accent-text);
-		font-size: 28px;
-		font-weight: 700;
-		line-height: 1;
 		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
 	}
 </style>

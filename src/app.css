@@ -1,3 +1,6 @@
+/* Self-hosted UI font (bundled by Vite, no external requests). */
+@import '@fontsource-variable/inter';
+
 /* Design tokens: dark by default, light via the OS preference. */
 :root {
 	color-scheme: dark light;
@@ -20,7 +23,7 @@
 	--radius-pill: 999px;
 	--gutter: 10px;
 	--tabbar-height: 56px;
-	--font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--font: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
 @media (prefers-color-scheme: light) {

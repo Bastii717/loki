@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import X from 'lucide-svelte/icons/x';
 	import type { ActionData } from './$types';
 
 	let { form }: { form: ActionData } = $props();
@@ -177,7 +178,8 @@
 						<button
 							type="button"
 							aria-label="Tag {tag} entfernen"
-							onclick={() => (tags = tags.filter((t) => t !== tag))}>×</button
+							onclick={() => (tags = tags.filter((t) => t !== tag))}
+							><X size={14} aria-hidden="true" /></button
 						>
 					</span>
 				{/each}
@@ -312,6 +314,9 @@
 		background: color-mix(in srgb, currentColor 15%, transparent);
 	}
 	.chip button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		font: inherit;
 		border: 0;
 		background: none;

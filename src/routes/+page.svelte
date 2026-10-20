@@ -1,5 +1,9 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import Clock from 'lucide-svelte/icons/clock';
+	import Flame from 'lucide-svelte/icons/flame';
+	import Trophy from 'lucide-svelte/icons/trophy';
+	import X from 'lucide-svelte/icons/x';
 	import { untrack } from 'svelte';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import MemeCard from '#lib/components/MemeCard.svelte';
@@ -9,9 +13,9 @@
 	let { data }: PageProps = $props();
 
 	const sorts = [
-		{ key: 'new', label: 'Neu' },
-		{ key: 'hot', label: 'Hot' },
-		{ key: 'hof', label: 'Hall of Fame' }
+		{ key: 'new', label: 'Neu', icon: Clock },
+		{ key: 'hot', label: 'Hot', icon: Flame },
+		{ key: 'hof', label: 'Hall of Fame', icon: Trophy }
 	] as const;
 
 	// initialised from props so the first page is part of the server-rendered HTML
@@ -90,7 +94,8 @@
 			<a
 				href="{resolve('/')}{feedQuery(s.key, data.tag)}"
 				class="chip sort"
-				aria-current={data.sort === s.key ? 'true' : undefined}>{s.label}</a
+				aria-current={data.sort === s.key ? 'true' : undefined}
+				><s.icon size={16} aria-hidden="true" />{s.label}</a
 			>
 		{/each}
 	</nav>
@@ -99,7 +104,9 @@
 		<p class="active-tag">
 			<span class="chip tag">
 				#{data.tag}
-				<a href="{resolve('/')}{feedQuery(data.sort, null)}" aria-label="Tag-Filter entfernen">✕</a>
+				<a href="{resolve('/')}{feedQuery(data.sort, null)}" aria-label="Tag-Filter entfernen"
+					><X size={14} aria-hidden="true" /></a
+				>
 			</span>
 		</p>
 	{/if}
@@ -127,7 +134,7 @@
 			{/if}
 		</div>
 	{:else if items.length > 0}
-		<p class="end muted">Das war's — du bist am Ende. 🎉</p>
+		<p class="end muted">Das war's — du bist am Ende.</p>
 	{/if}
 </main>
 
@@ -203,6 +210,7 @@
 	}
 
 	.tag a {
+		display: flex;
 		padding: 0 2px;
 	}
 
