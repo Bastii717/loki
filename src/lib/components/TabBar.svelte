@@ -5,11 +5,11 @@
 	// Entdecken, Quotes and Profil arrive in later tasks; their links 404 until then.
 	const left = [
 		{ href: '/', label: 'Feed', icon: '🏠' },
-		{ href: '/discover', label: 'Entdecken', icon: '🔥' }
+		{ href: '/entdecken', label: 'Entdecken', icon: '🔥' }
 	];
 	const right = [
 		{ href: '/quotes', label: 'Quotes', icon: '💬' },
-		{ href: '/profile', label: 'Profil', icon: '👤' }
+		{ href: '/profil', label: 'Profil', icon: '👤' }
 	];
 
 	const isActive = (href: string) =>

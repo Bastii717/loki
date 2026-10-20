@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { untrack } from 'svelte';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import MemeCard from '#lib/components/MemeCard.svelte';
 	import type { FeedItem } from '../lib/server/feed';
@@ -13,8 +14,9 @@
 		{ key: 'hof', label: 'Hall of Fame' }
 	] as const;
 
-	let items: FeedItem[] = $state([]);
-	let nextCursor: string | null = $state(null);
+	// initialised from props so the first page is part of the server-rendered HTML
+	let items: FeedItem[] = $state(untrack(() => data.items));
+	let nextCursor: string | null = $state(untrack(() => data.nextCursor));
 	let loading = $state(false);
 	let failed = $state(false);
 	let sentinel: HTMLElement | undefined = $state();
