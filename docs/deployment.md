@@ -9,7 +9,7 @@ The container runs as the non-root `node` user, listens on port 3000, exposes `/
 
 ## Quick start
 
-1. Copy `.env.example` to `.env` and fill it in (see below).
+1. Copy `.env.example` (the production template; local development uses `.env.dev.example`) to `.env` and fill it in (see below).
 2. `docker compose pull && docker compose up -d`
 3. Publish the app through a Cloudflare Tunnel or nginx (see "Publishing").
 
@@ -39,6 +39,7 @@ Build the image yourself with `docker build -t ghcr.io/bastii717/loki:latest .`.
 | `HOST_HEADER` | behind proxy | `x-forwarded-host` |
 | `ADDRESS_HEADER` | behind proxy | `x-forwarded-for` (client IP, used for rate limiting). Only set it when a trusted proxy overwrites that header. |
 | `TUNNEL_TOKEN` | tunnel only | Cloudflare Tunnel token for the `cloudflared` sidecar |
+| `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | minio fallback only | Root credentials of the optional `minio` service; reuse them as `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` |
 
 ### Backup variables (`backup.env`, not `.env`)
 
