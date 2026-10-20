@@ -10,7 +10,7 @@ The container runs as the non-root `node` user, listens on port 3000, exposes `/
 ## Quick start
 
 1. Copy `.env.example` to `.env` and fill it in (see below).
-2. `docker compose -f compose.prod.yml pull && docker compose -f compose.prod.yml up -d`
+2. `docker compose pull && docker compose up -d`
 3. Publish the app through a Cloudflare Tunnel or nginx (see "Publishing").
 
 Build the image yourself with `docker build -t ghcr.io/bastii717/loki:latest .`.
@@ -21,8 +21,8 @@ Build the image yourself with `docker build -t ghcr.io/bastii717/loki:latest .`.
 | --- | --- | --- |
 | `ORIGIN` | yes | Public URL, e.g. `https://loki.example.com` (no trailing slash). Used for the OIDC redirect URI. adapter-node ignores it: SvelteKit's CSRF check compares the `Origin` header with the origin built from `PROTOCOL_HEADER`/`HOST_HEADER` (default protocol `https`), so set those behind a proxy. |
 | `POSTGRES_PASSWORD` | compose | Password of the bundled `db` service; compose derives `DATABASE_URL` from it. |
-| `DATABASE_URL` | yes (non-compose) | Overridden by `compose.prod.yml` to point at the `db` service. |
-| `S3_ENDPOINT` | yes | R2: `https://<account-id>.r2.cloudflarestorage.com` |
+| `DATABASE_URL` | yes (non-compose) | Overridden by `docker-compose.yml` to point at the `db` service. |
+| `S3_ENDPOINT` | yes | R2 (EU jurisdiction): `https://<account-id>.eu.r2.cloudflarestorage.com` |
 | `S3_BUCKET` | yes | Private bucket name |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | yes | R2 API token (Object Read & Write, scoped to the bucket) |
 | `S3_REGION` | no | `auto` for R2 |
@@ -58,7 +58,7 @@ The `backup` service reads its own `backup.env` (template: `backup.env.example`)
 | `BACKUP_MAX_DELETE` | no | A run that would delete more than this many media objects from the mirror aborts, default `200` |
 | `BACKUP_MAX_AGE_HOURS` | no | Container healthcheck turns unhealthy when no backup succeeded for this long, default `48` |
 
-The `backup` service in `compose.prod.yml` is commented out by default; uncomment it after creating `backup.env`. Operations and restore procedure: [`backup/README.md`](../backup/README.md).
+The `backup` service in `docker-compose.yml` is commented out by default; uncomment it after creating `backup.env`. Operations and restore procedure: [`backup/README.md`](../backup/README.md).
 
 ## Authentik setup
 
@@ -70,26 +70,26 @@ The `backup` service in `compose.prod.yml` is commented out by default; uncommen
 
 ## Cloudflare R2
 
-1. Create a bucket (R2 > Create bucket). Leave it private.
+1. Create the bucket in the **EU jurisdiction**: R2 > Create bucket > *Specify jurisdiction* > **European Union (EU)**. Leave it private. The jurisdiction (unlike a location hint) guarantees the data is stored and processed only in the EU, and it cannot be changed after creation. Create the backup bucket the same way.
 2. **Never attach a public custom domain, and never enable the `r2.dev` public URL, on this bucket.** Media is served only through short-lived presigned URLs issued by the app; a public bucket would expose every upload, including content that has been removed or blurred.
-3. Create an R2 API token with Object Read & Write limited to this bucket; use its keys as `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`.
-4. Set `S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com`, `S3_REGION=auto`, `S3_FORCE_PATH_STYLE=false`.
+3. Create an R2 API token with Object Read & Write limited to this bucket (select the EU jurisdiction when scoping it); use its keys as `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`.
+4. Set `S3_ENDPOINT=https://<account-id>.eu.r2.cloudflarestorage.com` (note the `.eu.`; EU buckets are not reachable through the default endpoint), `S3_REGION=auto`, `S3_FORCE_PATH_STYLE=false`.
 5. The app sets `requestChecksumCalculation`/`responseChecksumValidation` to `WHEN_REQUIRED` because R2 rejects the SDK's default CRC32 checksums.
 
-To self-host storage instead, uncomment the `minio` block in `compose.prod.yml` and follow the comments there.
+To self-host storage instead, uncomment the `minio` block in `docker-compose.yml` and follow the comments there.
 
 ## Publishing
 
 TLS terminates in front of the container; in both cases set `ORIGIN` to the public https URL,
 `PROTOCOL_HEADER=x-forwarded-proto` and `HOST_HEADER=x-forwarded-host`, and
-`BODY_SIZE_LIMIT` >= `MAX_UPLOAD_MB` (`compose.prod.yml` defaults it to `60M`). With nginx,
+`BODY_SIZE_LIMIT` >= `MAX_UPLOAD_MB` (`docker-compose.yml` defaults it to `60M`). With nginx,
 `client_max_body_size` must match it, otherwise nginx answers 413 before the app sees the upload.
 
 ### Option A: Cloudflare Tunnel
 
 1. Zero Trust > Networks > Tunnels: create a tunnel, copy its token into `TUNNEL_TOKEN` in `.env`.
 2. Add a public hostname pointing at `http://app:3000`.
-3. In `compose.prod.yml` uncomment the `cloudflared` service and remove the `ports:` entry of `app` so nothing is published on the host.
+3. In `docker-compose.yml` uncomment the `cloudflared` service and remove the `ports:` entry of `app` so nothing is published on the host.
 4. `ADDRESS_HEADER`: cloudflared forwards the client IP in `x-forwarded-for` (`cf-connecting-ip` also works). Set `ADDRESS_HEADER=x-forwarded-for`.
 
 ### Option B: external nginx
@@ -131,7 +131,7 @@ Set `ADDRESS_HEADER=x-forwarded-for`. nginx overwrites the header with `$remote_
 ## Operations
 
 - Health: `curl http://127.0.0.1:3000/healthz` returns `ok`.
-- Update: `docker compose -f compose.prod.yml pull && docker compose -f compose.prod.yml up -d` (migrations run on start).
+- Update: `docker compose pull && docker compose up -d` (migrations run on start).
 - Postgres data lives in the `db-data` volume.
 
 ## PWA share target
