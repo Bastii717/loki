@@ -7,17 +7,22 @@ import { createSession } from './lib/server/auth/session';
 import { db } from './lib/server/db';
 import { sessions } from './lib/server/db/schema';
 import { resetDb, setupDb, testUser } from './lib/server/db/test-utils';
-import { handle } from './hooks.server';
+import { handle, mediaOrigin } from './hooks.server';
 
 beforeAll(setupDb);
 beforeEach(resetDb);
 
-function run(path: string, cookie?: string, resolved: Response = new Response('ok')) {
+function run(
+	path: string,
+	cookie?: string,
+	resolved: Response = new Response('ok'),
+	method = 'GET'
+) {
 	const deleted: string[] = [];
 	const set: { name: string; value: string; opts: Record<string, unknown> }[] = [];
 	const event = {
 		url: new URL(`https://loki.test${path}`),
-		request: new Request(`https://loki.test${path}`),
+		request: new Request(`https://loki.test${path}`, { method }),
 		cookies: {
 			get: (name: string) => (name === 'loki_session' ? cookie : undefined),
 			delete: (name: string) => void deleted.push(name),
@@ -139,5 +144,62 @@ describe('security headers', () => {
 		expect(header).toContain(`img-src 'self' data: ${origin}`);
 		expect(header).toContain(`media-src 'self' ${origin}`);
 		expect(header).toContain(`script-src 'self' 'nonce-abc'`);
+	});
+});
+
+describe('media origin for the CSP', () => {
+	it('uses the endpoint origin with path-style addressing', () => {
+		expect(mediaOrigin('http://minio.lan:9000/', 'loki', true)).toBe('http://minio.lan:9000');
+	});
+
+	it('uses the bucket virtual host without path-style addressing (R2)', () => {
+		expect(mediaOrigin('https://acc.r2.cloudflarestorage.com', 'loki', false)).toBe(
+			'https://loki.acc.r2.cloudflarestorage.com'
+		);
+		expect(mediaOrigin('http://s3.lan:9000', 'loki', false)).toBe('http://loki.s3.lan:9000');
+	});
+
+	it('puts the configured origin into img-src and media-src', async () => {
+		const csp = `img-src 'self'; media-src 'self'`;
+		const resolved = new Response('x', { headers: { 'content-security-policy': csp } });
+		const res = await run('/healthz', undefined, resolved).response;
+		const expected = mediaOrigin(env.S3_ENDPOINT, env.S3_BUCKET, env.S3_FORCE_PATH_STYLE);
+		expect(res.headers.get('content-security-policy')).toBe(
+			`img-src 'self' ${expected}; media-src 'self' ${expected}`
+		);
+	});
+});
+
+describe('write rate limits', () => {
+	it('gives seen-tracking its own, larger bucket', async () => {
+		const user = await testUser();
+		const token = await createSession(user.id);
+		for (let i = 0; i < 100; i++) {
+			const res = await run('/api/memes/1/seen', token, new Response('ok'), 'POST').response;
+			expect(res.status).toBe(200);
+		}
+		// seen requests did not consume the regular write budget
+		const vote = await run('/api/memes/1/vote', token, new Response('ok'), 'POST').response;
+		expect(vote.status).toBe(200);
+	});
+
+	it('still caps seen-tracking at 300 per minute', async () => {
+		const user = await testUser();
+		const token = await createSession(user.id);
+		let last = 200;
+		for (let i = 0; i < 301; i++) {
+			last = (await run('/api/memes/1/seen', token, new Response('ok'), 'POST').response).status;
+		}
+		expect(last).toBe(429);
+	});
+
+	it('keeps the 60/min cap for other writes', async () => {
+		const user = await testUser();
+		const token = await createSession(user.id);
+		let last = 200;
+		for (let i = 0; i < 61; i++) {
+			last = (await run('/api/memes/1/vote', token, new Response('ok'), 'POST').response).status;
+		}
+		expect(last).toBe(429);
 	});
 });

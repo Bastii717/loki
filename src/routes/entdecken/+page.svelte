@@ -17,6 +17,7 @@
 	let loading = false;
 	let exhausted = false;
 	let replaying = false;
+	let activeId = $state<number | null>(null);
 	const loaded = new SvelteSet<number>();
 	const marked = new SvelteSet<number>();
 
@@ -59,7 +60,12 @@
 	function markSeen(id: number) {
 		if (marked.has(id)) return;
 		marked.add(id);
-		void fetch(`/api/memes/${id}/seen`, { method: 'POST' }).catch(() => marked.delete(id));
+		// failures (network or HTTP, e.g. 429) un-mark so the next activation retries
+		void fetch(`/api/memes/${id}/seen`, { method: 'POST' })
+			.then((res) => {
+				if (!res.ok) marked.delete(id);
+			})
+			.catch(() => marked.delete(id));
 	}
 
 	// A slide counts as active once 60% of it is on screen (the pager fills the viewport).
@@ -68,10 +74,21 @@
 			? new IntersectionObserver(
 					(hits) => {
 						for (const hit of hits) {
+							const el = hit.target as HTMLElement;
+							const id = el.dataset.id ? Number(el.dataset.id) : null;
+							// a slide dropping below the threshold stops being the active one (pauses its video)
+							if (
+								(!hit.isIntersecting || hit.intersectionRatio < ACTIVE_RATIO) &&
+								id === activeId
+							) {
+								activeId = null;
+							}
 							// callbacks also fire when a slide merely starts to peek in; only count real activation
 							if (!hit.isIntersecting || hit.intersectionRatio < ACTIVE_RATIO) continue;
-							const el = hit.target as HTMLElement;
-							if (el.dataset.id) markSeen(Number(el.dataset.id));
+							if (id !== null) {
+								activeId = id;
+								markSeen(id);
+							}
 							if (Number(el.dataset.index) >= entries.length - 3) void loadMore();
 						}
 					},
@@ -98,7 +115,7 @@
 			{@attach watch}
 		>
 			{#if entry.kind === 'meme'}
-				<DiscoverSlide item={entry.item} />
+				<DiscoverSlide item={entry.item} active={activeId === entry.item.id} />
 			{:else}
 				<div class="interstitial">
 					<h1>Du bist auf dem Laufenden!</h1>

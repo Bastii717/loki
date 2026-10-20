@@ -29,18 +29,34 @@ const isPublic = (path: string) =>
 	path.startsWith('/_app/immutable/') ||
 	path === '/_app/version.json';
 
+const SEEN_PATH = /^\/api\/memes\/\d+\/seen$/;
 const WRITE_METHODS = new Set(['POST', 'PATCH', 'DELETE']);
 const RATE_LIMITED_MESSAGE = 'Langsam, Lord! Zu viele Anfragen.';
 
 /** Per-user limits for state-changing requests (in-memory, see rate-limit.ts). */
 function limited(method: string, path: string, userId: number): boolean {
 	if (!WRITE_METHODS.has(method)) return false;
+	// Seen-tracking fires once per swiped slide; fast swiping must not eat the write budget.
+	if (method === 'POST' && SEEN_PATH.test(path)) {
+		return !rateLimit(`seen:${userId}`, 300, 60_000);
+	}
 	if (!rateLimit(`write:${userId}`, 60, 60_000)) return true;
 	if (method === 'POST' && (path === '/upload' || path.startsWith('/upload/'))) {
 		return !rateLimit(`upload:${userId}`, 10, 5 * 60_000);
 	}
 	return false;
 }
+
+/**
+ * Origin the browser fetches presigned media from. With path-style addressing that is the
+ * endpoint itself; otherwise (Cloudflare R2) the SDK presigns `https://<bucket>.<host>`.
+ */
+export function mediaOrigin(endpoint: string, bucket: string, forcePathStyle: boolean): string {
+	const url = new URL(endpoint);
+	return forcePathStyle ? url.origin : `${url.protocol}//${bucket}.${url.host}`;
+}
+
+let cachedMediaOrigin: string | undefined;
 
 /** Adds `origin` to the sources of `directive` in a CSP header value. */
 function addSource(csp: string, directive: string, origin: string): string {
@@ -66,7 +82,8 @@ function secure(response: Response): Response {
 	// origin is only known at runtime, so it is appended here.
 	const csp = headers.get('content-security-policy');
 	if (csp) {
-		const s3 = new URL(env.S3_ENDPOINT).origin;
+		cachedMediaOrigin ??= mediaOrigin(env.S3_ENDPOINT, env.S3_BUCKET, env.S3_FORCE_PATH_STYLE);
+		const s3 = cachedMediaOrigin;
 		headers.set(
 			'content-security-policy',
 			addSource(addSource(csp, 'img-src', s3), 'media-src', s3)
