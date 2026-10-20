@@ -159,6 +159,12 @@ describe('media origin for the CSP', () => {
 		expect(mediaOrigin('http://s3.lan:9000', 'loki', false)).toBe('http://loki.s3.lan:9000');
 	});
 
+	it('keeps the EU jurisdiction subdomain of R2', () => {
+		expect(mediaOrigin('https://acc.eu.r2.cloudflarestorage.com', 'loki', false)).toBe(
+			'https://loki.acc.eu.r2.cloudflarestorage.com'
+		);
+	});
+
 	it('puts the configured origin into img-src and media-src', async () => {
 		const csp = `img-src 'self'; media-src 'self'`;
 		const resolved = new Response('x', { headers: { 'content-security-policy': csp } });
