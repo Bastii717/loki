@@ -1,8 +1,71 @@
+/* Design tokens: dark by default, light via the OS preference. */
 :root {
-	color-scheme: light dark;
+	color-scheme: dark light;
+
+	--bg: #111214;
+	--surface: #2b2d31;
+	--surface-raised: #35373c;
+	--border: #3f4147;
+	--text: #f2f3f5;
+	--text-muted: #949ba4;
+	--accent: #5865f2;
+	--accent-text: #ffffff;
+	--accent-soft: rgba(88, 101, 242, 0.18);
+	--accent-soft-text: #a5acf7;
+	--up: #23a55a;
+	--down: #f23f43;
+	--overlay: rgba(17, 18, 20, 0.55);
+
+	--radius: 12px;
+	--radius-pill: 999px;
+	--gutter: 10px;
+	--tabbar-height: 56px;
+	--font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: light) {
+	:root {
+		--bg: #f2f3f5;
+		--surface: #ffffff;
+		--surface-raised: #ebedef;
+		--border: #d4d7dc;
+		--text: #1e1f22;
+		--text-muted: #5c6068;
+		--accent-soft: rgba(88, 101, 242, 0.12);
+		--accent-soft-text: #4752c4;
+		--up: #1a8a47;
+		--down: #d12c30;
+		--overlay: rgba(242, 243, 245, 0.6);
+	}
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
 }
 
 body {
 	margin: 0;
-	font-family: system-ui, sans-serif;
+	background: var(--bg);
+	color: var(--text);
+	font-family: var(--font);
+	font-size: 15px;
+	line-height: 1.4;
+	-webkit-text-size-adjust: 100%;
+}
+
+a {
+	color: inherit;
+	text-decoration: none;
+}
+
+button {
+	font: inherit;
+	color: inherit;
+}
+
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
 }
