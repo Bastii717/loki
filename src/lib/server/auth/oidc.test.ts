@@ -1,7 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../db';
-import { users } from '../db/schema';
+import { sessions, users } from '../db/schema';
+import { createSession } from './session';
 import { resetDb, setupDb } from '../db/test-utils';
 import { NoAccessError, mapGroupsToRole, upsertUserFromClaims } from './oidc';
 
@@ -52,6 +53,25 @@ describe('upsertUserFromClaims', () => {
 			upsertUserFromClaims({ sub: 's2', preferred_username: 'bob' })
 		).rejects.toBeInstanceOf(NoAccessError);
 		expect(await db.select().from(users)).toHaveLength(0);
+	});
+
+	it('revokes existing sessions when a returning user no longer has a group', async () => {
+		const user = await upsertUserFromClaims(claims({}));
+		const other = await upsertUserFromClaims({
+			sub: 's9',
+			preferred_username: 'carol',
+			groups: ['loki-members']
+		});
+		await createSession(user.id);
+		await createSession(user.id);
+		await createSession(other.id);
+
+		await expect(
+			upsertUserFromClaims({ sub: 's1', preferred_username: 'alice', groups: [] })
+		).rejects.toBeInstanceOf(NoAccessError);
+
+		const rows = await db.select().from(sessions);
+		expect(rows.map((r) => r.userId)).toEqual([other.id]);
 	});
 
 	it('falls back to sub when preferred_username is missing', async () => {

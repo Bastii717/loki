@@ -1,6 +1,7 @@
 import * as client from 'openid-client';
 import { db } from '../db';
-import { users } from '../db/schema';
+import { eq, inArray } from 'drizzle-orm';
+import { sessions, users } from '../db/schema';
 import { env } from '../env';
 import type { SessionUser } from './session';
 
@@ -26,9 +27,17 @@ export async function upsertUserFromClaims(claims: Record<string, unknown>): Pro
 	const raw = claims[env.OIDC_GROUPS_CLAIM];
 	const groups = Array.isArray(raw) ? raw.filter((g): g is string => typeof g === 'string') : [];
 	const role = mapGroupsToRole(groups);
-	if (!role) throw new NoAccessError();
-
 	const sub = String(claims.sub);
+	if (!role) {
+		// revoke access for a returning user who was removed from the groups at the IdP
+		await db
+			.delete(sessions)
+			.where(
+				inArray(sessions.userId, db.select({ id: users.id }).from(users).where(eq(users.sub, sub)))
+			);
+		throw new NoAccessError();
+	}
+
 	const username =
 		typeof claims.preferred_username === 'string' && claims.preferred_username
 			? claims.preferred_username
