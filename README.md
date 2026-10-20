@@ -54,12 +54,12 @@ The roadmap is the task list in [`docs/superpowers/plans/2026-10-20-loki.md`](do
 Requires Node and Docker.
 
 ```sh
-cp .env.example .env
+cp .env.dev.example .env
 docker compose -f docker-compose.dev.yml up -d   # Postgres, MinIO, mock OIDC provider
 npm install
 npm run dev
 ```
 
-Run the tests with `npm test`.
+Run the tests with `npm test`. `.env.dev.example` is the development template; `.env.example` is the production one (see [`docs/deployment.md`](docs/deployment.md)).
 
 For the full design (goals, non-goals, decisions, security, operations), see [`docs/superpowers/specs/`](docs/superpowers/specs/).
