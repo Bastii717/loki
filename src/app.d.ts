@@ -9,7 +9,10 @@ declare global {
 			user: SessionUser | null;
 		}
 		// interface PageData {}
-		// interface PageState {}
+		interface PageState {
+			/** Ordered meme ids of the feed the detail view was opened from (swipe navigation). */
+			feedIds?: number[];
+		}
 		// interface Platform {}
 	}
 }

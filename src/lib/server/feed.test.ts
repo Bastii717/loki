@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
 import { comments, favorites, media, mediaTags, tags, votes } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
-import { getFeedPage } from './feed';
+import { getFeedItem, getFeedPage } from './feed';
 
 beforeAll(setupDb);
 beforeEach(resetDb);
@@ -198,5 +198,18 @@ describe('getFeedPage', () => {
 		await expect(
 			getFeedPage({ viewerId: u.id, sort: 'new', cursor: 'not-a-cursor' })
 		).rejects.toThrow(/cursor/i);
+	});
+});
+
+describe('getFeedItem', () => {
+	it('returns the one meme with viewer-specific fields, or null', async () => {
+		const u = await testUser();
+		const a = await addMedia(u.id);
+		await addMedia(u.id);
+		await db.insert(votes).values({ userId: u.id, mediaId: a, value: 1 });
+		const item = await getFeedItem(u.id, a);
+		expect(item).toMatchObject({ id: a, userVote: 1, uploader: u.username });
+		expect(item!.mediaUrl).toMatch(/^\/media\//);
+		expect(await getFeedItem(u.id, 999999)).toBeNull();
 	});
 });

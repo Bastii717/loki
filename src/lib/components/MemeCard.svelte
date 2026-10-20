@@ -1,14 +1,21 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { relativeTime } from '../time';
 	import type { FeedItem } from '../server/feed';
 
-	let { item }: { item: FeedItem } = $props();
+	let { item, feedIds }: { item: FeedItem; feedIds?: number[] } = $props();
 
 	let revealed = $state(false);
-	const memeHref = $derived(
-		resolve(`/meme/${item.id}` as '/') /* route arrives with the detail page */
-	);
+	const memeHref = $derived(resolve('/meme/[id]', { id: String(item.id) }));
+
+	// Client-side nav that hands the feed's id order to the detail view for swipe navigation.
+	function open(e: MouseEvent) {
+		if (!feedIds || e.defaultPrevented || e.button !== 0) return;
+		if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		e.preventDefault();
+		void goto(memeHref, { state: { feedIds } });
+	}
 	const hidden = $derived(item.blurred !== null && !revealed);
 	// svelte-ignore state_referenced_locally
 	let score = $state(item.score);
@@ -45,7 +52,12 @@
 
 <article class="card">
 	<div class="media">
-		<a href={memeHref} tabindex={hidden ? -1 : undefined} aria-label={item.title || 'Meme'}>
+		<a
+			href={memeHref}
+			onclick={open}
+			tabindex={hidden ? -1 : undefined}
+			aria-label={item.title || 'Meme'}
+		>
 			<img
 				src={item.thumbUrl}
 				alt={item.title}
@@ -71,7 +83,7 @@
 
 	<div class="body">
 		<div class="info">
-			<a href={memeHref} class="title">{item.title || 'Ohne Titel'}</a>
+			<a href={memeHref} onclick={open} class="title">{item.title || 'Ohne Titel'}</a>
 			{#if item.tags.length > 0}
 				<ul class="tags">
 					{#each item.tags as tag (tag)}

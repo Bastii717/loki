@@ -28,6 +28,8 @@
 		failed = false;
 	});
 
+	const feedIds = $derived(items.map((i) => i.id));
+
 	const feedQuery = (sort: string, tag: string | null) => {
 		const params = new SvelteURLSearchParams();
 		if (sort !== 'new') params.set('sort', sort);
@@ -109,7 +111,7 @@
 	{:else}
 		<div class="list">
 			{#each items as item (item.id)}
-				<MemeCard {item} />
+				<MemeCard {item} {feedIds} />
 			{/each}
 		</div>
 	{/if}

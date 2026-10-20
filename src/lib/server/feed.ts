@@ -30,6 +30,8 @@ export interface FeedOptions {
 	tag?: string;
 	cursor?: string;
 	limit?: number;
+	/** Restrict to a single meme (detail view); sort/cursor are then irrelevant. */
+	id?: number;
 }
 
 export class InvalidCursorError extends Error {
@@ -125,6 +127,8 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 		)`
 		: sql``;
 
+	const idFilter = opts.id !== undefined ? sql`AND m.id = ${opts.id}` : sql``;
+
 	const rows = await db.execute<Row>(sql`
 		SELECT m.id, m.title, m.kind, m.object_key, m.thumb_key, m.width, m.height,
 			m.nsfw, m.spoiler, m.score, m.view_count, m.hot_score, m.created_at,
@@ -150,7 +154,7 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 		) fc ON true
 		LEFT JOIN votes v ON v.media_id = m.id AND v.user_id = ${opts.viewerId}
 		LEFT JOIN favorites uf ON uf.media_id = m.id AND uf.user_id = ${opts.viewerId}
-		WHERE true ${after} ${tagFilter}
+		WHERE true ${after} ${tagFilter} ${idFilter}
 		ORDER BY ${keyCol} DESC, m.id DESC
 		LIMIT ${limit + 1}
 	`);
@@ -187,4 +191,10 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 		nextCursor = encodeCursor({ v, id: last.id });
 	}
 	return { items, nextCursor };
+}
+
+/** A single meme in feed-item shape, or null when it does not exist. */
+export async function getFeedItem(viewerId: number, id: number): Promise<FeedItem | null> {
+	const { items } = await getFeedPage({ viewerId, sort: 'new', id, limit: 1 });
+	return items[0] ?? null;
 }
