@@ -35,7 +35,7 @@ You refresh the Loki README screenshots (`docs/screenshots/*.png`) from a seeded
    npx tsx --env-file=.env scripts/readme-screenshots.ts
    ```
 
-   It signs in through the mock OIDC provider as a throwaway user, waits for the visible images to load, and writes `feed-mobile.png` (390x844 @2x), `detail-mobile.png` (390x844 @2x, the meme with the most comments) and `feed-desktop.png` (1440x900 @2x). Set `SCREENSHOT_DEBUG=1` to log failed requests and redirects.
+   It signs in through the mock OIDC provider as a throwaway user, waits for the visible images to load, and writes `feed-mobile.png` (390x844 @2x), `detail-mobile.png` (390x844 @2x, the meme with the most comments) and `feed-desktop.png` (1440x900 @2x). Pass `--only=feed-desktop` (comma-separated names, without `.png`) to retake just some shots. Set `SCREENSHOT_DEBUG=1` to log failed requests and redirects.
 
 4. Stop the dev server again.
 

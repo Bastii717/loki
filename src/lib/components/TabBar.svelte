@@ -61,6 +61,13 @@
 		border-top: 1px solid var(--border);
 	}
 
+	/* wide screens: keep the strip full-width, but seat the items under the 560px feed column */
+	@media (min-width: 768px) {
+		.tabbar {
+			padding-inline: calc((100% - 560px) / 2);
+		}
+	}
+
 	.tab {
 		display: flex;
 		flex-direction: column;

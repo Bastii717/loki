@@ -127,42 +127,51 @@ async function withContext(
 	}
 }
 
+/** `--only=feed-desktop,detail-mobile` retakes just those shots (default: all). */
+const only = process.argv.find((a) => a.startsWith('--only='))?.slice('--only='.length);
+const wants = (name: string) => !only || only.split(',').includes(name);
+
 async function main(): Promise<void> {
 	await mkdir(OUT_DIR, { recursive: true });
 	const browser = await chromium.launch();
 	try {
-		await withContext(
-			browser,
-			MOBILE,
-			async (page) => {
-				await page.goto(`${BASE_URL}/`);
-				await waitForImages(page);
-				await save('feed-mobile.png', await page.screenshot());
+		if (wants('feed-mobile') || wants('detail-mobile'))
+			await withContext(
+				browser,
+				MOBILE,
+				async (page) => {
+					if (wants('feed-mobile')) {
+						await page.goto(`${BASE_URL}/`);
+						await waitForImages(page);
+						await save('feed-mobile.png', await page.screenshot());
+					}
+					if (!wants('detail-mobile')) return;
 
-				// The meme with the most comments makes the best detail view.
-				const link = await page.evaluate(async () => {
-					const res = await fetch('/api/feed?sort=new');
-					const { items } = await res.json();
-					const best = [...items].sort((a, b) => b.commentCount - a.commentCount)[0];
-					return `/meme/${best.id}`;
-				});
-				await page.goto(`${BASE_URL}${link}`);
-				await page.getByText('Kommentare').first().waitFor();
-				await waitForImages(page);
-				await save('detail-mobile.png', await page.screenshot());
-			},
-			true
-		);
-		await withContext(
-			browser,
-			DESKTOP,
-			async (page) => {
-				await page.goto(`${BASE_URL}/`);
-				await waitForImages(page);
-				await save('feed-desktop.png', await page.screenshot());
-			},
-			false
-		);
+					// The meme with the most comments makes the best detail view.
+					const link = await page.evaluate(async () => {
+						const res = await fetch('/api/feed?sort=new');
+						const { items } = await res.json();
+						const best = [...items].sort((a, b) => b.commentCount - a.commentCount)[0];
+						return `/meme/${best.id}`;
+					});
+					await page.goto(`${BASE_URL}${link}`);
+					await page.getByText('Kommentare').first().waitFor();
+					await waitForImages(page);
+					await save('detail-mobile.png', await page.screenshot());
+				},
+				true
+			);
+		if (wants('feed-desktop'))
+			await withContext(
+				browser,
+				DESKTOP,
+				async (page) => {
+					await page.goto(`${BASE_URL}/`);
+					await waitForImages(page);
+					await save('feed-desktop.png', await page.screenshot());
+				},
+				false
+			);
 	} finally {
 		await browser.close();
 	}
