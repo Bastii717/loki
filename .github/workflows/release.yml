@@ -26,6 +26,9 @@ jobs:
         id: rp
         with:
           release-type: node
+          # PRs opened with GITHUB_TOKEN don't trigger CI without manual approval;
+          # a PAT makes release PRs run CI like any other PR. Falls back if unset.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
   publish:
     needs: release-please

@@ -134,6 +134,15 @@ Set `ADDRESS_HEADER=x-forwarded-for`. nginx overwrites the header with `$remote_
 - Update: `docker compose pull && docker compose up -d` (migrations run on start).
 - Postgres data lives in the `db-data` volume.
 
+## Releases
+
+Pushes to `main` run [release-please](https://github.com/googleapis/release-please-action), which keeps one release PR open. Merging it tags the version and publishes `ghcr.io/bastii717/loki:<version>` and `:latest`.
+
+One-time repository setup:
+
+1. Settings > Actions > General > Workflow permissions: enable **Allow GitHub Actions to create and approve pull requests**.
+2. Create a fine-grained personal access token limited to this repository with **Contents** and **Pull requests** set to *Read and write*, and store it as the repository secret `RELEASE_PLEASE_TOKEN`. Release PRs are then opened under that account and run CI normally. Without the secret the workflow falls back to `GITHUB_TOKEN`, and CI on release PRs waits for manual approval ("Approve and run").
+
 ## PWA share target
 
 `POST /share` (the Android share sheet) is a multipart form POST, so SvelteKit's CSRF check
