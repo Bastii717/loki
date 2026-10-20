@@ -5,6 +5,7 @@ import { addComment } from '../../lib/server/comments';
 import { db } from '../../lib/server/db';
 import { comments, media, quotes } from '../../lib/server/db/schema';
 import { resetDb, setupDb, testUser } from '../../lib/server/db/test-utils';
+import { ensureBucket } from '../../lib/server/storage-test-utils';
 import { addQuote } from '../../lib/server/quotes';
 import { resetRateLimits } from '../../lib/server/rate-limit';
 import { callRoute } from '../../lib/server/test-request';
@@ -15,7 +16,11 @@ import { POST as voteMeme } from './memes/[id]/vote/+server';
 import { DELETE as deleteQuote } from './quotes/[id]/+server';
 import { POST as voteQuote } from './quotes/[id]/vote/+server';
 
-beforeAll(setupDb);
+// moderator/uploader deletion removes the bucket objects, so the bucket must exist (fresh CI MinIO)
+beforeAll(async () => {
+	await setupDb();
+	await ensureBucket();
+});
 beforeEach(async () => {
 	resetRateLimits();
 	await resetDb();

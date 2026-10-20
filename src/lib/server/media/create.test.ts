@@ -7,6 +7,7 @@ import { media, mediaTags, tags } from '../db/schema';
 import { resetDb, setupDb, testUser } from '../db/test-utils';
 import { env } from '../env';
 import { deleteObjects, s3Client } from '../storage';
+import { ensureBucket } from '../storage-test-utils';
 import { UploadError, createMedia, normalizeTag } from './create';
 
 async function listKeys(): Promise<string[]> {
@@ -39,6 +40,7 @@ const created: string[] = [];
 
 beforeAll(async () => {
 	await setupDb();
+	await ensureBucket();
 	png = await sharp({ create: { width: 300, height: 200, channels: 3, background: '#39c' } })
 		.png()
 		.toBuffer();
