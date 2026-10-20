@@ -8,7 +8,15 @@
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import type { FeedItem } from '../server/feed';
 
-	let { item }: { item: FeedItem } = $props();
+	let { item, active = false }: { item: FeedItem; active?: boolean } = $props();
+	let video = $state<HTMLVideoElement>();
+
+	// Only the active slide plays; the rest stay paused so swiping does not decode a pile of videos.
+	$effect(() => {
+		if (!video) return;
+		if (active) void video.play().catch(() => {});
+		else video.pause();
+	});
 
 	// The parent keys this component by meme id, so initial props are the whole state.
 	// svelte-ignore state_referenced_locally
@@ -48,9 +56,23 @@
 
 <div class="media">
 	{#if item.kind === 'video'}
-		<video src={item.mediaUrl} loop muted playsinline autoplay class:blurred={!revealed}></video>
+		<video
+			bind:this={video}
+			src={item.mediaUrl}
+			loop
+			muted
+			playsinline
+			preload="metadata"
+			class:blurred={!revealed}
+		></video>
 	{:else}
-		<img src={item.mediaUrl} alt={item.title} class:blurred={!revealed} draggable="false" />
+		<img
+			src={item.mediaUrl}
+			alt={item.title}
+			loading="lazy"
+			class:blurred={!revealed}
+			draggable="false"
+		/>
 	{/if}
 	{#if !revealed}
 		<button type="button" class="reveal" onclick={() => (revealed = true)}>
@@ -73,7 +95,7 @@
 		type="button"
 		class="arrow up"
 		class:active={userVote === 1}
-		aria-label="Upvote"
+		aria-label="Hochwählen"
 		aria-pressed={userVote === 1}
 		onclick={() => vote(1)}
 		><ArrowBigUp size={26} fill={userVote === 1 ? 'currentColor' : 'none'} /></button
@@ -83,7 +105,7 @@
 		type="button"
 		class="arrow down"
 		class:active={userVote === -1}
-		aria-label="Downvote"
+		aria-label="Runterwählen"
 		aria-pressed={userVote === -1}
 		onclick={() => vote(-1)}
 		><ArrowBigDown size={26} fill={userVote === -1 ? 'currentColor' : 'none'} /></button
