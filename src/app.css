@@ -26,8 +26,10 @@
 	--font: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* Light palette: applied by the OS preference unless the user forced dark, or by an explicit
+   [data-theme='light'] (set from the stored choice, see theme.ts and app.html). */
 @media (prefers-color-scheme: light) {
-	:root {
+	:root:not([data-theme='dark']) {
 		--bg: #f2f3f5;
 		--surface: #ffffff;
 		--surface-raised: #ebedef;
@@ -40,6 +42,25 @@
 		--down: #d12c30;
 		--overlay: rgba(242, 243, 245, 0.6);
 	}
+}
+
+:root[data-theme='light'] {
+	color-scheme: light;
+	--bg: #f2f3f5;
+	--surface: #ffffff;
+	--surface-raised: #ebedef;
+	--border: #d4d7dc;
+	--text: #1e1f22;
+	--text-muted: #5c6068;
+	--accent-soft: rgba(88, 101, 242, 0.12);
+	--accent-soft-text: #4752c4;
+	--up: #1a8a47;
+	--down: #d12c30;
+	--overlay: rgba(242, 243, 245, 0.6);
+}
+
+:root[data-theme='dark'] {
+	color-scheme: dark;
 }
 
 *,

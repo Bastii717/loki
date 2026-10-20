@@ -7,6 +7,7 @@
 	import { untrack } from 'svelte';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import MemeCard from '#lib/components/MemeCard.svelte';
+	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
 	import type { FeedItem } from '../lib/server/feed';
 	import type { PageProps } from './$types';
 
@@ -81,11 +82,14 @@
 
 <header class="top">
 	<span class="brand">Loki</span>
-	<form method="POST" action="/logout">
-		<button type="submit" class="logout" title="Angemeldet als {data.user?.username}">
-			Abmelden
-		</button>
-	</form>
+	<div class="actions">
+		<ThemeToggle />
+		<form method="POST" action="/logout">
+			<button type="submit" class="logout" title="Angemeldet als {data.user?.username}">
+				Abmelden
+			</button>
+		</form>
+	</div>
 </header>
 
 <main class="feed">
@@ -148,6 +152,12 @@
 		justify-content: space-between;
 		padding: 10px 14px;
 		background: var(--bg);
+	}
+
+	.actions {
+		display: flex;
+		align-items: center;
+		gap: 4px;
 	}
 
 	.brand {
