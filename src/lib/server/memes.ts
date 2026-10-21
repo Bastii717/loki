@@ -7,7 +7,8 @@ import {
 	assertNotTimedOut,
 	resolveAfterDelete,
 	resolveCommentReportsOfMedia,
-	resolveWithAudit
+	resolveWithAudit,
+	snapshotContent
 } from './moderation';
 import { deleteObjects } from './storage';
 import { MediaNotFoundError } from './votes';
@@ -52,7 +53,8 @@ export async function toggleFavorite(
 
 /**
  * Uploader or moderator/admin. Removes the row (dependents cascade) and closes its open reports in
- * one transaction (the uploader's own deletion: 'removed'; a moderator's: 'actioned' + audit row),
+ * one transaction (the uploader's own deletion: 'removed', no audit; a moderator's: always an audit
+ * row with author + title, and the open reports 'actioned'),
  * then removes both bucket objects. Objects that are already gone are no error (S3 deletes are idempotent).
  */
 export async function deleteMedia(user: SessionUser, mediaId: number): Promise<void> {
@@ -68,16 +70,18 @@ export async function deleteMedia(user: SessionUser, mediaId: number): Promise<v
 	await db.transaction(async (tx) => {
 		// the meme's comments cascade away with it: close their reports (neutrally) first
 		await resolveCommentReportsOfMedia(user, mediaId, tx);
+		const snapshot = await snapshotContent(tx, 'meme', mediaId);
 		await tx.delete(media).where(eq(media.id, mediaId));
-		await resolveAfterDelete(user, 'meme', mediaId, row.uploaderId, tx);
+		await resolveAfterDelete(user, 'meme', mediaId, row.uploaderId, tx, snapshot);
 	});
 	await deleteObjects([row.objectKey, row.thumbKey]);
 }
 
 /**
  * Moderators/admins on any media, the uploader on their own. Unspecified flags stay unchanged.
- * A moderator switching a flag ON for someone else's meme is a forced flag: its open reports are
- * closed as 'actioned' and flags_forced is audited. Own memes and switching flags off never are.
+ * Every change of a flag on someone else's meme is audited with its direction ("NSFW an", "Spoiler
+ * aus"): flags_forced when a flag is switched ON (which also closes the open reports as
+ * 'actioned'), flags_changed when flags are only switched off. Own memes are never audited.
  */
 export async function setFlags(
 	user: SessionUser,
@@ -85,7 +89,7 @@ export async function setFlags(
 	flags: { nsfw?: boolean; spoiler?: boolean }
 ): Promise<void> {
 	const [row] = await db
-		.select({ uploaderId: media.uploaderId })
+		.select({ uploaderId: media.uploaderId, nsfw: media.nsfw, spoiler: media.spoiler })
 		.from(media)
 		.where(eq(media.id, mediaId));
 	if (!row) throw new MediaNotFoundError();
@@ -97,17 +101,28 @@ export async function setFlags(
 	if (flags.nsfw !== undefined) set.nsfw = flags.nsfw;
 	if (flags.spoiler !== undefined) set.spoiler = flags.spoiler;
 	if (Object.keys(set).length === 0) return;
-	const forced = row.uploaderId !== user.id && (set.nsfw === true || set.spoiler === true);
+	const foreign = row.uploaderId !== user.id;
+	const forced = foreign && (set.nsfw === true || set.spoiler === true);
+	// switching off a flag that is off already changes nothing: nothing to audit
+	const changed =
+		(set.nsfw !== undefined && set.nsfw !== row.nsfw) ||
+		(set.spoiler !== undefined && set.spoiler !== row.spoiler);
+	// the audit detail names every requested flag with its direction ("NSFW an, Spoiler aus")
+	const what = [
+		set.nsfw !== undefined && `NSFW ${set.nsfw ? 'an' : 'aus'}`,
+		set.spoiler !== undefined && `Spoiler ${set.spoiler ? 'an' : 'aus'}`
+	]
+		.filter(Boolean)
+		.join(', ');
 	await db.transaction(async (tx) => {
 		await tx.update(media).set(set).where(eq(media.id, mediaId));
-		if (forced) {
-			const what = [set.nsfw && 'NSFW', set.spoiler && 'Spoiler'].filter(Boolean).join(' und ');
+		if (forced || (foreign && changed)) {
 			await resolveWithAudit(
 				user,
 				'meme',
 				mediaId,
-				AUDIT_ACTIONS.flagsForced,
-				`${what} erzwungen, `,
+				forced ? AUDIT_ACTIONS.flagsForced : AUDIT_ACTIONS.flagsChanged,
+				`${what}, `,
 				tx
 			);
 		}

@@ -1,7 +1,12 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from './db';
 import { quoteVotes, quotes } from './db/schema';
-import { assertNotTimedOut, resolveAfterDelete, underReviewSql } from './moderation';
+import {
+	assertNotTimedOut,
+	resolveAfterDelete,
+	snapshotContent,
+	underReviewSql
+} from './moderation';
 import type { SessionUser } from './auth/session';
 import type { VoteValue } from './votes';
 
@@ -128,7 +133,7 @@ export async function voteQuote(
 
 /**
  * Moderators and admins only (old-app rule); votes cascade. Closes the quote's open reports in the
- * same transaction ('removed' for a moderator's own quote; otherwise 'actioned' + audit row).
+ * same transaction ('removed' for a moderator's own quote; otherwise always an audit row, reports 'actioned').
  */
 export async function deleteQuote(user: SessionUser, quoteId: number): Promise<void> {
 	if (user.role !== 'moderator' && user.role !== 'admin') throw new QuotePermissionError();
@@ -140,11 +145,12 @@ export async function deleteQuote(user: SessionUser, quoteId: number): Promise<v
 	// Own quotes may always be removed; moderating others' is suspended by a timeout.
 	if (q.submittedBy !== user.id) await assertNotTimedOut(user);
 	await db.transaction(async (tx) => {
+		const snapshot = await snapshotContent(tx, 'quote', quoteId);
 		const deleted = await tx
 			.delete(quotes)
 			.where(eq(quotes.id, quoteId))
 			.returning({ id: quotes.id });
 		if (deleted.length === 0) throw new QuoteNotFoundError();
-		await resolveAfterDelete(user, 'quote', quoteId, q.submittedBy, tx);
+		await resolveAfterDelete(user, 'quote', quoteId, q.submittedBy, tx, snapshot);
 	});
 }

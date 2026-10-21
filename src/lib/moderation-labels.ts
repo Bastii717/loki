@@ -27,6 +27,8 @@ export const AUDIT_LABELS: Record<string, string> = {
 	content_released: 'Inhalt freigegeben',
 	content_deleted: 'Inhalt gelöscht',
 	flags_forced: 'Blur erzwungen',
+	flags_changed: 'Flags geändert',
+	site_content_changed: 'Regeln/FAQ geändert',
 	timeout_set: 'Timeout gesetzt',
 	timeout_lifted: 'Timeout aufgehoben'
 };

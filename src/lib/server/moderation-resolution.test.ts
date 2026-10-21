@@ -91,25 +91,54 @@ describe('deleting content closes its open reports', () => {
 				targetId: id
 			});
 			expect(log[0].detail).toContain(author.username);
-			expect(log[0].detail).toContain('x'); // the excerpt of the report
+			expect(log[0].detail).toContain(
+				type === 'meme' ? 'Titel' : type === 'comment' ? 'Kommentar' : 'Zitat'
+			);
 		}
 	);
 
 	it.each(['meme', 'comment', 'quote'] as const)(
-		'%s: deleting an unreported item writes no audit row and touches no reports',
+		'%s: a moderator deleting an unreported foreign item still audits it with author and excerpt',
 		async (type) => {
 			const author = await user('member');
 			const mod = await user('moderator');
-			const memeId = await insertMeme(author.id);
+			const memeId = await insertMeme(author.id, 'Titel');
 			const id =
 				type === 'meme'
 					? memeId
 					: type === 'comment'
-						? await insertComment(author.id, memeId)
-						: await insertQuote(author.id);
+						? await insertComment(author.id, memeId, 'Kommentar')
+						: await insertQuote(author.id, 'Zitat');
 			await remove(type, mod, id);
-			expect(await audits()).toHaveLength(0);
+			const log = await audits();
+			expect(log).toHaveLength(1);
+			expect(log[0]).toMatchObject({
+				action: 'content_deleted',
+				actorId: mod.id,
+				targetType: type,
+				targetId: id
+			});
+			expect(log[0].detail).toContain(author.username);
+			expect(log[0].detail).toContain(
+				type === 'meme' ? 'Titel' : type === 'comment' ? 'Kommentar' : 'Zitat'
+			);
 			expect(await reportRows(type, id)).toHaveLength(0);
+		}
+	);
+
+	it.each(['meme', 'comment', 'quote'] as const)(
+		'%s: an author deleting their own unreported item stays audit-free',
+		async (type) => {
+			const author = await user(type === 'quote' ? 'moderator' : 'member');
+			const memeId = await insertMeme(author.id, 'Titel');
+			const id =
+				type === 'meme'
+					? memeId
+					: type === 'comment'
+						? await insertComment(author.id, memeId, 'Kommentar')
+						: await insertQuote(author.id, 'Zitat');
+			await remove(type, author, id);
+			expect(await audits()).toHaveLength(0);
 		}
 	);
 
@@ -214,7 +243,7 @@ describe('forced flags on foreign memes', () => {
 		const log = await audits();
 		expect(log).toHaveLength(1);
 		expect(log[0]).toMatchObject({ action: 'flags_forced', actorId: mod.id, targetId: id });
-		expect(log[0].detail).toContain('NSFW erzwungen');
+		expect(log[0].detail).toContain('NSFW an');
 		const [row] = await db.select().from(media).where(eq(media.id, id));
 		expect(row).toMatchObject({ nsfw: true, reviewedAt: null });
 	});
@@ -224,15 +253,44 @@ describe('forced flags on foreign memes', () => {
 		const mod = await user('moderator');
 		const id = await reportedItem('meme', author.id);
 		await setFlags(mod, id, { nsfw: true, spoiler: true });
-		expect((await audits())[0].detail).toContain('NSFW und Spoiler erzwungen');
+		expect((await audits())[0].detail).toContain('NSFW an, Spoiler an');
 	});
 
-	it('does not resolve when a moderator switches a flag off, or when the uploader sets their own', async () => {
+	it('audits a moderator switching flags off with the direction, without closing the case', async () => {
 		const author = await user('member');
 		const mod = await user('moderator');
 		const id = await reportedItem('meme', author.id);
+		await db.update(media).set({ nsfw: true, spoiler: true }).where(eq(media.id, id));
 		await setFlags(mod, id, { nsfw: false });
+		await setFlags(mod, id, { spoiler: false });
+		expect((await reportRows('meme', id)).every((r) => r.status === 'open')).toBe(true);
+		const log = await audits();
+		expect(log).toHaveLength(2);
+		expect(log[0]).toMatchObject({ action: 'flags_changed', actorId: mod.id, targetId: id });
+		expect(log[0].detail).toContain('NSFW aus');
+		expect(log[0].detail).toContain(author.username);
+		expect(log[0].detail).toContain('Titel');
+		expect(log[1].detail).toContain('Spoiler aus');
+	});
+
+	it('audits flag changes on an unreported foreign meme, but not no-ops', async () => {
+		const author = await user('member');
+		const mod = await user('moderator');
+		const id = await insertMeme(author.id, 'Titel');
+		await setFlags(mod, id, { spoiler: false }); // already off: no change
+		expect(await audits()).toHaveLength(0);
+		await setFlags(mod, id, { spoiler: true });
+		const log = await audits();
+		expect(log).toHaveLength(1);
+		expect(log[0]).toMatchObject({ action: 'flags_forced', targetId: id });
+		expect(log[0].detail).toContain('Spoiler an');
+	});
+
+	it('does not audit the uploader setting their own flags', async () => {
+		const author = await user('member');
+		const id = await reportedItem('meme', author.id);
 		await setFlags(author, id, { nsfw: true });
+		await setFlags(author, id, { nsfw: false });
 		expect((await reportRows('meme', id)).every((r) => r.status === 'open')).toBe(true);
 		expect(await audits()).toHaveLength(0);
 	});

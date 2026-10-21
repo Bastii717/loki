@@ -1,7 +1,12 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import { db } from './db';
 import { comments, media, mediaViews, users } from './db/schema';
-import { assertNotTimedOut, resolveAfterDelete, underReviewSql } from './moderation';
+import {
+	assertNotTimedOut,
+	resolveAfterDelete,
+	snapshotContent,
+	underReviewSql
+} from './moderation';
 import type { SessionUser } from './auth/session';
 import { MediaNotFoundError } from './votes';
 
@@ -87,7 +92,7 @@ export async function addComment(
 
 /**
  * Author, moderator or admin may delete; everyone else gets CommentPermissionError. Closes the
- * comment's open reports in the same transaction (author: 'removed'; moderator: 'actioned' + audit row).
+ * comment's open reports in the same transaction (author: 'removed', no audit; moderator: always an audit row, reports 'actioned').
  */
 export async function deleteComment(user: SessionUser, commentId: number): Promise<void> {
 	const [c] = await db
@@ -101,8 +106,9 @@ export async function deleteComment(user: SessionUser, commentId: number): Promi
 	// Own comments may always be removed; moderating others' is suspended by a timeout.
 	if (c.authorId !== user.id) await assertNotTimedOut(user);
 	await db.transaction(async (tx) => {
+		const snapshot = await snapshotContent(tx, 'comment', commentId);
 		await tx.delete(comments).where(eq(comments.id, commentId));
-		await resolveAfterDelete(user, 'comment', commentId, c.authorId, tx);
+		await resolveAfterDelete(user, 'comment', commentId, c.authorId, tx, snapshot);
 	});
 }
 

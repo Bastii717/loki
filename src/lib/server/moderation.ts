@@ -20,6 +20,8 @@ export const AUDIT_ACTIONS = {
 	reportDismissed: 'report_dismissed',
 	contentDeleted: 'content_deleted',
 	flagsForced: 'flags_forced',
+	flagsChanged: 'flags_changed',
+	siteContentChanged: 'site_content_changed',
 	timeoutSet: 'timeout_set',
 	timeoutLifted: 'timeout_lifted',
 	contentReleased: 'content_released'
@@ -231,13 +233,13 @@ export async function liftTimeout(actor: SessionUser, userId: number): Promise<v
 
 // --- reports ---------------------------------------------------------------------------------
 
-interface ContentSnapshot {
+export interface ContentSnapshot {
 	authorId: number | null;
 	excerpt: string;
 }
 
 /** Locks the content row (serializing concurrent reports on it) and snapshots author + excerpt. */
-async function snapshotContent(
+export async function snapshotContent(
 	tx: Executor,
 	contentType: ContentType,
 	contentId: number
@@ -475,32 +477,45 @@ export async function resolveCommentReportsOfMedia(
 }
 
 /**
- * A moderator's concrete action on someone else's content (`content_deleted` / `flags_forced`):
- * closes the open reports as 'actioned' and writes the audit row, atomically. Does nothing (no
- * audit row) when the content has no open reports. `note` prefixes the audit detail. Used by the
- * content modules for inline actions and by the queue, so both behave identically.
+ * A moderator's concrete action on someone else's content (`content_deleted` / `flags_forced` /
+ * `flags_changed`): ALWAYS writes the audit row (author name + excerpt, so the trace survives the
+ * content), reported or not, and closes any open reports as 'actioned', atomically. Returns how
+ * many reports it closed (0 = none were open). `note` prefixes the audit detail. `snapshot` is the
+ * content as read BEFORE a deletion (same transaction); without it the row is read here, and when
+ * it is already gone the closed reports' author/excerpt stand in. Used by the content modules for
+ * inline actions and by the queue, so both behave identically.
  */
 export async function resolveWithAudit(
 	actor: SessionUser,
 	contentType: ContentType,
 	contentId: number,
-	action: typeof AUDIT_ACTIONS.contentDeleted | typeof AUDIT_ACTIONS.flagsForced,
+	action:
+		| typeof AUDIT_ACTIONS.contentDeleted
+		| typeof AUDIT_ACTIONS.flagsForced
+		| typeof AUDIT_ACTIONS.flagsChanged,
 	note = '',
-	executor?: Executor
+	executor?: Executor,
+	snapshot?: ContentSnapshot | null
 ): Promise<number> {
 	return inTransaction(executor, async (tx) => {
-		const closed = await closeOpenReports(tx, actor, contentType, contentId, 'actioned');
-		if (closed.length === 0) return 0;
-		const [author] = await tx
-			.select({ username: users.username })
-			.from(users)
-			.where(eq(users.id, closed[0].authorId));
+		const content = snapshot ?? (await snapshotContent(tx, contentType, contentId));
+		// switching a flag off is audited but is no decision on the reports
+		const closed =
+			action === AUDIT_ACTIONS.flagsChanged
+				? []
+				: await closeOpenReports(tx, actor, contentType, contentId, 'actioned');
+		const authorId = content?.authorId ?? closed[0]?.authorId ?? null;
+		const excerpt = content?.excerpt ?? closed[0]?.excerpt ?? '';
+		const [author] =
+			authorId === null
+				? []
+				: await tx.select({ username: users.username }).from(users).where(eq(users.id, authorId));
 		await audit(
 			actor.id,
 			action,
 			contentType,
 			contentId,
-			`${note}${author?.username ?? ''}: ${closed[0].excerpt}`,
+			`${note}${author?.username ?? ''}: ${excerpt}`,
 			tx
 		);
 		return closed.length;
@@ -510,16 +525,26 @@ export async function resolveWithAudit(
 /**
  * Closes the open reports of content that was just deleted. The author's own deletion closes them
  * as 'removed' (their own act, no audit row); anybody else is a moderator acting on foreign
- * content: 'actioned' plus a content_deleted audit row.
+ * content: content_deleted is audited ALWAYS (with the `snapshot` taken before the delete), and
+ * open reports are closed as 'actioned'.
  */
 export function resolveAfterDelete(
 	actor: SessionUser,
 	contentType: ContentType,
 	contentId: number,
 	authorId: number | null,
-	executor?: Executor
+	executor?: Executor,
+	snapshot?: ContentSnapshot | null
 ): Promise<number> {
 	return authorId === actor.id
 		? resolveReports(actor, contentType, contentId, 'removed', executor)
-		: resolveWithAudit(actor, contentType, contentId, AUDIT_ACTIONS.contentDeleted, '', executor);
+		: resolveWithAudit(
+				actor,
+				contentType,
+				contentId,
+				AUDIT_ACTIONS.contentDeleted,
+				'',
+				executor,
+				snapshot
+			);
 }
