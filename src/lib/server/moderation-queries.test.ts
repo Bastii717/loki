@@ -288,6 +288,29 @@ describe('listUserOverview', () => {
 	});
 });
 
+describe('listUserOverview confirmed counts', () => {
+	it("excludes 'removed' and 'dismissed' reports from the confirmed count", async () => {
+		const admin = asSession(await testUser({ role: 'admin' }));
+		const author = await testUser();
+		const m1 = await meme(author.id);
+		const m2 = await meme(author.id);
+		const m3 = await meme(author.id);
+		// self-removed (the author deleted it before a moderator decided): no judgment on the author
+		await addOpenReports('meme', m1, author.id, 3);
+		await resolveReports(admin, 'meme', m1, 'removed');
+		await addOpenReports('meme', m2, author.id, 2);
+		await resolveReports(admin, 'meme', m2, 'dismissed');
+		const before = (await listUserOverview()).find((u) => u.username === author.username)!;
+		expect(before).toMatchObject({ confirmedReports: 0, confirmedCases: 0 });
+
+		// only the 'actioned' one counts, next to the removed ones
+		await addOpenReports('meme', m3, author.id, 1);
+		await resolveReports(admin, 'meme', m3, 'actioned');
+		const after = (await listUserOverview()).find((u) => u.username === author.username)!;
+		expect(after).toMatchObject({ confirmedReports: 1, confirmedCases: 1 });
+	});
+});
+
 describe('searchUsers / usernamesById', () => {
 	it('matches usernames case-insensitively as a substring and escapes wildcards', async () => {
 		await testUser({ username: 'Anna_Banane' });

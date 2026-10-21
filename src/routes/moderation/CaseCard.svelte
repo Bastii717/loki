@@ -176,7 +176,7 @@
 					type="button"
 					class="btn primary"
 					disabled={busy}
-					onclick={() => run({ action: 'release' })}
+					onclick={() => run({ action: gone ? 'delete' : 'release' })}
 				>
 					<Check size={16} aria-hidden="true" />
 					{gone ? 'Schließen' : 'Freigeben'}
