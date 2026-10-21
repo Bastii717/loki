@@ -5,6 +5,8 @@ import {
 	MAX_CONTENT_LENGTH,
 	saveContent
 } from '../../lib/server/content';
+import { TimeoutActiveError } from '../../lib/server/moderation';
+import { timeoutFail } from '../../lib/server/moderation-http';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -25,6 +27,7 @@ export const actions: Actions = {
 			await saveContent(locals.user, 'faq', markdown);
 		} catch (e) {
 			if (e instanceof ContentPermissionError) error(403, 'Nur Admins dürfen das bearbeiten');
+			if (e instanceof TimeoutActiveError) return timeoutFail(e, { markdown });
 			throw e;
 		}
 		return { saved: true };

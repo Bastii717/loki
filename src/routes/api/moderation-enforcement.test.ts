@@ -20,7 +20,9 @@ import { addQuote } from '../../lib/server/quotes';
 import { resetRateLimits } from '../../lib/server/rate-limit';
 import { ensureBucket } from '../../lib/server/storage-test-utils';
 import { callRoute, type RouteResult } from '../../lib/server/test-request';
+import { actions as faqActions } from '../faq/+page.server';
 import { actions as quoteActions } from '../quotes/+page.server';
+import { actions as rulesActions } from '../regeln/+page.server';
 import { actions as uploadActions } from '../upload/+page.server';
 import { GET as feed } from './feed/+server';
 import { GET as discover } from './discover/+server';
@@ -321,4 +323,33 @@ describe('form actions', () => {
 		});
 		expect(await db.select().from(quotes)).toHaveLength(1); // only the fixture
 	});
+
+	it.each([
+		['regeln', rulesActions],
+		['faq', faqActions]
+	] as const)(
+		'%s save action returns the German message and keeps the draft for a timed-out admin (403)',
+		async (_name, pageActions) => {
+			const w = await timedOutWorld();
+			const admin = await testUser({ role: 'admin' });
+			await db.insert(timeouts).values({
+				userId: admin.id,
+				setBy: w.victim.id,
+				reason: REASON,
+				until: UNTIL
+			});
+			const form = new FormData();
+			form.set('markdown', '# Neu');
+			const result = (await pageActions.save!({
+				request: new Request('https://loki.test/regeln?/save', { method: 'POST', body: form }),
+				locals: { user: { id: admin.id, username: admin.username, role: 'admin' } }
+			} as never)) as { status: number; data: Record<string, unknown> };
+			expect(result.status).toBe(403);
+			expect(result.data).toMatchObject({
+				message: BLOCK_MESSAGE,
+				error: BLOCK_MESSAGE,
+				markdown: '# Neu'
+			});
+		}
+	);
 });

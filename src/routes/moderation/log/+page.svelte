@@ -14,7 +14,9 @@
 	const target = (e: PageProps['data']['entries'][number]) =>
 		e.targetType === 'user'
 			? `Nutzer ${e.targetName ?? `#${e.targetId}`}`
-			: `${CONTENT_LABELS[e.targetType as keyof typeof CONTENT_LABELS] ?? e.targetType} #${e.targetId}`;
+			: e.targetType === 'site_content'
+				? 'Seiteninhalt'
+				: `${CONTENT_LABELS[e.targetType as keyof typeof CONTENT_LABELS] ?? e.targetType} #${e.targetId}`;
 </script>
 
 <svelte:head>

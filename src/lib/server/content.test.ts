@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { db } from './db';
+import { auditLog } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
+import { timeOut } from './moderation-test-utils';
+import { TimeoutActiveError } from './moderation';
 import { ContentPermissionError, getContent, saveContent } from './content';
 import type { SessionUser } from './auth/session';
 
@@ -84,5 +88,35 @@ describe('content', () => {
 		const u = await userWithRole(role);
 		await expect(saveContent(u, 'rules', 'x')).rejects.toBeInstanceOf(ContentPermissionError);
 		expect((await getContent('rules')).markdown).toBe('');
+	});
+
+	it('audits every save as site_content_changed with the key', async () => {
+		const admin = await userWithRole('admin');
+		await saveContent(admin, 'rules', 'eins');
+		await saveContent(admin, 'faq', 'zwei');
+		const rows = await db.select().from(auditLog);
+		expect(rows).toHaveLength(2);
+		expect(rows[0]).toMatchObject({
+			action: 'site_content_changed',
+			actorId: admin.id,
+			targetType: 'site_content',
+			detail: 'rules'
+		});
+		expect(rows[1].detail).toBe('faq');
+	});
+
+	it('writes no audit row for a rejected save', async () => {
+		const mod = await userWithRole('moderator');
+		await expect(saveContent(mod, 'rules', 'x')).rejects.toBeInstanceOf(ContentPermissionError);
+		expect(await db.select().from(auditLog)).toHaveLength(0);
+	});
+
+	it('refuses a timed-out admin with TimeoutActiveError and changes nothing', async () => {
+		const admin = await userWithRole('admin');
+		const other = await userWithRole('admin');
+		await timeOut(admin.id, other.id);
+		await expect(saveContent(admin, 'rules', 'x')).rejects.toBeInstanceOf(TimeoutActiveError);
+		expect((await getContent('rules')).markdown).toBe('');
+		expect(await db.select().from(auditLog)).toHaveLength(0);
 	});
 });
