@@ -19,7 +19,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	);
 	return {
 		action: action ?? '',
-		actions: KNOWN_ACTIONS,
+		// content_released is defined but never written (a release logs report_dismissed): no filter entry
+		actions: KNOWN_ACTIONS.filter((a) => a !== AUDIT_ACTIONS.contentReleased),
 		nextCursor,
 		entries: entries.map((e) => ({
 			id: e.id,

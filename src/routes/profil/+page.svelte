@@ -6,6 +6,7 @@
 	import CircleQuestionMark from 'lucide-svelte/icons/circle-question-mark';
 	import Images from 'lucide-svelte/icons/images';
 	import LogOut from 'lucide-svelte/icons/log-out';
+	import Shield from 'lucide-svelte/icons/shield';
 	import Star from 'lucide-svelte/icons/star';
 	import type { PageProps } from './$types';
 
@@ -63,6 +64,18 @@
 					</a>
 				</li>
 			{/each}
+			{#if data.openCases !== null}
+				<li>
+					<a href={resolve('/moderation')}>
+						<Shield size={20} aria-hidden="true" />
+						<span>Moderation</span>
+						{#if data.openCases > 0}
+							<span class="cases" aria-label="{data.openCases} offene Fälle">{data.openCases}</span>
+						{/if}
+						<ChevronRight size={18} aria-hidden="true" />
+					</a>
+				</li>
+			{/if}
 		</ul>
 	</nav>
 
@@ -154,6 +167,20 @@
 
 	li a span {
 		flex: 1;
+	}
+
+	li a .cases {
+		flex: none;
+		min-width: 22px;
+		padding: 0 7px;
+		border-radius: var(--radius-pill);
+		background: var(--down);
+		color: #fff;
+		font-size: 12px;
+		font-weight: 700;
+		line-height: 22px;
+		text-align: center;
+		font-variant-numeric: tabular-nums;
 	}
 
 	li a :global(svg:last-child) {

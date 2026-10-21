@@ -23,5 +23,5 @@
 {@render children()}
 
 {#if showTabs}
-	<TabBar pathname={page.url.pathname} />
+	<TabBar pathname={page.url.pathname} badge={data.openCases ?? 0} />
 {/if}
