@@ -184,17 +184,21 @@ describe('Review Focus 1: members never reach the moderation area', () => {
 });
 
 describe('hooks-level prefix guard (defense in depth)', () => {
-	it.each(['/moderation', '/moderation/log', '/api/moderation/case', '/api/moderation/users'])(
-		'%s: a member is turned away before the route handler runs',
-		async (path) => {
-			const w = await world();
-			const handler = vi.fn(() => new Response('geheim'));
-			const { response } = await callRoute({ handler, path, session: w.member.session });
-			expect(response.status).toBe(403);
-			expect(await response.text()).not.toContain('geheim');
-			expect(handler).not.toHaveBeenCalled();
-		}
-	);
+	it.each([
+		'/moderation',
+		'/moderation/log',
+		'/api/moderation/case',
+		'/api/moderation/users',
+		'/%6Doderation', // percent-encoded: SvelteKit routes it to /moderation
+		'/api/moderation/%63ase'
+	])('%s: a member is turned away before the route handler runs', async (path) => {
+		const w = await world();
+		const handler = vi.fn(() => new Response('geheim'));
+		const { response } = await callRoute({ handler, path, session: w.member.session });
+		expect(response.status).toBe(403);
+		expect(await response.text()).not.toContain('geheim');
+		expect(handler).not.toHaveBeenCalled();
+	});
 
 	it('moderators and admins reach the handler, and lookalike paths are not affected', async () => {
 		const w = await world();

@@ -145,7 +145,7 @@ describe('deleting a meme closes the reports on its cascaded comments', () => {
 		expect(await audits()).toHaveLength(0);
 	});
 
-	it('a moderator deleting a foreign meme: comment reports are actioned, one audit row for the meme only', async () => {
+	it('a moderator deleting a foreign meme: comment reports close neutrally as removed, one audit row for the meme only', async () => {
 		const uploader = await user('member');
 		const commenter = await user('member');
 		const mod = await user('moderator');
@@ -155,10 +155,42 @@ describe('deleting a meme closes the reports on its cascaded comments', () => {
 		await addOpenReports('comment', commentId, commenter.id, 2);
 		await deleteMedia(mod, memeId);
 		const rows = await reportRows('comment', commentId);
-		expect(rows.every((r) => r.status === 'resolved' && r.outcome === 'actioned')).toBe(true);
+		expect(rows).toHaveLength(2);
+		expect(rows.every((r) => r.status === 'resolved' && r.outcome === 'removed')).toBe(true);
+		expect((await reportRows('meme', memeId))[0].outcome).toBe('actioned'); // the meme's own case
 		const log = await audits();
 		expect(log).toHaveLength(1);
 		expect(log[0]).toMatchObject({ action: 'content_deleted', targetType: 'meme' });
+	});
+
+	it('the queue delete of a meme closes its comments reports as removed too', async () => {
+		const uploader = await user('member');
+		const commenter = await user('member');
+		const mod = await user('moderator');
+		const memeId = await insertMeme(uploader.id);
+		await addOpenReports('meme', memeId, uploader.id, 2);
+		const commentId = await insertComment(commenter.id, memeId);
+		await addOpenReports('comment', commentId, commenter.id, 1);
+		await actOnCase(mod, 'meme', memeId, { type: 'delete' });
+		expect((await reportRows('comment', commentId))[0]).toMatchObject({
+			status: 'resolved',
+			outcome: 'removed'
+		});
+		expect(await audits()).toHaveLength(1);
+	});
+
+	it('ghost meme in the queue: the case is finished (actioned + audit) and nothing else is touched', async () => {
+		const uploader = await user('member');
+		const mod = await user('moderator');
+		const memeId = await reportedItem('meme', uploader.id);
+		const otherMeme = await insertMeme(uploader.id);
+		const otherComment = await insertComment(uploader.id, otherMeme);
+		await addOpenReports('comment', otherComment, uploader.id, 1);
+		await db.delete(media).where(eq(media.id, memeId));
+		await actOnCase(mod, 'meme', memeId, { type: 'delete' });
+		expect((await reportRows('meme', memeId)).every((r) => r.outcome === 'actioned')).toBe(true);
+		expect((await audits()).map((a) => a.action)).toEqual(['content_deleted']);
+		expect((await reportRows('comment', otherComment))[0].status).toBe('open');
 	});
 
 	it('leaves reports on comments of other memes alone', async () => {

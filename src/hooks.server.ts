@@ -23,6 +23,19 @@ const PUBLIC_PATHS = new Set([
 	'/robots.txt'
 ]);
 
+/**
+ * The pathname the way SvelteKit routes it (percent-escapes decoded, `%25` kept literal), so
+ * `/%6Doderation` cannot slip past a guard comparing against `/moderation`. A malformed escape
+ * falls back to the raw pathname.
+ */
+export function routedPath(pathname: string): string {
+	try {
+		return pathname.split('%25').map(decodeURI).join('%25');
+	} catch {
+		return pathname;
+	}
+}
+
 const isPublic = (path: string) =>
 	PUBLIC_PATHS.has(path) ||
 	path.startsWith('/icons/') || // PWA install fetches icons without credentials
@@ -123,7 +136,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (token && session?.renewed) event.cookies.set(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
 	if (token && !event.locals.user) event.cookies.delete(SESSION_COOKIE, { path: '/' });
 
-	const path = event.url.pathname;
+	const path = routedPath(event.url.pathname);
 	if (!event.locals.user && !isPublic(path)) {
 		if (path === '/api' || path.startsWith('/api/')) {
 			return secure(json({ error: 'Unauthorized' }, { status: 401 }));

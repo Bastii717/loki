@@ -390,26 +390,32 @@ export const canSeeUnderReview = (user: Pick<SessionUser, 'role'>): boolean =>
 const inTransaction = <T>(executor: Executor | undefined, fn: (tx: Executor) => Promise<T>) =>
 	executor ? fn(executor) : db.transaction((tx) => fn(tx));
 
-/** Closes the open reports of a content item and returns what was closed (excerpt, author). */
-function closeOpenReports(
+/**
+ * Closes the open reports of `contentType` rows matching `idCondition` (an SQL condition on
+ * reports.content_id) and returns what was closed (excerpt, author).
+ */
+function closeOpenReportsWhere(
 	tx: Executor,
 	actor: SessionUser,
 	contentType: ContentType,
-	contentId: number,
+	idCondition: SQL,
 	outcome: ReportOutcome
 ) {
 	return tx
 		.update(reports)
 		.set({ status: 'resolved', outcome, resolvedAt: sql`now()`, resolvedBy: actor.id })
-		.where(
-			and(
-				eq(reports.contentType, contentType),
-				eq(reports.contentId, contentId),
-				eq(reports.status, 'open')
-			)
-		)
+		.where(and(eq(reports.contentType, contentType), idCondition, eq(reports.status, 'open')))
 		.returning({ excerpt: reports.excerpt, authorId: reports.authorId });
 }
+
+/** Closes the open reports of a content item and returns what was closed (excerpt, author). */
+const closeOpenReports = (
+	tx: Executor,
+	actor: SessionUser,
+	contentType: ContentType,
+	contentId: number,
+	outcome: ReportOutcome
+) => closeOpenReportsWhere(tx, actor, contentType, eq(reports.contentId, contentId), outcome);
 
 /**
  * Closes all open reports of a content item with `outcome` and returns how many it closed (0 =
@@ -449,27 +455,23 @@ export async function resolveReports(
 
 /**
  * Deleting a meme cascades its comments away; their open reports would stay open forever (reports
- * have no foreign key). Closes them with `outcome` in the caller's transaction, call it BEFORE the
- * meme row is deleted. No audit row: the meme's own deletion is the decision.
+ * have no foreign key). Closes them in the caller's transaction as 'removed': collateral damage of
+ * the meme's deletion, never a judgment on the commenter (an 'actioned' outcome would count as a
+ * confirmed report against them). Call it BEFORE the meme row is deleted. No audit row: the meme's
+ * own deletion is the decision.
  */
 export async function resolveCommentReportsOfMedia(
 	actor: SessionUser,
 	mediaId: number,
-	outcome: ReportOutcome,
 	executor: Executor
-): Promise<number> {
-	const closed = await executor
-		.update(reports)
-		.set({ status: 'resolved', outcome, resolvedAt: sql`now()`, resolvedBy: actor.id })
-		.where(
-			and(
-				eq(reports.contentType, 'comment'),
-				eq(reports.status, 'open'),
-				sql`${reports.contentId} IN (SELECT ${comments.id} FROM ${comments} WHERE ${comments.mediaId} = ${mediaId})`
-			)
-		)
-		.returning({ id: reports.id });
-	return closed.length;
+): Promise<void> {
+	await closeOpenReportsWhere(
+		executor,
+		actor,
+		'comment',
+		sql`${reports.contentId} IN (SELECT ${comments.id} FROM ${comments} WHERE ${comments.mediaId} = ${mediaId})`,
+		'removed'
+	);
 }
 
 /**

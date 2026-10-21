@@ -97,6 +97,12 @@ describe('auth guard', () => {
 		}
 	);
 
+	it('compares the decoded path: an encoded public path is public, an encoded protected one is not', async () => {
+		expect((await run('/log%69n').response).status).toBe(200);
+		expect((await run('/%6Demes').response).status).toBe(303);
+		expect((await run('/api/%66eed').response).status).toBe(401);
+	});
+
 	it('returns 401 for bare /api', async () => {
 		expect((await run('/api').response).status).toBe(401);
 	});
