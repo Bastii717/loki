@@ -129,6 +129,13 @@ export async function voteQuote(
 /** Moderators and admins only (old-app rule); votes cascade. */
 export async function deleteQuote(user: SessionUser, quoteId: number): Promise<void> {
 	if (user.role !== 'moderator' && user.role !== 'admin') throw new QuotePermissionError();
+	const [q] = await db
+		.select({ submittedBy: quotes.submittedBy })
+		.from(quotes)
+		.where(eq(quotes.id, quoteId));
+	if (!q) throw new QuoteNotFoundError();
+	// Own quotes may always be removed; moderating others' is suspended by a timeout.
+	if (q.submittedBy !== user.id) await assertNotTimedOut(user);
 	const deleted = await db
 		.delete(quotes)
 		.where(eq(quotes.id, quoteId))

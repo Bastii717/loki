@@ -13,9 +13,9 @@ import {
 	markSeen
 } from './comments';
 import { MediaNotFoundError } from './votes';
-import { addOpenReports, OVER_THRESHOLD } from './moderation-test-utils';
+import { addOpenReports, OVER_THRESHOLD, timeOut } from './moderation-test-utils';
 import { env } from './env';
-import { resolveReports } from './moderation';
+import { resolveReports, TimeoutActiveError } from './moderation';
 
 beforeAll(setupDb);
 beforeEach(resetDb);
@@ -89,6 +89,20 @@ describe('comments', () => {
 		await deleteComment({ id: mod.id, username: mod.username, role: 'moderator' }, c1.id);
 		await deleteComment({ id: admin.id, username: admin.username, role: 'admin' }, c2.id);
 		expect(await db.select().from(comments)).toHaveLength(0);
+	});
+
+	it("refuses a timed-out moderator on someone else's comment, allows their own", async () => {
+		const a = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const admin = await testUser({ role: 'admin' });
+		const id = await addMedia(a.id);
+		const foreign = await addComment(a.id, id, 'fremd');
+		const own = await addComment(mod.id, id, 'eigen');
+		await timeOut(mod.id, admin.id);
+		const modUser = { id: mod.id, username: mod.username, role: 'moderator' as const };
+		await expect(deleteComment(modUser, foreign.id)).rejects.toBeInstanceOf(TimeoutActiveError);
+		await deleteComment(modUser, own.id);
+		expect((await db.select().from(comments)).map((c) => c.id)).toEqual([foreign.id]);
 	});
 
 	it('throws CommentNotFoundError for a missing comment', async () => {

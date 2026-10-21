@@ -52,6 +52,8 @@ export async function deleteMedia(user: SessionUser, mediaId: number): Promise<v
 		.where(eq(media.id, mediaId));
 	if (!row) throw new MediaNotFoundError();
 	if (row.uploaderId !== user.id && !isModerator(user)) throw new MediaPermissionError();
+	// Deleting one's own meme stays allowed while timed out; acting on others' is moderation, which a timeout suspends.
+	if (row.uploaderId !== user.id) await assertNotTimedOut(user);
 
 	await db.delete(media).where(eq(media.id, mediaId));
 	await deleteObjects([row.objectKey, row.thumbKey]);
@@ -69,8 +71,8 @@ export async function setFlags(
 		.where(eq(media.id, mediaId));
 	if (!row) throw new MediaNotFoundError();
 	if (row.uploaderId !== user.id && !isModerator(user)) throw new MediaPermissionError();
-	// Uploaders editing their own flags are a user write; moderators acting on others' memes are moderation.
-	if (row.uploaderId === user.id) await assertNotTimedOut(user);
+	// Own flags are a user write, flags on others' memes are moderation: both are blocked by a timeout.
+	await assertNotTimedOut(user);
 
 	const set: { nsfw?: boolean; spoiler?: boolean } = {};
 	if (flags.nsfw !== undefined) set.nsfw = flags.nsfw;

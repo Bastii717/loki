@@ -95,6 +95,8 @@ export async function deleteComment(user: SessionUser, commentId: number): Promi
 	if (c.authorId !== user.id && user.role !== 'moderator' && user.role !== 'admin') {
 		throw new CommentPermissionError();
 	}
+	// Own comments may always be removed; moderating others' is suspended by a timeout.
+	if (c.authorId !== user.id) await assertNotTimedOut(user);
 	await db.delete(comments).where(eq(comments.id, commentId));
 }
 

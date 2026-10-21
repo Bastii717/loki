@@ -9,9 +9,9 @@ import {
 	QuoteTextError,
 	voteQuote
 } from './quotes';
-import { addOpenReports, OVER_THRESHOLD } from './moderation-test-utils';
+import { addOpenReports, OVER_THRESHOLD, timeOut } from './moderation-test-utils';
 import { env } from './env';
-import { resolveReports } from './moderation';
+import { resolveReports, TimeoutActiveError } from './moderation';
 
 beforeAll(setupDb);
 beforeEach(resetDb);
@@ -86,6 +86,20 @@ describe('deleteQuote', () => {
 		await deleteQuote(asSession(mod), q1.id);
 		await deleteQuote(asSession(admin), q2.id);
 		expect(await listQuotes(u.id)).toHaveLength(0);
+	});
+
+	it("refuses a timed-out moderator on someone else's quote, allows their own", async () => {
+		const u = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const admin = await testUser({ role: 'admin' });
+		const foreign = await addQuote(u.id, 'fremd', 'a');
+		const own = await addQuote(mod.id, 'eigen', 'a');
+		await timeOut(mod.id, admin.id);
+		await expect(deleteQuote(asSession(mod), foreign.id)).rejects.toBeInstanceOf(
+			TimeoutActiveError
+		);
+		await deleteQuote(asSession(mod), own.id);
+		expect((await listQuotes(u.id)).map((q) => q.id)).toEqual([foreign.id]);
 	});
 
 	it('throws not-found for a missing quote', async () => {
