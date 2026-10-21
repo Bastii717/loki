@@ -1,6 +1,7 @@
 import { canSeeUnderReview } from '../../../../../lib/server/moderation';
 import { error, json } from '@sveltejs/kit';
 import { addComment, CommentTextError, listComments } from '../../../../../lib/server/comments';
+import { mapModerationError } from '../../../../../lib/server/moderation-http';
 import { MediaNotFoundError } from '../../../../../lib/server/votes';
 import type { RequestHandler } from './$types';
 
@@ -31,6 +32,6 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	} catch (e) {
 		if (e instanceof MediaNotFoundError) error(404, 'Not found');
 		if (e instanceof CommentTextError) error(400, e.message);
-		throw e;
+		mapModerationError(e);
 	}
 };

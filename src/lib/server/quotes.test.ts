@@ -30,6 +30,14 @@ describe('addQuote / listQuotes', () => {
 		expect(list.map((q) => q.id)).toEqual([b.id, a.id]);
 	});
 
+	it("flags the viewer's own quotes as mine (report entry is never offered on them)", async () => {
+		const owner = await testUser();
+		const other = await testUser();
+		await addQuote(owner.id, 'Meins', 'Opa');
+		expect((await listQuotes(owner.id))[0].mine).toBe(true);
+		expect((await listQuotes(other.id))[0].mine).toBe(false);
+	});
+
 	it('rejects empty and over-long text or author', async () => {
 		const u = await testUser();
 		await expect(addQuote(u.id, '   ', 'x')).rejects.toBeInstanceOf(QuoteTextError);

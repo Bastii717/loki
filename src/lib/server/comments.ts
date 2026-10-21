@@ -1,7 +1,7 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import { db } from './db';
 import { comments, media, mediaViews, users } from './db/schema';
-import { underReviewSql } from './moderation';
+import { assertNotTimedOut, underReviewSql } from './moderation';
 import type { SessionUser } from './auth/session';
 import { MediaNotFoundError } from './votes';
 
@@ -70,6 +70,7 @@ export async function addComment(
 ): Promise<CommentItem> {
 	const trimmed = text.trim();
 	if (trimmed.length < 1 || trimmed.length > MAX_COMMENT_LENGTH) throw new CommentTextError();
+	await assertNotTimedOut({ id: userId });
 	const [m] = await db.select({ id: media.id }).from(media).where(eq(media.id, mediaId));
 	if (!m) throw new MediaNotFoundError();
 	const [inserted] = await db

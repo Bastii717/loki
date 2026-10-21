@@ -15,10 +15,12 @@
 	import Star from 'lucide-svelte/icons/star';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
+	import { apiErrorMessage } from '../api-error';
 	import { relativeTime } from '../time';
 	import { createVoter } from '../vote';
 	import type { CommentItem } from '../server/comments';
 	import type { FeedItem } from '../server/feed';
+	import ReportButton from './ReportButton.svelte';
 	import UnderReviewBadge from './UnderReviewBadge.svelte';
 	import UnderReviewPanel from './UnderReviewPanel.svelte';
 
@@ -187,7 +189,10 @@
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ [flag]: value })
 			});
-			if (!res.ok) throw new Error(String(res.status));
+			if (!res.ok) {
+				menuError = await apiErrorMessage(res, 'Markierung konnte nicht geändert werden.');
+				return;
+			}
 			await invalidateAll();
 		} catch {
 			menuError = 'Markierung konnte nicht geändert werden.';
@@ -207,7 +212,10 @@
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ text: value })
 			});
-			if (!res.ok) throw new Error(String(res.status));
+			if (!res.ok) {
+				commentError = await apiErrorMessage(res, 'Kommentar konnte nicht gesendet werden.');
+				return;
+			}
 			comments.unshift((await res.json()) as CommentItem);
 			commentCount += 1;
 			text = '';
@@ -256,6 +264,7 @@
 			>
 		</div>
 	{/if}
+	<ReportButton contentType="meme" contentId={item.id} mine={item.mine} />
 	{#if flags}
 		<div class="menu">
 			<button
@@ -407,14 +416,21 @@
 						<div class="head">
 							<b>{c.author}</b>
 							<time datetime={c.createdAt}>{relativeTime(c.createdAt)}</time>
-							{#if c.authorId === viewer.id || viewer.canModerate}
-								<button
-									type="button"
-									class="del"
-									onclick={() => remove(c)}
-									aria-label="Kommentar von {c.author} löschen">Löschen</button
-								>
-							{/if}
+							<span class="actions">
+								{#if c.authorId === viewer.id || viewer.canModerate}
+									<button
+										type="button"
+										class="del"
+										onclick={() => remove(c)}
+										aria-label="Kommentar von {c.author} löschen">Löschen</button
+									>
+								{/if}
+								<ReportButton
+									contentType="comment"
+									contentId={c.id}
+									mine={c.authorId === viewer.id}
+								/>
+							</span>
 						</div>
 						{#if c.text === null}
 							<p class="review"><EyeOff size={14} aria-hidden="true" /> Wird geprüft</p>
@@ -743,8 +759,13 @@
 		color: var(--text-muted);
 	}
 
-	.del {
+	.actions {
+		display: flex;
+		align-items: center;
 		margin-left: auto;
+	}
+
+	.del {
 		padding: 4px 8px;
 		border: 0;
 		background: none;

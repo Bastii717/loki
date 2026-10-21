@@ -142,7 +142,8 @@ export async function activeTimeout(
 	return row ?? null;
 }
 
-export async function assertNotTimedOut(user: SessionUser): Promise<void> {
+/** Throws TimeoutActiveError while the user has an active timeout. Called by every write module. */
+export async function assertNotTimedOut(user: Pick<SessionUser, 'id'>): Promise<void> {
 	const active = await activeTimeout(user.id);
 	if (active) throw new TimeoutActiveError(active.until, active.reason);
 }

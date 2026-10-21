@@ -12,6 +12,7 @@
 	import { relativeTime } from '../time';
 	import { createVoter } from '../vote';
 	import type { FeedItem } from '../server/feed';
+	import ReportButton from './ReportButton.svelte';
 	import UnderReviewBadge from './UnderReviewBadge.svelte';
 	import UnderReviewPanel from './UnderReviewPanel.svelte';
 
@@ -103,6 +104,7 @@
 			onclick={toggleFavorite}
 			><Star size={20} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true" /></button
 		>
+		<ReportButton contentType="meme" contentId={item.id} mine={item.mine} variant="overlay" />
 		{#if hidden}
 			<button type="button" class="reveal" onclick={() => (revealed = true)}>
 				{#if item.blurred === 'nsfw'}

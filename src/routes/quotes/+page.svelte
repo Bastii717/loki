@@ -8,7 +8,9 @@
 	import Send from 'lucide-svelte/icons/send';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import X from 'lucide-svelte/icons/x';
+	import ReportButton from '../../lib/components/ReportButton.svelte';
 	import UnderReviewBadge from '../../lib/components/UnderReviewBadge.svelte';
+	import { apiErrorMessage } from '../../lib/api-error';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -31,7 +33,10 @@
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ value })
 			});
-			if (!res.ok) throw new Error();
+			if (!res.ok) {
+				failure = await apiErrorMessage(res, 'Abstimmen fehlgeschlagen.');
+				return;
+			}
 			const result: { score: number; userVote: 1 | -1 | 0 } = await res.json();
 			items = items.map((x) => (x.id === id ? { ...x, ...result } : x));
 		} catch {
@@ -127,6 +132,7 @@
 						{/if}
 					</div>
 					<div class="votes">
+						<ReportButton contentType="quote" contentId={q.id} mine={q.mine} />
 						<button
 							type="button"
 							class="icon up"

@@ -23,6 +23,8 @@ export interface FeedItem {
 	viewCount: number;
 	blurred: 'nsfw' | 'spoiler' | null;
 	uploader: string;
+	/** The viewer uploaded this meme (never offer "Melden" on it). */
+	mine: boolean;
 	createdAt: string;
 	/**
 	 * Hidden by report threshold and not yet released. Non-moderators get empty title/tags/uploader and null
@@ -104,6 +106,7 @@ interface Row extends Record<string, unknown> {
 	created_at: Date | string;
 	created_at_raw: string;
 	uploader: string;
+	mine: boolean;
 	tag_names: string[];
 	comment_count: number;
 	favorite_count: number;
@@ -174,6 +177,7 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 			m.nsfw, m.spoiler, m.score, m.view_count, m.hot_score, m.created_at,
 			m.created_at::text AS created_at_raw,
 			u.username AS uploader,
+			(m.uploader_id = ${opts.viewerId}) AS mine,
 			COALESCE(tg.names, ARRAY[]::text[]) AS tag_names,
 			cc.n AS comment_count,
 			fc.n AS favorite_count,
@@ -226,6 +230,7 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 			viewCount: r.view_count,
 			blurred: r.nsfw || r.score <= env.AUTO_BLUR_SCORE ? 'nsfw' : r.spoiler ? 'spoiler' : null,
 			uploader: hide ? '' : r.uploader,
+			mine: r.mine,
 			createdAt: new Date(r.created_at).toISOString(),
 			underReview: r.under_review
 		};

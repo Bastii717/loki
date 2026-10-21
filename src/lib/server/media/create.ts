@@ -3,6 +3,7 @@ import type { SessionUser } from '../auth/session';
 import { db } from '../db';
 import { media, mediaTags, tags } from '../db/schema';
 import { env } from '../env';
+import { assertNotTimedOut } from '../moderation';
 import { deleteObjects, mediaKey, putObject } from '../storage';
 import { processMedia, sniffMedia } from './process';
 
@@ -37,6 +38,7 @@ export type CreateMediaOptions = {
  */
 export async function createMedia(opts: CreateMediaOptions): Promise<{ id: number }> {
 	const { uploader, file } = opts;
+	await assertNotTimedOut(uploader);
 	const sniffed = await sniffMedia(file);
 	if (!sniffed) throw new UploadError('type');
 	if (file.length > env.MAX_UPLOAD_MB * 1024 * 1024) throw new UploadError('size');

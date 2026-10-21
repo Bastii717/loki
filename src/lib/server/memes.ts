@@ -2,6 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { SessionUser } from './auth/session';
 import { db } from './db';
 import { favorites, media } from './db/schema';
+import { assertNotTimedOut } from './moderation';
 import { deleteObjects } from './storage';
 import { MediaNotFoundError } from './votes';
 
@@ -18,6 +19,7 @@ export async function toggleFavorite(
 	userId: number,
 	mediaId: number
 ): Promise<{ favorited: boolean; count: number }> {
+	await assertNotTimedOut({ id: userId });
 	return db.transaction(async (tx) => {
 		// Lock the media row so concurrent toggles on one meme serialize.
 		const [row] = await tx
@@ -67,6 +69,8 @@ export async function setFlags(
 		.where(eq(media.id, mediaId));
 	if (!row) throw new MediaNotFoundError();
 	if (row.uploaderId !== user.id && !isModerator(user)) throw new MediaPermissionError();
+	// Uploaders editing their own flags are a user write; moderators acting on others' memes are moderation.
+	if (row.uploaderId === user.id) await assertNotTimedOut(user);
 
 	const set: { nsfw?: boolean; spoiler?: boolean } = {};
 	if (flags.nsfw !== undefined) set.nsfw = flags.nsfw;

@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { deleteMedia, MediaPermissionError, setFlags } from '../../../../lib/server/memes';
+import { mapModerationError } from '../../../../lib/server/moderation-http';
 import { MediaNotFoundError } from '../../../../lib/server/votes';
 import type { RequestHandler } from './$types';
 
@@ -12,7 +13,7 @@ function parseId(raw: string): number {
 function mapError(e: unknown): never {
 	if (e instanceof MediaNotFoundError) error(404, 'Not found');
 	if (e instanceof MediaPermissionError) error(403, 'Forbidden');
-	throw e;
+	mapModerationError(e);
 }
 
 export const DELETE: RequestHandler = async ({ params, locals }) => {

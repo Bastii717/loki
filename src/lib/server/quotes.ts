@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from './db';
 import { quoteVotes, quotes } from './db/schema';
-import { underReviewSql } from './moderation';
+import { assertNotTimedOut, underReviewSql } from './moderation';
 import type { SessionUser } from './auth/session';
 import type { VoteValue } from './votes';
 
@@ -30,6 +30,8 @@ export interface QuoteItem {
 	text: string | null;
 	author: string;
 	underReview: boolean;
+	/** The viewer submitted this quote (never offer "Melden" on it). */
+	mine: boolean;
 	createdAt: string;
 	score: number;
 	userVote: VoteValue;
@@ -45,6 +47,7 @@ const columns = (userId: number) => ({
 	text: quotes.text,
 	author: quotes.author,
 	underReview: underReviewSql('quote', quotes.id, quotes.reviewedAt),
+	mine: sql<boolean>`coalesce(${quotes.submittedBy} = ${userId}, false)`,
 	createdAt: quotes.createdAt,
 	score: scoreSql,
 	userVote: userVoteSql(userId)
@@ -55,6 +58,7 @@ const toItem = (r: {
 	text: string;
 	author: string;
 	underReview: boolean;
+	mine: boolean;
 	createdAt: Date;
 	score: number;
 	userVote: number;
@@ -81,6 +85,7 @@ export async function addQuote(userId: number, text: string, author: string): Pr
 	const a = author.trim();
 	if (t.length < 1 || t.length > MAX_QUOTE_LENGTH) throw new QuoteTextError();
 	if (a.length < 1 || a.length > MAX_AUTHOR_LENGTH) throw new QuoteTextError();
+	await assertNotTimedOut({ id: userId });
 	const [inserted] = await db
 		.insert(quotes)
 		.values({ text: t, author: a, submittedBy: userId })
@@ -95,6 +100,7 @@ export async function voteQuote(
 	quoteId: number,
 	value: VoteValue
 ): Promise<{ score: number; userVote: VoteValue }> {
+	await assertNotTimedOut({ id: userId });
 	return db.transaction(async (tx) => {
 		const [q] = await tx
 			.select({ id: quotes.id })

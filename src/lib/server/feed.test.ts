@@ -216,6 +216,14 @@ describe('getFeedItem', () => {
 		expect(item!.mediaUrl).toMatch(/^\/media\//);
 		expect(await getFeedItem(u.id, 999999)).toBeNull();
 	});
+
+	it("flags the viewer's own memes as mine (report entry is never offered on them)", async () => {
+		const owner = await testUser();
+		const other = await testUser();
+		const id = await addMedia(owner.id);
+		expect((await getFeedItem(owner.id, id))!.mine).toBe(true);
+		expect((await getFeedItem(other.id, id))!.mine).toBe(false);
+	});
 });
 
 describe('under review', () => {

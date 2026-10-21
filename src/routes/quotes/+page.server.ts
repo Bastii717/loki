@@ -1,4 +1,5 @@
-import { canSeeUnderReview } from '../../lib/server/moderation';
+import { canSeeUnderReview, TimeoutActiveError } from '../../lib/server/moderation';
+import { timeoutFail } from '../../lib/server/moderation-http';
 import { fail } from '@sveltejs/kit';
 import {
 	addQuote,
@@ -30,6 +31,7 @@ export const actions: Actions = {
 			if (e instanceof QuoteTextError) {
 				return fail(400, { error: 'Bitte Zitat und Urheber ausfüllen.', text, author });
 			}
+			if (e instanceof TimeoutActiveError) return timeoutFail(e, { text, author });
 			throw e;
 		}
 		return { success: true };

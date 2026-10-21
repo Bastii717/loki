@@ -8,6 +8,7 @@
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import { createVoter } from '../vote';
 	import type { FeedItem } from '../server/feed';
+	import ReportButton from './ReportButton.svelte';
 	import UnderReviewBadge from './UnderReviewBadge.svelte';
 	import UnderReviewPanel from './UnderReviewPanel.svelte';
 
@@ -116,6 +117,7 @@
 		aria-label="{item.commentCount} Kommentare"
 		><MessageCircle size={22} /><small>{item.commentCount}</small></a
 	>
+	<ReportButton contentType="meme" contentId={item.id} mine={item.mine} />
 </div>
 
 <style>
