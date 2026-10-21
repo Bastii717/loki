@@ -448,6 +448,31 @@ export async function resolveReports(
 }
 
 /**
+ * Deleting a meme cascades its comments away; their open reports would stay open forever (reports
+ * have no foreign key). Closes them with `outcome` in the caller's transaction, call it BEFORE the
+ * meme row is deleted. No audit row: the meme's own deletion is the decision.
+ */
+export async function resolveCommentReportsOfMedia(
+	actor: SessionUser,
+	mediaId: number,
+	outcome: ReportOutcome,
+	executor: Executor
+): Promise<number> {
+	const closed = await executor
+		.update(reports)
+		.set({ status: 'resolved', outcome, resolvedAt: sql`now()`, resolvedBy: actor.id })
+		.where(
+			and(
+				eq(reports.contentType, 'comment'),
+				eq(reports.status, 'open'),
+				sql`${reports.contentId} IN (SELECT ${comments.id} FROM ${comments} WHERE ${comments.mediaId} = ${mediaId})`
+			)
+		)
+		.returning({ id: reports.id });
+	return closed.length;
+}
+
+/**
  * A moderator's concrete action on someone else's content (`content_deleted` / `flags_forced`):
  * closes the open reports as 'actioned' and writes the audit row, atomically. Does nothing (no
  * audit row) when the content has no open reports. `note` prefixes the audit detail. Used by the

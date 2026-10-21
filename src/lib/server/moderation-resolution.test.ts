@@ -131,6 +131,47 @@ describe('deleting content closes its open reports', () => {
 	});
 });
 
+describe('deleting a meme closes the reports on its cascaded comments', () => {
+	it('the uploader deleting their own meme: comment reports are removed, no audit row', async () => {
+		const uploader = await user('member');
+		const commenter = await user('member');
+		const memeId = await insertMeme(uploader.id);
+		const commentId = await insertComment(commenter.id, memeId);
+		await addOpenReports('comment', commentId, commenter.id, 2);
+		await deleteMedia(uploader, memeId);
+		const rows = await reportRows('comment', commentId);
+		expect(rows).toHaveLength(2);
+		expect(rows.every((r) => r.status === 'resolved' && r.outcome === 'removed')).toBe(true);
+		expect(await audits()).toHaveLength(0);
+	});
+
+	it('a moderator deleting a foreign meme: comment reports are actioned, one audit row for the meme only', async () => {
+		const uploader = await user('member');
+		const commenter = await user('member');
+		const mod = await user('moderator');
+		const memeId = await insertMeme(uploader.id);
+		await addOpenReports('meme', memeId, uploader.id, 1);
+		const commentId = await insertComment(commenter.id, memeId);
+		await addOpenReports('comment', commentId, commenter.id, 2);
+		await deleteMedia(mod, memeId);
+		const rows = await reportRows('comment', commentId);
+		expect(rows.every((r) => r.status === 'resolved' && r.outcome === 'actioned')).toBe(true);
+		const log = await audits();
+		expect(log).toHaveLength(1);
+		expect(log[0]).toMatchObject({ action: 'content_deleted', targetType: 'meme' });
+	});
+
+	it('leaves reports on comments of other memes alone', async () => {
+		const uploader = await user('member');
+		const memeId = await insertMeme(uploader.id);
+		const otherMeme = await insertMeme(uploader.id);
+		const otherComment = await insertComment(uploader.id, otherMeme);
+		await addOpenReports('comment', otherComment, uploader.id, 1);
+		await deleteMedia(uploader, memeId);
+		expect((await reportRows('comment', otherComment))[0].status).toBe('open');
+	});
+});
+
 describe('forced flags on foreign memes', () => {
 	it('closes the case as actioned and audits flags_forced', async () => {
 		const author = await user('member');

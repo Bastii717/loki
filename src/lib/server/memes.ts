@@ -6,6 +6,7 @@ import {
 	AUDIT_ACTIONS,
 	assertNotTimedOut,
 	resolveAfterDelete,
+	resolveCommentReportsOfMedia,
 	resolveWithAudit
 } from './moderation';
 import { deleteObjects } from './storage';
@@ -65,6 +66,13 @@ export async function deleteMedia(user: SessionUser, mediaId: number): Promise<v
 	if (row.uploaderId !== user.id) await assertNotTimedOut(user);
 
 	await db.transaction(async (tx) => {
+		// the meme's comments cascade away with it: their open reports die with the same decision
+		await resolveCommentReportsOfMedia(
+			user,
+			mediaId,
+			row.uploaderId === user.id ? 'removed' : 'actioned',
+			tx
+		);
 		await tx.delete(media).where(eq(media.id, mediaId));
 		await resolveAfterDelete(user, 'meme', mediaId, row.uploaderId, tx);
 	});
