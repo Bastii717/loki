@@ -9,6 +9,9 @@ import {
 	QuoteTextError,
 	voteQuote
 } from './quotes';
+import { addOpenReports, OVER_THRESHOLD, timeOut } from './moderation-test-utils';
+import { env } from './env';
+import { resolveReports, TimeoutActiveError } from './moderation';
 
 beforeAll(setupDb);
 beforeEach(resetDb);
@@ -25,6 +28,14 @@ describe('addQuote / listQuotes', () => {
 		expect(a).toMatchObject({ text: 'Erstes', author: 'Opa', score: 0, userVote: 0 });
 		const list = await listQuotes(u.id);
 		expect(list.map((q) => q.id)).toEqual([b.id, a.id]);
+	});
+
+	it("flags the viewer's own quotes as mine (report entry is never offered on them)", async () => {
+		const owner = await testUser();
+		const other = await testUser();
+		await addQuote(owner.id, 'Meins', 'Opa');
+		expect((await listQuotes(owner.id))[0].mine).toBe(true);
+		expect((await listQuotes(other.id))[0].mine).toBe(false);
 	});
 
 	it('rejects empty and over-long text or author', async () => {
@@ -77,8 +88,68 @@ describe('deleteQuote', () => {
 		expect(await listQuotes(u.id)).toHaveLength(0);
 	});
 
+	it("refuses a timed-out moderator on someone else's quote, allows their own", async () => {
+		const u = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const admin = await testUser({ role: 'admin' });
+		const foreign = await addQuote(u.id, 'fremd', 'a');
+		const own = await addQuote(mod.id, 'eigen', 'a');
+		await timeOut(mod.id, admin.id);
+		await expect(deleteQuote(asSession(mod), foreign.id)).rejects.toBeInstanceOf(
+			TimeoutActiveError
+		);
+		await deleteQuote(asSession(mod), own.id);
+		expect((await listQuotes(u.id)).map((q) => q.id)).toEqual([foreign.id]);
+	});
+
 	it('throws not-found for a missing quote', async () => {
 		const mod = await testUser({ role: 'moderator' });
 		await expect(deleteQuote(asSession(mod), 999999)).rejects.toBeInstanceOf(QuoteNotFoundError);
+	});
+});
+
+describe('listQuotes under review', () => {
+	it('nulls text (and author) of an over-threshold quote for members; mods see it flagged', async () => {
+		const u = await testUser();
+		const fine = await addQuote(u.id, 'ok', 'Opa');
+		const bad = await addQuote(u.id, 'boese', 'Opa Hitler');
+		await addOpenReports('quote', bad.id, u.id, OVER_THRESHOLD);
+
+		const member = await listQuotes(u.id);
+		expect(member.find((q) => q.id === fine.id)).toMatchObject({ text: 'ok', underReview: false });
+		expect(member.find((q) => q.id === bad.id)).toMatchObject({
+			text: null,
+			author: '',
+			underReview: true
+		});
+		expect(JSON.stringify(member)).not.toContain('boese');
+		expect(JSON.stringify(member)).not.toContain('Hitler');
+
+		const mod = await listQuotes(u.id, true);
+		expect(mod.find((q) => q.id === bad.id)).toMatchObject({
+			text: 'boese',
+			author: 'Opa Hitler',
+			underReview: true
+		});
+	});
+
+	it('exactly at the threshold the quote is visible; a released quote stays visible', async () => {
+		const u = await testUser();
+		const q = await addQuote(u.id, 'grenzfall', 'Oma');
+		await addOpenReports('quote', q.id, u.id, env.REPORT_REVIEW_THRESHOLD);
+		expect((await listQuotes(u.id))[0]).toMatchObject({ text: 'grenzfall', underReview: false });
+
+		await addOpenReports('quote', q.id, u.id, 1);
+		expect((await listQuotes(u.id))[0]).toMatchObject({ text: null, underReview: true });
+
+		const mod = await testUser({ role: 'moderator' });
+		await resolveReports(
+			{ id: mod.id, username: mod.username, role: 'moderator' },
+			'quote',
+			q.id,
+			'dismissed'
+		);
+		await addOpenReports('quote', q.id, u.id, OVER_THRESHOLD);
+		expect((await listQuotes(u.id))[0]).toMatchObject({ text: 'grenzfall', underReview: false });
 	});
 });

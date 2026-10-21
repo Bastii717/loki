@@ -7,6 +7,8 @@ import { resetDb, setupDb, testUser } from './db/test-utils';
 import { env } from './env';
 import { getFeedPage } from './feed';
 import { deleteMedia, MediaPermissionError, setFlags, toggleFavorite } from './memes';
+import { TimeoutActiveError } from './moderation';
+import { timeOut } from './moderation-test-utils';
 import { mediaKey, putObject, s3Client } from './storage';
 import { ensureBucket } from './storage-test-utils';
 import { MediaNotFoundError } from './votes';
@@ -140,6 +142,32 @@ describe('setFlags', () => {
 	it('throws MediaNotFoundError for missing media', async () => {
 		const mod = await testUser({ role: 'moderator' });
 		await expect(setFlags(mod, 999999, { nsfw: true })).rejects.toBeInstanceOf(MediaNotFoundError);
+	});
+
+	it('refuses a timed-out moderator on foreign media (moderation rights are suspended)', async () => {
+		const owner = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const admin = await testUser({ role: 'admin' });
+		const m = await addMedia(owner.id);
+		await timeOut(mod.id, admin.id);
+		await expect(setFlags(mod, m.id, { nsfw: true })).rejects.toBeInstanceOf(TimeoutActiveError);
+		const [row] = await db.select().from(media).where(eq(media.id, m.id));
+		expect(row.nsfw).toBe(false);
+	});
+});
+
+describe('moderator deletes while timed out', () => {
+	it('deleteMedia: refused on foreign media, still allowed on the own one', async () => {
+		const owner = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const admin = await testUser({ role: 'admin' });
+		const foreign = await addMedia(owner.id);
+		const own = await addMedia(mod.id);
+		await timeOut(mod.id, admin.id);
+		await expect(deleteMedia(mod, foreign.id)).rejects.toBeInstanceOf(TimeoutActiveError);
+		expect(await db.select().from(media).where(eq(media.id, foreign.id))).toHaveLength(1);
+		await deleteMedia(mod, own.id);
+		expect(await db.select().from(media).where(eq(media.id, own.id))).toHaveLength(0);
 	});
 });
 

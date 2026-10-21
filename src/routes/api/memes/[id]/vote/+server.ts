@@ -1,5 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { applyVote, MediaNotFoundError, type VoteValue } from '../../../../../lib/server/votes';
+import { mapModerationError } from '../../../../../lib/server/moderation-http';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
@@ -19,6 +20,6 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		return json(await applyVote(locals.user!.id, mediaId, value as VoteValue));
 	} catch (e) {
 		if (e instanceof MediaNotFoundError) error(404, 'Not found');
-		throw e;
+		mapModerationError(e);
 	}
 };

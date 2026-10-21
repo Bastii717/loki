@@ -1,4 +1,5 @@
 import { error } from '@sveltejs/kit';
+import { canSeeUnderReview, isMediaKeyUnderReview } from '../../../lib/server/moderation';
 import { getPresignedUrl } from '../../../lib/server/storage';
 import type { RequestHandler } from './$types';
 
@@ -21,6 +22,9 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	if (!locals.user) error(401, 'Unauthorized');
 	const key = params.key;
 	if (!isValidKey(key)) error(404, 'Not found');
+	// Under-review media is gone for members, by either key (original or thumbnail).
+	if (!canSeeUnderReview(locals.user) && (await isMediaKeyUnderReview(key)))
+		error(404, 'Not found');
 	const location = await getPresignedUrl(key, PRESIGN_TTL_SECONDS);
 	return new Response(null, {
 		status: 302,

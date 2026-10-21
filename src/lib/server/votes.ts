@@ -1,6 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from './db';
 import { media, votes } from './db/schema';
+import { assertNotTimedOut } from './moderation';
 
 export type VoteValue = 1 | -1 | 0;
 
@@ -21,6 +22,7 @@ export async function applyVote(
 	mediaId: number,
 	value: VoteValue
 ): Promise<{ score: number; userVote: VoteValue }> {
+	await assertNotTimedOut({ id: userId });
 	return db.transaction(async (tx) => {
 		const [row] = await tx
 			.select({ id: media.id })

@@ -14,6 +14,7 @@ Planned and being built. The UI is German; code and docs are English.
 - **Tags** with autocomplete and hashtag filtering.
 - **NSFW and spoiler blur**, set at upload or by moderators.
 - **Statistics**: uploads over time, top uploaders and voters, tag distribution.
+- **Meldungen und Moderation**: members report memes, comments and quotes. Content with too many open reports is hidden until a moderator decides in the moderation area (queue, timeouts, audit log).
 - **Rules and FAQ**, editable by admins in the app.
 - **PWA** with a share target, so memes can be sent straight from the share sheet.
 

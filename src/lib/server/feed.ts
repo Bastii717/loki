@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { db } from './db';
 import { env } from './env';
+import { openReporterCountSelect, overThresholdSql } from './moderation';
 
 export type FeedSort = 'new' | 'hot' | 'hof';
 
@@ -8,8 +9,9 @@ export interface FeedItem {
 	id: number;
 	title: string;
 	kind: 'image' | 'gif' | 'video';
-	thumbUrl: string;
-	mediaUrl: string;
+	/** null while under review, for viewers who may not see it. */
+	thumbUrl: string | null;
+	mediaUrl: string | null;
 	width: number | null;
 	height: number | null;
 	tags: string[];
@@ -21,11 +23,20 @@ export interface FeedItem {
 	viewCount: number;
 	blurred: 'nsfw' | 'spoiler' | null;
 	uploader: string;
+	/** The viewer uploaded this meme (never offer "Melden" on it). */
+	mine: boolean;
 	createdAt: string;
+	/**
+	 * Hidden by report threshold and not yet released. Non-moderators get empty title/tags/uploader and null
+	 * URLs (enforced here, not in the UI); moderators get the full item with this flag set.
+	 */
+	underReview: boolean;
 }
 
 export interface FeedOptions {
 	viewerId: number;
+	/** Moderators/admins: return under-review content in full (pass `canSeeUnderReview(user)`). Default false = hidden. */
+	revealAll?: boolean;
 	sort: FeedSort;
 	tag?: string;
 	cursor?: string;
@@ -95,11 +106,13 @@ interface Row extends Record<string, unknown> {
 	created_at: Date | string;
 	created_at_raw: string;
 	uploader: string;
+	mine: boolean;
 	tag_names: string[];
 	comment_count: number;
 	favorite_count: number;
 	user_vote: number;
 	user_favorite: boolean;
+	under_review: boolean;
 }
 
 /**
@@ -129,7 +142,13 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 		? sql`AND EXISTS (
 			SELECT 1 FROM media_tags mt JOIN tags t ON t.id = mt.tag_id
 			WHERE mt.media_id = m.id AND t.name = ${opts.tag}
-		)`
+		)
+		${
+			// A tag filter would otherwise act as an oracle for the tags of hidden items.
+			opts.revealAll
+				? sql``
+				: sql`AND NOT (m.reviewed_at IS NULL AND ${overThresholdSql(sql`rc.n`)})`
+		}`
 		: sql``;
 
 	const idFilter = opts.id !== undefined ? sql`AND m.id = ${opts.id}` : sql``;
@@ -158,11 +177,13 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 			m.nsfw, m.spoiler, m.score, m.view_count, m.hot_score, m.created_at,
 			m.created_at::text AS created_at_raw,
 			u.username AS uploader,
+			(m.uploader_id = ${opts.viewerId}) AS mine,
 			COALESCE(tg.names, ARRAY[]::text[]) AS tag_names,
 			cc.n AS comment_count,
 			fc.n AS favorite_count,
 			COALESCE(v.value, 0) AS user_vote,
-			(uf.user_id IS NOT NULL) AS user_favorite
+			(uf.user_id IS NOT NULL) AS user_favorite,
+			(m.reviewed_at IS NULL AND ${overThresholdSql(sql`rc.n`)}) AS under_review
 		FROM media m
 		JOIN users u ON u.id = m.uploader_id
 		LEFT JOIN LATERAL (
@@ -176,6 +197,9 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 		LEFT JOIN LATERAL (
 			SELECT count(*)::int AS n FROM favorites f WHERE f.media_id = m.id
 		) fc ON true
+		LEFT JOIN LATERAL (
+			${openReporterCountSelect('meme', sql`m.id`)}
+		) rc ON true
 		LEFT JOIN votes v ON v.media_id = m.id AND v.user_id = ${opts.viewerId}
 		LEFT JOIN favorites uf ON uf.media_id = m.id AND uf.user_id = ${opts.viewerId}
 		WHERE true ${after} ${tagFilter} ${idFilter} ${idsFilter} ${uploaderFilter} ${favoriteFilter}
@@ -187,25 +211,30 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 	const hasMore = page.length > limit;
 	if (hasMore) page.length = limit;
 
-	const items: FeedItem[] = page.map((r) => ({
-		id: r.id,
-		title: r.title,
-		kind: r.kind,
-		thumbUrl: `/media/${r.thumb_key}`,
-		mediaUrl: `/media/${r.object_key}`,
-		width: r.width,
-		height: r.height,
-		tags: r.tag_names,
-		score: r.score,
-		userVote: r.user_vote as FeedItem['userVote'],
-		commentCount: r.comment_count,
-		favoriteCount: r.favorite_count,
-		userFavorite: r.user_favorite,
-		viewCount: r.view_count,
-		blurred: r.nsfw || r.score <= env.AUTO_BLUR_SCORE ? 'nsfw' : r.spoiler ? 'spoiler' : null,
-		uploader: r.uploader,
-		createdAt: new Date(r.created_at).toISOString()
-	}));
+	const items: FeedItem[] = page.map((r) => {
+		const hide = r.under_review && !opts.revealAll;
+		return {
+			id: r.id,
+			title: hide ? '' : r.title,
+			kind: r.kind,
+			thumbUrl: hide ? null : `/media/${r.thumb_key}`,
+			mediaUrl: hide ? null : `/media/${r.object_key}`,
+			width: r.width,
+			height: r.height,
+			tags: hide ? [] : r.tag_names,
+			score: r.score,
+			userVote: r.user_vote as FeedItem['userVote'],
+			commentCount: r.comment_count,
+			favoriteCount: r.favorite_count,
+			userFavorite: r.user_favorite,
+			viewCount: r.view_count,
+			blurred: r.nsfw || r.score <= env.AUTO_BLUR_SCORE ? 'nsfw' : r.spoiler ? 'spoiler' : null,
+			uploader: hide ? '' : r.uploader,
+			mine: r.mine,
+			createdAt: new Date(r.created_at).toISOString(),
+			underReview: r.under_review
+		};
+	});
 
 	let nextCursor: string | null = null;
 	if (hasMore) {
@@ -218,7 +247,11 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 }
 
 /** A single meme in feed-item shape, or null when it does not exist. */
-export async function getFeedItem(viewerId: number, id: number): Promise<FeedItem | null> {
-	const { items } = await getFeedPage({ viewerId, sort: 'new', id, limit: 1 });
+export async function getFeedItem(
+	viewerId: number,
+	id: number,
+	revealAll = false
+): Promise<FeedItem | null> {
+	const { items } = await getFeedPage({ viewerId, revealAll, sort: 'new', id, limit: 1 });
 	return items[0] ?? null;
 }

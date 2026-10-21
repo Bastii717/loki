@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
 	boolean,
 	doublePrecision,
@@ -48,11 +49,15 @@ export const media = pgTable(
 		score: integer('score').notNull().default(0),
 		viewCount: integer('view_count').notNull().default(0),
 		hotScore: doublePrecision('hot_score').notNull().default(0),
+		reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
 		createdAt: createdAt()
 	},
 	(t) => [
 		index('media_hot_score_idx').on(t.hotScore),
-		index('media_created_at_idx').on(t.createdAt)
+		index('media_created_at_idx').on(t.createdAt),
+		// /media/[...key] resolves a requested key to its row to enforce under-review
+		index('media_object_key_idx').on(t.objectKey),
+		index('media_thumb_key_idx').on(t.thumbKey)
 	]
 );
 
@@ -111,6 +116,7 @@ export const comments = pgTable('comments', {
 		.notNull()
 		.references(() => users.id),
 	text: text('text').notNull(),
+	reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
 	createdAt: createdAt()
 });
 
@@ -133,6 +139,7 @@ export const quotes = pgTable('quotes', {
 	text: text('text').notNull(),
 	author: text('author').notNull(),
 	submittedBy: integer('submitted_by').references(() => users.id, { onDelete: 'set null' }),
+	reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
 	createdAt: createdAt()
 });
 
@@ -156,3 +163,78 @@ export const siteContent = pgTable('site_content', {
 	updatedBy: integer('updated_by').references(() => users.id),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
+
+/**
+ * User reports. contentId deliberately has no foreign key: a report outlives the content it
+ * points at (deleted by a mod or its owner), so the excerpt and authorId are snapshots.
+ */
+export const reports = pgTable(
+	'reports',
+	{
+		id: serial('id').primaryKey(),
+		contentType: text('content_type', { enum: ['meme', 'comment', 'quote'] }).notNull(),
+		contentId: integer('content_id').notNull(),
+		reporterId: integer('reporter_id')
+			.notNull()
+			.references(() => users.id),
+		authorId: integer('author_id')
+			.notNull()
+			.references(() => users.id),
+		category: text('category', {
+			enum: ['verletzend', 'verstoerend', 'falschinfo', 'spam', 'sonstiges']
+		}).notNull(),
+		text: text('text').notNull().default(''),
+		excerpt: text('excerpt').notNull(),
+		status: text('status', { enum: ['open', 'resolved'] })
+			.notNull()
+			.default('open'),
+		outcome: text('outcome', { enum: ['dismissed', 'actioned', 'removed'] }),
+		createdAt: createdAt(),
+		resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+		resolvedBy: integer('resolved_by').references(() => users.id)
+	},
+	(t) => [
+		index('reports_content_idx').on(t.contentType, t.contentId, t.status),
+		index('reports_author_outcome_idx').on(t.authorId, t.outcome),
+		// The hot paths (open-count subqueries, queue) only ever look at open reports.
+		index('reports_open_content_idx')
+			.on(t.contentType, t.contentId)
+			.where(sql`${t.status} = 'open'`)
+	]
+);
+
+export const timeouts = pgTable(
+	'timeouts',
+	{
+		id: serial('id').primaryKey(),
+		userId: integer('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		setBy: integer('set_by')
+			.notNull()
+			.references(() => users.id),
+		reason: text('reason').notNull(),
+		until: timestamp('until', { withTimezone: true }).notNull(),
+		liftedAt: timestamp('lifted_at', { withTimezone: true }),
+		liftedBy: integer('lifted_by').references(() => users.id),
+		createdAt: createdAt()
+	},
+	(t) => [index('timeouts_user_until_idx').on(t.userId, t.until)]
+);
+
+/** Moderation audit trail. Append-only by convention: nothing updates or deletes rows. */
+export const auditLog = pgTable(
+	'audit_log',
+	{
+		id: serial('id').primaryKey(),
+		actorId: integer('actor_id')
+			.notNull()
+			.references(() => users.id),
+		action: text('action').notNull(),
+		targetType: text('target_type').notNull(),
+		targetId: integer('target_id').notNull(),
+		detail: text('detail').notNull().default(''),
+		createdAt: createdAt()
+	},
+	(t) => [index('audit_log_created_at_idx').on(t.createdAt)]
+);

@@ -15,10 +15,14 @@
 	import Star from 'lucide-svelte/icons/star';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
+	import { apiErrorMessage } from '../api-error';
 	import { relativeTime } from '../time';
 	import { createVoter } from '../vote';
 	import type { CommentItem } from '../server/comments';
 	import type { FeedItem } from '../server/feed';
+	import ReportButton from './ReportButton.svelte';
+	import UnderReviewBadge from './UnderReviewBadge.svelte';
+	import UnderReviewPanel from './UnderReviewPanel.svelte';
 
 	let {
 		item,
@@ -57,6 +61,8 @@
 	let menuOpen = $state(false);
 	let menuError = $state('');
 	const scoreLabel = $derived(score > 0 ? `+${score}` : String(score));
+	// Under review and withheld by the server (members): panel only, no reveal. Mods keep the content.
+	const withheld = $derived(item.mediaUrl === null);
 
 	// ---- swipe / arrow navigation between feed neighbours
 	const feedIds = $derived(page.state.feedIds);
@@ -183,7 +189,10 @@
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ [flag]: value })
 			});
-			if (!res.ok) throw new Error(String(res.status));
+			if (!res.ok) {
+				menuError = await apiErrorMessage(res, 'Markierung konnte nicht geändert werden.');
+				return;
+			}
 			await invalidateAll();
 		} catch {
 			menuError = 'Markierung konnte nicht geändert werden.';
@@ -203,7 +212,10 @@
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ text: value })
 			});
-			if (!res.ok) throw new Error(String(res.status));
+			if (!res.ok) {
+				commentError = await apiErrorMessage(res, 'Kommentar konnte nicht gesendet werden.');
+				return;
+			}
 			comments.unshift((await res.json()) as CommentItem);
 			commentCount += 1;
 			text = '';
@@ -233,7 +245,7 @@
 	<button type="button" class="icon-btn" onclick={back} aria-label="Zurück"
 		><ArrowLeft size={22} aria-hidden="true" /></button
 	>
-	<span class="bar-title">{item.title || 'Ohne Titel'}</span>
+	<span class="bar-title">{withheld ? 'Wird geprüft' : item.title || 'Ohne Titel'}</span>
 	{#if feedIds}
 		<div class="pager">
 			<button
@@ -252,6 +264,7 @@
 			>
 		</div>
 	{/if}
+	<ReportButton contentType="meme" contentId={item.id} mine={item.mine} />
 	{#if flags}
 		<div class="menu">
 			<button
@@ -294,13 +307,15 @@
 
 <main class="detail">
 	<div class="stage" onpointerdown={onPointerDown} onpointerup={onPointerUp} role="presentation">
-		{#if item.kind === 'video'}
+		{#if withheld}
+			<UnderReviewPanel />
+		{:else if item.kind === 'video'}
 			<video src={item.mediaUrl} controls loop muted playsinline autoplay class:blurred={!revealed}
 			></video>
 		{:else}
 			<img src={item.mediaUrl} alt={item.title} class:blurred={!revealed} draggable="false" />
 		{/if}
-		{#if !revealed}
+		{#if !withheld && !revealed}
 			<button type="button" class="reveal" onclick={() => (revealed = true)}>
 				{#if item.blurred === 'nsfw'}
 					<EyeOff size={20} aria-hidden="true" /> Antippen zum Anzeigen
@@ -314,9 +329,10 @@
 	<section class="info">
 		<div class="row">
 			<div class="grow">
-				<h1>{item.title || 'Ohne Titel'}</h1>
+				<h1>{withheld ? 'Wird geprüft' : item.title || 'Ohne Titel'}</h1>
+				{#if item.underReview && !withheld}<p class="review-note"><UnderReviewBadge /></p>{/if}
 				<p class="meta">
-					von {item.uploader} ·
+					{#if item.uploader}von {item.uploader} ·{/if}
 					<time datetime={item.createdAt}>{relativeTime(item.createdAt)}</time>
 					·
 					<span class="views" aria-label="{viewCount} Aufrufe"
@@ -400,16 +416,28 @@
 						<div class="head">
 							<b>{c.author}</b>
 							<time datetime={c.createdAt}>{relativeTime(c.createdAt)}</time>
-							{#if c.authorId === viewer.id || viewer.canModerate}
-								<button
-									type="button"
-									class="del"
-									onclick={() => remove(c)}
-									aria-label="Kommentar von {c.author} löschen">Löschen</button
-								>
-							{/if}
+							<span class="actions">
+								{#if c.authorId === viewer.id || viewer.canModerate}
+									<button
+										type="button"
+										class="del"
+										onclick={() => remove(c)}
+										aria-label="Kommentar von {c.author} löschen">Löschen</button
+									>
+								{/if}
+								<ReportButton
+									contentType="comment"
+									contentId={c.id}
+									mine={c.authorId === viewer.id}
+								/>
+							</span>
 						</div>
-						<p>{c.text}</p>
+						{#if c.text === null}
+							<p class="review"><EyeOff size={14} aria-hidden="true" /> Wird geprüft</p>
+						{:else}
+							{#if c.underReview}<p class="review-note"><UnderReviewBadge /></p>{/if}
+							<p>{c.text}</p>
+						{/if}
 					</li>
 				{/each}
 			</ul>
@@ -731,8 +759,13 @@
 		color: var(--text-muted);
 	}
 
-	.del {
+	.actions {
+		display: flex;
+		align-items: center;
 		margin-left: auto;
+	}
+
+	.del {
 		padding: 4px 8px;
 		border: 0;
 		background: none;
@@ -745,5 +778,17 @@
 		margin: 4px 0 0;
 		overflow-wrap: anywhere;
 		white-space: pre-wrap;
+	}
+
+	.list p.review {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--text-muted);
+		font-style: italic;
+	}
+
+	.review-note {
+		margin: 4px 0 0;
 	}
 </style>

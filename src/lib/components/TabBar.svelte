@@ -5,7 +5,8 @@
 	import Plus from 'lucide-svelte/icons/plus';
 	import Quote from 'lucide-svelte/icons/quote';
 	import User from 'lucide-svelte/icons/user';
-	let { pathname }: { pathname: string } = $props();
+	/** `badge`: open moderation cases, only passed for moderators/admins; shown as a dot-count on Profil. */
+	let { pathname, badge = 0 }: { pathname: string; badge?: number } = $props();
 
 	// Entdecken, Quotes and Profil arrive in later tasks; their links 404 until then.
 	const left = [
@@ -41,7 +42,14 @@
 			class="tab"
 			aria-current={isActive(tab.href) ? 'page' : undefined}
 		>
-			<tab.icon size={22} aria-hidden="true" />
+			<span class="icon">
+				<tab.icon size={22} aria-hidden="true" />
+				{#if tab.href === '/profil' && badge > 0}
+					<span class="badge" role="img" aria-label="{badge} offene Meldungen"
+						>{badge > 9 ? '9+' : badge}</span
+					>
+				{/if}
+			</span>
 			<span class="label">{tab.label}</span>
 		</a>
 	{/each}
@@ -77,6 +85,26 @@
 		min-height: var(--tabbar-height);
 		color: var(--text-muted);
 		font-size: 11px;
+	}
+
+	.icon {
+		position: relative;
+		display: flex;
+	}
+
+	.badge {
+		position: absolute;
+		top: -4px;
+		right: -10px;
+		min-width: 16px;
+		padding: 0 4px;
+		border-radius: var(--radius-pill);
+		background: var(--down);
+		color: #fff;
+		font-size: 10px;
+		font-weight: 700;
+		line-height: 16px;
+		text-align: center;
 	}
 
 	.tab[aria-current='page'] {

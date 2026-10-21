@@ -1,6 +1,12 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import { db } from './db';
 import { comments, media, mediaViews, users } from './db/schema';
+import {
+	assertNotTimedOut,
+	resolveAfterDelete,
+	snapshotContent,
+	underReviewSql
+} from './moderation';
 import type { SessionUser } from './auth/session';
 import { MediaNotFoundError } from './votes';
 
@@ -27,7 +33,9 @@ export interface CommentItem {
 	mediaId: number;
 	authorId: number;
 	author: string;
-	text: string;
+	/** null while under review, for viewers who may not see it. */
+	text: string | null;
+	underReview: boolean;
 	createdAt: string;
 }
 
@@ -37,6 +45,7 @@ const columns = {
 	authorId: comments.authorId,
 	author: users.username,
 	text: comments.text,
+	underReview: underReviewSql('comment', comments.id, comments.reviewedAt),
 	createdAt: comments.createdAt
 };
 
@@ -45,15 +54,18 @@ const toItem = (r: Omit<CommentItem, 'createdAt'> & { createdAt: Date }): Commen
 	createdAt: r.createdAt.toISOString()
 });
 
-/** Comments of a meme, newest first. */
-export async function listComments(mediaId: number): Promise<CommentItem[]> {
+/** Comments of a meme, newest first. Under-review texts are nulled unless `revealAll` (moderators). */
+export async function listComments(mediaId: number, revealAll = false): Promise<CommentItem[]> {
 	const rows = await db
 		.select(columns)
 		.from(comments)
 		.innerJoin(users, eq(users.id, comments.authorId))
 		.where(eq(comments.mediaId, mediaId))
 		.orderBy(desc(comments.createdAt), desc(comments.id));
-	return rows.map(toItem);
+	return rows.map((r) => {
+		const item = toItem(r);
+		return item.underReview && !revealAll ? { ...item, text: null } : item;
+	});
 }
 
 export async function addComment(
@@ -63,6 +75,7 @@ export async function addComment(
 ): Promise<CommentItem> {
 	const trimmed = text.trim();
 	if (trimmed.length < 1 || trimmed.length > MAX_COMMENT_LENGTH) throw new CommentTextError();
+	await assertNotTimedOut({ id: userId });
 	const [m] = await db.select({ id: media.id }).from(media).where(eq(media.id, mediaId));
 	if (!m) throw new MediaNotFoundError();
 	const [inserted] = await db
@@ -77,7 +90,10 @@ export async function addComment(
 	return toItem(row);
 }
 
-/** Author, moderator or admin may delete; everyone else gets CommentPermissionError. */
+/**
+ * Author, moderator or admin may delete; everyone else gets CommentPermissionError. Closes the
+ * comment's open reports in the same transaction (author: 'removed', no audit; moderator: always an audit row, reports 'actioned').
+ */
 export async function deleteComment(user: SessionUser, commentId: number): Promise<void> {
 	const [c] = await db
 		.select({ authorId: comments.authorId })
@@ -87,7 +103,13 @@ export async function deleteComment(user: SessionUser, commentId: number): Promi
 	if (c.authorId !== user.id && user.role !== 'moderator' && user.role !== 'admin') {
 		throw new CommentPermissionError();
 	}
-	await db.delete(comments).where(eq(comments.id, commentId));
+	// Own comments may always be removed; moderating others' is suspended by a timeout.
+	if (c.authorId !== user.id) await assertNotTimedOut(user);
+	await db.transaction(async (tx) => {
+		const snapshot = await snapshotContent(tx, 'comment', commentId);
+		await tx.delete(comments).where(eq(comments.id, commentId));
+		await resolveAfterDelete(user, 'comment', commentId, c.authorId, tx, snapshot);
+	});
 }
 
 /**

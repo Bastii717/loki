@@ -1,3 +1,5 @@
+import { canSeeUnderReview, TimeoutActiveError } from '../../lib/server/moderation';
+import { timeoutFail } from '../../lib/server/moderation-http';
 import { fail } from '@sveltejs/kit';
 import {
 	addQuote,
@@ -11,8 +13,8 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ locals }) => {
 	const user = locals.user!;
 	return {
-		quotes: await listQuotes(user.id),
-		canModerate: user.role === 'moderator' || user.role === 'admin',
+		quotes: await listQuotes(user.id, canSeeUnderReview(user)),
+		canModerate: canSeeUnderReview(user),
 		limits: { text: MAX_QUOTE_LENGTH, author: MAX_AUTHOR_LENGTH }
 	};
 };
@@ -29,6 +31,7 @@ export const actions: Actions = {
 			if (e instanceof QuoteTextError) {
 				return fail(400, { error: 'Bitte Zitat und Urheber ausfüllen.', text, author });
 			}
+			if (e instanceof TimeoutActiveError) return timeoutFail(e, { text, author });
 			throw e;
 		}
 		return { success: true };

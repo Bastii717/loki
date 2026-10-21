@@ -4,9 +4,13 @@
 	import ArrowBigDown from 'lucide-svelte/icons/arrow-big-down';
 	import ArrowBigUp from 'lucide-svelte/icons/arrow-big-up';
 	import Check from 'lucide-svelte/icons/check';
+	import EyeOff from 'lucide-svelte/icons/eye-off';
 	import Send from 'lucide-svelte/icons/send';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import X from 'lucide-svelte/icons/x';
+	import ReportButton from '../../lib/components/ReportButton.svelte';
+	import UnderReviewBadge from '../../lib/components/UnderReviewBadge.svelte';
+	import { apiErrorMessage } from '../../lib/api-error';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -29,7 +33,10 @@
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ value })
 			});
-			if (!res.ok) throw new Error();
+			if (!res.ok) {
+				failure = await apiErrorMessage(res, 'Abstimmen fehlgeschlagen.');
+				return;
+			}
 			const result: { score: number; userVote: 1 | -1 | 0 } = await res.json();
 			items = items.map((x) => (x.id === id ? { ...x, ...result } : x));
 		} catch {
@@ -94,8 +101,13 @@
 			{#each items as q (q.id)}
 				<li class="card">
 					<div class="body">
-						<blockquote>„{q.text}“</blockquote>
-						<p class="author">— {q.author}</p>
+						{#if q.text === null}
+							<p class="review"><EyeOff size={14} aria-hidden="true" /> Wird geprüft</p>
+						{:else}
+							{#if q.underReview}<UnderReviewBadge />{/if}
+							<blockquote>„{q.text}“</blockquote>
+							<p class="author">— {q.author}</p>
+						{/if}
 						{#if data.canModerate}
 							{#if confirmingId === q.id}
 								<div class="confirm">
@@ -120,6 +132,7 @@
 						{/if}
 					</div>
 					<div class="votes">
+						<ReportButton contentType="quote" contentId={q.id} mine={q.mine} />
 						<button
 							type="button"
 							class="icon up"
@@ -227,6 +240,14 @@
 		margin: 0;
 		overflow-wrap: anywhere;
 		white-space: pre-wrap;
+	}
+	.review {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin: 0;
+		color: var(--text-muted);
+		font-style: italic;
 	}
 	.author {
 		margin: 0;

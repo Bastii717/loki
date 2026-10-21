@@ -1,5 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { env } from '../../lib/server/env';
+import { TimeoutActiveError } from '../../lib/server/moderation';
+import { timeoutFail } from '../../lib/server/moderation-http';
 import { UploadError, createMedia } from '../../lib/server/media/create';
 import { peekShared } from '../../lib/server/share-stash';
 import type { Actions, PageServerLoad } from './$types';
@@ -37,6 +39,7 @@ export const actions: Actions = {
 				spoiler
 			});
 		} catch (e) {
+			if (e instanceof TimeoutActiveError) return timeoutFail(e, values);
 			if (e instanceof UploadError) {
 				const message =
 					e.code === 'size'

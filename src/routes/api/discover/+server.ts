@@ -1,3 +1,4 @@
+import { canSeeUnderReview } from '../../../lib/server/moderation';
 import { error, json } from '@sveltejs/kit';
 import { getDiscoverBatch } from '../../../lib/server/discover';
 import type { RequestHandler } from './$types';
@@ -9,5 +10,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		.map(Number)
 		.filter((n) => Number.isSafeInteger(n) && n > 0)
 		.slice(-500); // most recent ids; the client sends oldest first
-	return json(await getDiscoverBatch(locals.user.id, undefined, exclude));
+	return json(
+		await getDiscoverBatch(locals.user.id, undefined, exclude, canSeeUnderReview(locals.user))
+	);
 };

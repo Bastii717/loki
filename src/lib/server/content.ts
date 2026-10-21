@@ -3,6 +3,7 @@ import DOMPurify from 'isomorphic-dompurify';
 import { marked } from 'marked';
 import { db } from './db';
 import { siteContent } from './db/schema';
+import { AUDIT_ACTIONS, assertNotTimedOut, audit } from './moderation';
 import type { SessionUser } from './auth/session';
 
 export type ContentKey = 'rules' | 'faq';
@@ -37,16 +38,23 @@ export async function getContent(key: ContentKey): Promise<SiteContent> {
 	return { html: render(row.markdown), markdown: row.markdown, updatedAt: row.updatedAt };
 }
 
-/** Admin only. */
+/**
+ * Admin only, and not while timed out (an admin's timeout suspends their write rights like anybody's).
+ * Every save is audited (site_content_changed, the key as detail) in the same transaction.
+ */
 export async function saveContent(
 	user: SessionUser,
 	key: ContentKey,
 	markdown: string
 ): Promise<void> {
 	if (user.role !== 'admin') throw new ContentPermissionError();
+	await assertNotTimedOut(user);
 	const values = { markdown, updatedBy: user.id, updatedAt: new Date() };
-	await db
-		.insert(siteContent)
-		.values({ key, ...values })
-		.onConflictDoUpdate({ target: siteContent.key, set: values });
+	await db.transaction(async (tx) => {
+		await tx
+			.insert(siteContent)
+			.values({ key, ...values })
+			.onConflictDoUpdate({ target: siteContent.key, set: values });
+		await audit(user.id, AUDIT_ACTIONS.siteContentChanged, 'site_content', 0, key, tx);
+	});
 }

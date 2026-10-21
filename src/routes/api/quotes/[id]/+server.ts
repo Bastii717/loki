@@ -4,6 +4,7 @@ import {
 	QuoteNotFoundError,
 	QuotePermissionError
 } from '../../../../lib/server/quotes';
+import { mapModerationError } from '../../../../lib/server/moderation-http';
 import type { RequestHandler } from './$types';
 
 export const DELETE: RequestHandler = async ({ params, locals }) => {
@@ -14,7 +15,7 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 	} catch (e) {
 		if (e instanceof QuoteNotFoundError) error(404, 'Not found');
 		if (e instanceof QuotePermissionError) error(403, 'Forbidden');
-		throw e;
+		mapModerationError(e);
 	}
 	return new Response(null, { status: 204 });
 };

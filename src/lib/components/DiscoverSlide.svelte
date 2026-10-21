@@ -8,9 +8,14 @@
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import { createVoter } from '../vote';
 	import type { FeedItem } from '../server/feed';
+	import ReportButton from './ReportButton.svelte';
+	import UnderReviewBadge from './UnderReviewBadge.svelte';
+	import UnderReviewPanel from './UnderReviewPanel.svelte';
 
 	let { item, active = false }: { item: FeedItem; active?: boolean } = $props();
 	let video = $state<HTMLVideoElement>();
+	// Under review and withheld by the server (members): panel only, no reveal. Mods keep the content.
+	const withheld = $derived(item.mediaUrl === null);
 
 	// Only the active slide plays; the rest stay paused so swiping does not decode a pile of videos.
 	$effect(() => {
@@ -39,7 +44,9 @@
 </script>
 
 <div class="media">
-	{#if item.kind === 'video'}
+	{#if withheld}
+		<UnderReviewPanel />
+	{:else if item.kind === 'video'}
 		<video
 			bind:this={video}
 			src={item.mediaUrl}
@@ -58,7 +65,7 @@
 			draggable="false"
 		/>
 	{/if}
-	{#if !revealed}
+	{#if !withheld && !revealed}
 		<button type="button" class="reveal" onclick={() => (revealed = true)}>
 			{#if item.blurred === 'nsfw'}
 				<EyeOff size={20} aria-hidden="true" /> Antippen zum Anzeigen
@@ -70,8 +77,9 @@
 </div>
 
 <div class="caption">
-	<b>{item.title || 'Ohne Titel'}</b>
-	<span>von {item.uploader}</span>
+	<b>{withheld ? 'Wird geprüft' : item.title || 'Ohne Titel'}</b>
+	{#if item.uploader}<span>von {item.uploader}</span>{/if}
+	{#if item.underReview && !withheld}<UnderReviewBadge />{/if}
 </div>
 
 <div class="rail">
@@ -109,6 +117,7 @@
 		aria-label="{item.commentCount} Kommentare"
 		><MessageCircle size={22} /><small>{item.commentCount}</small></a
 	>
+	<ReportButton contentType="meme" contentId={item.id} mine={item.mine} />
 </div>
 
 <style>

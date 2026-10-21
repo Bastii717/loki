@@ -1,5 +1,7 @@
+import { canSeeUnderReview } from '../../../../../lib/server/moderation';
 import { error, json } from '@sveltejs/kit';
 import { addComment, CommentTextError, listComments } from '../../../../../lib/server/comments';
+import { mapModerationError } from '../../../../../lib/server/moderation-http';
 import { MediaNotFoundError } from '../../../../../lib/server/votes';
 import type { RequestHandler } from './$types';
 
@@ -9,8 +11,9 @@ function parseId(raw: string): number {
 	return id;
 }
 
-export const GET: RequestHandler = async ({ params }) => {
-	return json({ comments: await listComments(parseId(params.id)) });
+export const GET: RequestHandler = async ({ params, locals }) => {
+	const revealAll = locals.user !== null && canSeeUnderReview(locals.user);
+	return json({ comments: await listComments(parseId(params.id), revealAll) });
 };
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
@@ -29,6 +32,6 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	} catch (e) {
 		if (e instanceof MediaNotFoundError) error(404, 'Not found');
 		if (e instanceof CommentTextError) error(400, e.message);
-		throw e;
+		mapModerationError(e);
 	}
 };

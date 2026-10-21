@@ -1,5 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { QuoteNotFoundError, voteQuote } from '../../../../../lib/server/quotes';
+import { mapModerationError } from '../../../../../lib/server/moderation-http';
 import type { VoteValue } from '../../../../../lib/server/votes';
 import type { RequestHandler } from './$types';
 
@@ -20,6 +21,6 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		return json(await voteQuote(locals.user!.id, id, value as VoteValue));
 	} catch (e) {
 		if (e instanceof QuoteNotFoundError) error(404, 'Not found');
-		throw e;
+		mapModerationError(e);
 	}
 };

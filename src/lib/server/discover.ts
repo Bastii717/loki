@@ -20,7 +20,8 @@ const idList = (ids: number[]) =>
 export async function getDiscoverBatch(
 	viewerId: number,
 	limit = DEFAULT_LIMIT,
-	exclude: number[] = []
+	exclude: number[] = [],
+	revealAll = false
 ): Promise<{ items: FeedItem[]; caughtUp: boolean }> {
 	const n = Math.min(Math.max(Math.trunc(limit), 1), MAX_LIMIT);
 	const notExcluded = exclude.length > 0 ? sql`AND m.id NOT IN (${idList(exclude)})` : sql``;
@@ -45,7 +46,7 @@ export async function getDiscoverBatch(
 	}
 	if (ids.length === 0) return { items: [], caughtUp };
 
-	const { items } = await getFeedPage({ viewerId, sort: 'new', ids, limit: ids.length });
+	const { items } = await getFeedPage({ viewerId, revealAll, sort: 'new', ids, limit: ids.length });
 	const byId = new Map(items.map((i) => [i.id, i]));
 	return { items: ids.flatMap((id) => byId.get(id) ?? []), caughtUp };
 }

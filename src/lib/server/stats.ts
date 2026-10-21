@@ -1,6 +1,7 @@
-import { desc, eq, sql } from 'drizzle-orm';
+import { desc, eq, not, sql } from 'drizzle-orm';
 import { db } from './db';
 import { media, mediaTags, tags, users } from './db/schema';
+import { underReviewSql } from './moderation';
 
 export type Stats = {
 	uploadsPerWeek: { week: string; count: number }[];
@@ -44,6 +45,8 @@ export async function getStats(): Promise<Stats> {
 		db
 			.select({ id: media.id, title: media.title, score: media.score })
 			.from(media)
+			// titles of memes under review must not leak through the stats page
+			.where(not(underReviewSql('meme', media.id, media.reviewedAt)))
 			.orderBy(desc(media.score), media.id)
 			.limit(TOP),
 		db

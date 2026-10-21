@@ -3,6 +3,7 @@ import { db } from './db';
 import { media, mediaTags, tags } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import { getStats } from './stats';
+import { addOpenReports, OVER_THRESHOLD } from './moderation-test-utils';
 
 beforeAll(setupDb);
 beforeEach(resetDb);
@@ -94,5 +95,14 @@ describe('getStats', () => {
 			{ name: 'd', count: 3 },
 			{ name: 'e', count: 2 }
 		]);
+	});
+
+	it('leaves memes under review out of the top-voted list', async () => {
+		const u = await testUser();
+		await addMedia(u.id, 'harmlos', 5);
+		const hidden = await addMedia(u.id, 'gemeldet', 99);
+		await addOpenReports('meme', hidden, u.id, OVER_THRESHOLD);
+		const s = await getStats();
+		expect(s.topVoted.map((x) => x.title)).toEqual(['harmlos']);
 	});
 });

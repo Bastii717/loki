@@ -1,6 +1,12 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from './db';
 import { quoteVotes, quotes } from './db/schema';
+import {
+	assertNotTimedOut,
+	resolveAfterDelete,
+	snapshotContent,
+	underReviewSql
+} from './moderation';
 import type { SessionUser } from './auth/session';
 import type { VoteValue } from './votes';
 
@@ -25,8 +31,12 @@ export class QuotePermissionError extends Error {
 
 export interface QuoteItem {
 	id: number;
-	text: string;
+	/** null while under review, for viewers who may not see it (author is then blanked too). */
+	text: string | null;
 	author: string;
+	underReview: boolean;
+	/** The viewer submitted this quote (never offer "Melden" on it). */
+	mine: boolean;
 	createdAt: string;
 	score: number;
 	userVote: VoteValue;
@@ -41,6 +51,8 @@ const columns = (userId: number) => ({
 	id: quotes.id,
 	text: quotes.text,
 	author: quotes.author,
+	underReview: underReviewSql('quote', quotes.id, quotes.reviewedAt),
+	mine: sql<boolean>`coalesce(${quotes.submittedBy} = ${userId}, false)`,
 	createdAt: quotes.createdAt,
 	score: scoreSql,
 	userVote: userVoteSql(userId)
@@ -50,6 +62,8 @@ const toItem = (r: {
 	id: number;
 	text: string;
 	author: string;
+	underReview: boolean;
+	mine: boolean;
 	createdAt: Date;
 	score: number;
 	userVote: number;
@@ -59,13 +73,16 @@ const toItem = (r: {
 	userVote: r.userVote as VoteValue
 });
 
-/** All quotes, newest first, with the viewer's own vote. */
-export async function listQuotes(userId: number): Promise<QuoteItem[]> {
+/** All quotes, newest first, with the viewer's own vote. Under-review text is nulled unless `revealAll`. */
+export async function listQuotes(userId: number, revealAll = false): Promise<QuoteItem[]> {
 	const rows = await db
 		.select(columns(userId))
 		.from(quotes)
 		.orderBy(desc(quotes.createdAt), desc(quotes.id));
-	return rows.map(toItem);
+	return rows.map((r) => {
+		const item = toItem(r);
+		return item.underReview && !revealAll ? { ...item, text: null, author: '' } : item;
+	});
 }
 
 export async function addQuote(userId: number, text: string, author: string): Promise<QuoteItem> {
@@ -73,6 +90,7 @@ export async function addQuote(userId: number, text: string, author: string): Pr
 	const a = author.trim();
 	if (t.length < 1 || t.length > MAX_QUOTE_LENGTH) throw new QuoteTextError();
 	if (a.length < 1 || a.length > MAX_AUTHOR_LENGTH) throw new QuoteTextError();
+	await assertNotTimedOut({ id: userId });
 	const [inserted] = await db
 		.insert(quotes)
 		.values({ text: t, author: a, submittedBy: userId })
@@ -87,6 +105,7 @@ export async function voteQuote(
 	quoteId: number,
 	value: VoteValue
 ): Promise<{ score: number; userVote: VoteValue }> {
+	await assertNotTimedOut({ id: userId });
 	return db.transaction(async (tx) => {
 		const [q] = await tx
 			.select({ id: quotes.id })
@@ -112,12 +131,26 @@ export async function voteQuote(
 	});
 }
 
-/** Moderators and admins only (old-app rule); votes cascade. */
+/**
+ * Moderators and admins only (old-app rule); votes cascade. Closes the quote's open reports in the
+ * same transaction ('removed' for a moderator's own quote; otherwise always an audit row, reports 'actioned').
+ */
 export async function deleteQuote(user: SessionUser, quoteId: number): Promise<void> {
 	if (user.role !== 'moderator' && user.role !== 'admin') throw new QuotePermissionError();
-	const deleted = await db
-		.delete(quotes)
-		.where(eq(quotes.id, quoteId))
-		.returning({ id: quotes.id });
-	if (deleted.length === 0) throw new QuoteNotFoundError();
+	const [q] = await db
+		.select({ submittedBy: quotes.submittedBy })
+		.from(quotes)
+		.where(eq(quotes.id, quoteId));
+	if (!q) throw new QuoteNotFoundError();
+	// Own quotes may always be removed; moderating others' is suspended by a timeout.
+	if (q.submittedBy !== user.id) await assertNotTimedOut(user);
+	await db.transaction(async (tx) => {
+		const snapshot = await snapshotContent(tx, 'quote', quoteId);
+		const deleted = await tx
+			.delete(quotes)
+			.where(eq(quotes.id, quoteId))
+			.returning({ id: quotes.id });
+		if (deleted.length === 0) throw new QuoteNotFoundError();
+		await resolveAfterDelete(user, 'quote', quoteId, q.submittedBy, tx, snapshot);
+	});
 }

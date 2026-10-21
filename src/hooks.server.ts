@@ -23,11 +23,29 @@ const PUBLIC_PATHS = new Set([
 	'/robots.txt'
 ]);
 
+/**
+ * The pathname the way SvelteKit routes it (percent-escapes decoded, `%25` kept literal), so
+ * `/%6Doderation` cannot slip past a guard comparing against `/moderation`. A malformed escape
+ * falls back to the raw pathname.
+ */
+export function routedPath(pathname: string): string {
+	try {
+		return pathname.split('%25').map(decodeURI).join('%25');
+	} catch {
+		return pathname;
+	}
+}
+
 const isPublic = (path: string) =>
 	PUBLIC_PATHS.has(path) ||
 	path.startsWith('/icons/') || // PWA install fetches icons without credentials
 	path.startsWith('/_app/immutable/') ||
 	path === '/_app/version.json';
+
+const MODERATION_ROOTS = ['/moderation', '/api/moderation'];
+const isModerationPath = (path: string) =>
+	MODERATION_ROOTS.some((root) => path === root || path.startsWith(`${root}/`));
+const FORBIDDEN_MESSAGE = 'Dieser Bereich ist nur für Moderatoren und Admins.';
 
 const SEEN_PATH = /^\/api\/memes\/\d+\/seen$/;
 const WRITE_METHODS = new Set(['POST', 'PATCH', 'DELETE']);
@@ -118,12 +136,25 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (token && session?.renewed) event.cookies.set(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
 	if (token && !event.locals.user) event.cookies.delete(SESSION_COOKIE, { path: '/' });
 
-	const path = event.url.pathname;
+	const path = routedPath(event.url.pathname);
 	if (!event.locals.user && !isPublic(path)) {
 		if (path === '/api' || path.startsWith('/api/')) {
 			return secure(json({ error: 'Unauthorized' }, { status: 401 }));
 		}
 		return secure(new Response(null, { status: 303, headers: { location: '/login' } }));
+	}
+	// Defense in depth: every moderation page and API checks the role itself (requireModerator);
+	// this keeps members out even if a future route forgets to. Timeouts are handled there.
+	const role = event.locals.user?.role;
+	if (role && role !== 'moderator' && role !== 'admin' && isModerationPath(path)) {
+		if (path.startsWith('/api/'))
+			return secure(json({ error: FORBIDDEN_MESSAGE }, { status: 403 }));
+		return secure(
+			new Response(FORBIDDEN_MESSAGE, {
+				status: 403,
+				headers: { 'content-type': 'text/plain; charset=utf-8' }
+			})
+		);
 	}
 	const retryAfter = event.locals.user
 		? retryAfterSeconds(event.request.method, path, event.locals.user.id)

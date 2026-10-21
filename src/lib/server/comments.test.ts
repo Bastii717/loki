@@ -13,6 +13,9 @@ import {
 	markSeen
 } from './comments';
 import { MediaNotFoundError } from './votes';
+import { addOpenReports, OVER_THRESHOLD, timeOut } from './moderation-test-utils';
+import { env } from './env';
+import { resolveReports, TimeoutActiveError } from './moderation';
 
 beforeAll(setupDb);
 beforeEach(resetDb);
@@ -88,6 +91,20 @@ describe('comments', () => {
 		expect(await db.select().from(comments)).toHaveLength(0);
 	});
 
+	it("refuses a timed-out moderator on someone else's comment, allows their own", async () => {
+		const a = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const admin = await testUser({ role: 'admin' });
+		const id = await addMedia(a.id);
+		const foreign = await addComment(a.id, id, 'fremd');
+		const own = await addComment(mod.id, id, 'eigen');
+		await timeOut(mod.id, admin.id);
+		const modUser = { id: mod.id, username: mod.username, role: 'moderator' as const };
+		await expect(deleteComment(modUser, foreign.id)).rejects.toBeInstanceOf(TimeoutActiveError);
+		await deleteComment(modUser, own.id);
+		expect((await db.select().from(comments)).map((c) => c.id)).toEqual([foreign.id]);
+	});
+
 	it('throws CommentNotFoundError for a missing comment', async () => {
 		const u = await testUser();
 		await expect(
@@ -125,5 +142,63 @@ describe('markSeen', () => {
 	it('throws MediaNotFoundError for a missing meme', async () => {
 		const u = await testUser();
 		await expect(markSeen(u.id, 999999)).rejects.toBeInstanceOf(MediaNotFoundError);
+	});
+});
+
+describe('listComments under review', () => {
+	async function setup(reportCount: number) {
+		const author = await testUser();
+		const mid = await addMedia(author.id);
+		const visible = await addComment(author.id, mid, 'harmlos');
+		const reported = await addComment(author.id, mid, 'boese');
+		await addOpenReports('comment', reported.id, author.id, reportCount);
+		return { author, mid, visible, reported };
+	}
+
+	it('nulls only the over-threshold comment text for members', async () => {
+		const { mid, visible, reported } = await setup(OVER_THRESHOLD);
+		// listComments takes no viewer: the author sees the same as anyone else
+		const list = await listComments(mid);
+		expect(list.find((c) => c.id === visible.id)).toMatchObject({
+			text: 'harmlos',
+			underReview: false
+		});
+		expect(list.find((c) => c.id === reported.id)).toMatchObject({ text: null, underReview: true });
+		expect(JSON.stringify(list)).not.toContain('boese');
+	});
+
+	it('moderators (revealAll) get the text, still flagged', async () => {
+		const { mid, reported } = await setup(OVER_THRESHOLD);
+		const list = await listComments(mid, true);
+		expect(list.find((c) => c.id === reported.id)).toMatchObject({
+			text: 'boese',
+			underReview: true
+		});
+	});
+
+	it('exactly at the threshold the text is visible', async () => {
+		const { mid, reported } = await setup(env.REPORT_REVIEW_THRESHOLD);
+		const list = await listComments(mid);
+		expect(list.find((c) => c.id === reported.id)).toMatchObject({
+			text: 'boese',
+			underReview: false
+		});
+	});
+
+	it('a released comment stays visible', async () => {
+		const { mid, reported, author } = await setup(OVER_THRESHOLD);
+		const mod = await testUser({ role: 'moderator' });
+		await resolveReports(
+			{ id: mod.id, username: mod.username, role: 'moderator' },
+			'comment',
+			reported.id,
+			'dismissed'
+		);
+		await addOpenReports('comment', reported.id, author.id, OVER_THRESHOLD);
+		const list = await listComments(mid);
+		expect(list.find((c) => c.id === reported.id)).toMatchObject({
+			text: 'boese',
+			underReview: false
+		});
 	});
 });

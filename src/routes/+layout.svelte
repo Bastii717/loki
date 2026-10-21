@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import TabBar from '#lib/components/TabBar.svelte';
+	import TimeoutBanner from '#lib/components/TimeoutBanner.svelte';
 	import { watchThemeColor } from '../lib/theme';
 	import type { LayoutProps } from './$types';
 
@@ -20,8 +21,12 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
+{#if data.activeTimeout}
+	<TimeoutBanner until={data.activeTimeout.until} reason={data.activeTimeout.reason} />
+{/if}
+
 {@render children()}
 
 {#if showTabs}
-	<TabBar pathname={page.url.pathname} />
+	<TabBar pathname={page.url.pathname} badge={data.openCases ?? 0} />
 {/if}

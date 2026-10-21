@@ -1,0 +1,38 @@
+<script lang="ts">
+	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
+	import ShieldCheck from 'lucide-svelte/icons/shield-check';
+	import CaseCard from './CaseCard.svelte';
+	import type { PageProps } from './$types';
+
+	let { data }: PageProps = $props();
+
+	const onLaterPage = $derived(page.url.searchParams.has('cursor'));
+</script>
+
+<svelte:head>
+	<title>Queue · Moderation · Loki</title>
+</svelte:head>
+
+{#if data.cases.length === 0}
+	<div class="empty">
+		<ShieldCheck size={36} aria-hidden="true" />
+		<p>Keine offenen Meldungen. Alles ruhig.</p>
+	</div>
+{:else}
+	<p class="muted">Älteste Fälle zuerst. Du siehst gemeldete Inhalte immer vollständig.</p>
+	<ul class="list">
+		{#each data.cases as item (item.contentType + ':' + item.contentId)}
+			<li><CaseCard {item} viewer={data.viewer} /></li>
+		{/each}
+	</ul>
+{/if}
+
+{#if data.nextCursor !== null || onLaterPage}
+	<nav class="pager" aria-label="Seiten">
+		{#if onLaterPage}<a href={resolve('/moderation')}>Zum Anfang</a>{/if}
+		{#if data.nextCursor !== null}
+			<a href="{resolve('/moderation')}?cursor={data.nextCursor}">Weitere Fälle</a>
+		{/if}
+	</nav>
+{/if}
