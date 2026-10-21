@@ -1,3 +1,4 @@
+import { canSeeUnderReview } from '../../../../../lib/server/moderation';
 import { error, json } from '@sveltejs/kit';
 import { addComment, CommentTextError, listComments } from '../../../../../lib/server/comments';
 import { MediaNotFoundError } from '../../../../../lib/server/votes';
@@ -9,8 +10,9 @@ function parseId(raw: string): number {
 	return id;
 }
 
-export const GET: RequestHandler = async ({ params }) => {
-	return json({ comments: await listComments(parseId(params.id)) });
+export const GET: RequestHandler = async ({ params, locals }) => {
+	const revealAll = locals.user !== null && canSeeUnderReview(locals.user);
+	return json({ comments: await listComments(parseId(params.id), revealAll) });
 };
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {

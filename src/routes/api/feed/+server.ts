@@ -1,3 +1,4 @@
+import { canSeeUnderReview } from '../../../lib/server/moderation';
 import { error, json } from '@sveltejs/kit';
 import { InvalidCursorError, getFeedPage, parseSort, parseTag } from '../../../lib/server/feed';
 import type { RequestHandler } from './$types';
@@ -7,6 +8,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	try {
 		const page = await getFeedPage({
 			viewerId: locals.user.id,
+			revealAll: canSeeUnderReview(locals.user),
 			sort: parseSort(url.searchParams.get('sort')),
 			tag: parseTag(url.searchParams.get('tag')),
 			cursor: url.searchParams.get('cursor') ?? undefined,

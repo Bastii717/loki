@@ -12,6 +12,8 @@
 	import { relativeTime } from '../time';
 	import { createVoter } from '../vote';
 	import type { FeedItem } from '../server/feed';
+	import UnderReviewBadge from './UnderReviewBadge.svelte';
+	import UnderReviewPanel from './UnderReviewPanel.svelte';
 
 	let { item, feedIds }: { item: FeedItem; feedIds?: number[] } = $props();
 
@@ -25,7 +27,9 @@
 		e.preventDefault();
 		void goto(memeHref, { state: { feedIds } });
 	}
-	const hidden = $derived(item.blurred !== null && !revealed);
+	// Under review and withheld by the server (members): panel only, no reveal. Mods keep the content.
+	const withheld = $derived(item.mediaUrl === null);
+	const hidden = $derived(!withheld && item.blurred !== null && !revealed);
 	// svelte-ignore state_referenced_locally
 	let score = $state(item.score);
 	// svelte-ignore state_referenced_locally
@@ -67,19 +71,24 @@
 			href={memeHref}
 			onclick={open}
 			tabindex={hidden ? -1 : undefined}
-			aria-label={item.title || 'Meme'}
+			aria-label={withheld ? 'Wird geprüft' : item.title || 'Meme'}
 		>
-			<img
-				src={item.thumbUrl}
-				alt={item.title}
-				width={item.width ?? undefined}
-				height={item.height ?? undefined}
-				loading="lazy"
-				decoding="async"
-				class:fallback={item.width === null || item.height === null}
-				class:blurred={hidden}
-			/>
+			{#if withheld}
+				<UnderReviewPanel />
+			{:else}
+				<img
+					src={item.thumbUrl}
+					alt={item.title}
+					width={item.width ?? undefined}
+					height={item.height ?? undefined}
+					loading="lazy"
+					decoding="async"
+					class:fallback={item.width === null || item.height === null}
+					class:blurred={hidden}
+				/>
+			{/if}
 		</a>
+		{#if item.underReview && !withheld}<UnderReviewBadge overlay />{/if}
 		{#if item.kind !== 'image'}
 			<span class="badge">
 				{#if item.kind === 'video'}<Play size={11} fill="currentColor" aria-hidden="true" /> Video{:else}GIF{/if}
@@ -107,7 +116,9 @@
 
 	<div class="body">
 		<div class="info">
-			<a href={memeHref} onclick={open} class="title">{item.title || 'Ohne Titel'}</a>
+			{#if !withheld}
+				<a href={memeHref} onclick={open} class="title">{item.title || 'Ohne Titel'}</a>
+			{/if}
 			{#if item.tags.length > 0}
 				<ul class="tags">
 					{#each item.tags as tag (tag)}

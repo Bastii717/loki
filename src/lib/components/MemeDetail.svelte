@@ -19,6 +19,8 @@
 	import { createVoter } from '../vote';
 	import type { CommentItem } from '../server/comments';
 	import type { FeedItem } from '../server/feed';
+	import UnderReviewBadge from './UnderReviewBadge.svelte';
+	import UnderReviewPanel from './UnderReviewPanel.svelte';
 
 	let {
 		item,
@@ -57,6 +59,8 @@
 	let menuOpen = $state(false);
 	let menuError = $state('');
 	const scoreLabel = $derived(score > 0 ? `+${score}` : String(score));
+	// Under review and withheld by the server (members): panel only, no reveal. Mods keep the content.
+	const withheld = $derived(item.mediaUrl === null);
 
 	// ---- swipe / arrow navigation between feed neighbours
 	const feedIds = $derived(page.state.feedIds);
@@ -233,7 +237,7 @@
 	<button type="button" class="icon-btn" onclick={back} aria-label="Zurück"
 		><ArrowLeft size={22} aria-hidden="true" /></button
 	>
-	<span class="bar-title">{item.title || 'Ohne Titel'}</span>
+	<span class="bar-title">{withheld ? 'Wird geprüft' : item.title || 'Ohne Titel'}</span>
 	{#if feedIds}
 		<div class="pager">
 			<button
@@ -294,13 +298,15 @@
 
 <main class="detail">
 	<div class="stage" onpointerdown={onPointerDown} onpointerup={onPointerUp} role="presentation">
-		{#if item.kind === 'video'}
+		{#if withheld}
+			<UnderReviewPanel />
+		{:else if item.kind === 'video'}
 			<video src={item.mediaUrl} controls loop muted playsinline autoplay class:blurred={!revealed}
 			></video>
 		{:else}
 			<img src={item.mediaUrl} alt={item.title} class:blurred={!revealed} draggable="false" />
 		{/if}
-		{#if !revealed}
+		{#if !withheld && !revealed}
 			<button type="button" class="reveal" onclick={() => (revealed = true)}>
 				{#if item.blurred === 'nsfw'}
 					<EyeOff size={20} aria-hidden="true" /> Antippen zum Anzeigen
@@ -314,7 +320,8 @@
 	<section class="info">
 		<div class="row">
 			<div class="grow">
-				<h1>{item.title || 'Ohne Titel'}</h1>
+				<h1>{withheld ? 'Wird geprüft' : item.title || 'Ohne Titel'}</h1>
+				{#if item.underReview && !withheld}<p class="review-note"><UnderReviewBadge /></p>{/if}
 				<p class="meta">
 					von {item.uploader} ·
 					<time datetime={item.createdAt}>{relativeTime(item.createdAt)}</time>
@@ -409,7 +416,12 @@
 								>
 							{/if}
 						</div>
-						<p>{c.text}</p>
+						{#if c.text === null}
+							<p class="review"><EyeOff size={14} aria-hidden="true" /> Wird geprüft</p>
+						{:else}
+							{#if c.underReview}<p class="review-note"><UnderReviewBadge /></p>{/if}
+							<p>{c.text}</p>
+						{/if}
 					</li>
 				{/each}
 			</ul>
@@ -745,5 +757,17 @@
 		margin: 4px 0 0;
 		overflow-wrap: anywhere;
 		white-space: pre-wrap;
+	}
+
+	.list p.review {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--text-muted);
+		font-style: italic;
+	}
+
+	.review-note {
+		margin: 4px 0 0;
 	}
 </style>

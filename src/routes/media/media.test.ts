@@ -7,6 +7,9 @@ import { resetDb, setupDb, testUser } from '../../lib/server/db/test-utils';
 import { env } from '../../lib/server/env';
 import { deleteObjects, putObject } from '../../lib/server/storage';
 import { ensureBucket } from '../../lib/server/storage-test-utils';
+import { addOpenReports, OVER_THRESHOLD } from '../../lib/server/moderation-test-utils';
+import { db } from '../../lib/server/db';
+import { media } from '../../lib/server/db/schema';
 import { GET } from './[...key]/+server';
 
 beforeAll(async () => {
@@ -95,5 +98,61 @@ describe('GET /media/[...key]', () => {
 		const res = await request(path, await createSession(user.id));
 		expect(res.status).toBe(404);
 		expect(res.headers.get('location')).toBeNull();
+	});
+
+	describe('under review', () => {
+		const OBJ = `memes/utest/${crypto.randomUUID()}-o.txt`;
+		const THUMB = `memes/utest/${crypto.randomUUID()}-t.txt`;
+
+		beforeAll(async () => {
+			await putObject(OBJ, Buffer.from('o'), 'text/plain');
+			await putObject(THUMB, Buffer.from('t'), 'text/plain');
+			return () => deleteObjects([OBJ, THUMB]);
+		});
+
+		async function reportedMeme(reports: number) {
+			const author = await testUser();
+			const [row] = await db
+				.insert(media)
+				.values({ uploaderId: author.id, kind: 'image', objectKey: OBJ, thumbKey: THUMB })
+				.returning({ id: media.id });
+			await addOpenReports('meme', row.id, author.id, reports);
+			return author;
+		}
+
+		it('404s both the original and the thumbnail key for a member', async () => {
+			await reportedMeme(OVER_THRESHOLD);
+			const member = await testUser();
+			const cookie = await createSession(member.id);
+			for (const key of [OBJ, THUMB]) {
+				const res = await request(`/media/${key}`, cookie);
+				expect(res.status).toBe(404);
+				expect(res.headers.get('location')).toBeNull();
+			}
+		});
+
+		it('also 404s for the author', async () => {
+			const author = await reportedMeme(OVER_THRESHOLD);
+			const res = await request(`/media/${OBJ}`, await createSession(author.id));
+			expect(res.status).toBe(404);
+		});
+
+		it.each(['moderator', 'admin'] as const)('still redirects for a %s', async (role) => {
+			await reportedMeme(OVER_THRESHOLD);
+			const user = await testUser({ role });
+			const cookie = await createSession(user.id);
+			for (const key of [OBJ, THUMB]) {
+				expect((await request(`/media/${key}`, cookie)).status).toBe(302);
+			}
+		});
+
+		it('serves a meme exactly at the threshold', async () => {
+			await reportedMeme(env.REPORT_REVIEW_THRESHOLD);
+			const member = await testUser();
+			const cookie = await createSession(member.id);
+			for (const key of [OBJ, THUMB]) {
+				expect((await request(`/media/${key}`, cookie)).status).toBe(302);
+			}
+		});
 	});
 });

@@ -9,6 +9,9 @@ import {
 	QuoteTextError,
 	voteQuote
 } from './quotes';
+import { addOpenReports, OVER_THRESHOLD } from './moderation-test-utils';
+import { env } from './env';
+import { resolveReports } from './moderation';
 
 beforeAll(setupDb);
 beforeEach(resetDb);
@@ -80,5 +83,51 @@ describe('deleteQuote', () => {
 	it('throws not-found for a missing quote', async () => {
 		const mod = await testUser({ role: 'moderator' });
 		await expect(deleteQuote(asSession(mod), 999999)).rejects.toBeInstanceOf(QuoteNotFoundError);
+	});
+});
+
+describe('listQuotes under review', () => {
+	it('nulls text (and author) of an over-threshold quote for members; mods see it flagged', async () => {
+		const u = await testUser();
+		const fine = await addQuote(u.id, 'ok', 'Opa');
+		const bad = await addQuote(u.id, 'boese', 'Opa Hitler');
+		await addOpenReports('quote', bad.id, u.id, OVER_THRESHOLD);
+
+		const member = await listQuotes(u.id);
+		expect(member.find((q) => q.id === fine.id)).toMatchObject({ text: 'ok', underReview: false });
+		expect(member.find((q) => q.id === bad.id)).toMatchObject({
+			text: null,
+			author: '',
+			underReview: true
+		});
+		expect(JSON.stringify(member)).not.toContain('boese');
+		expect(JSON.stringify(member)).not.toContain('Hitler');
+
+		const mod = await listQuotes(u.id, true);
+		expect(mod.find((q) => q.id === bad.id)).toMatchObject({
+			text: 'boese',
+			author: 'Opa Hitler',
+			underReview: true
+		});
+	});
+
+	it('exactly at the threshold the quote is visible; a released quote stays visible', async () => {
+		const u = await testUser();
+		const q = await addQuote(u.id, 'grenzfall', 'Oma');
+		await addOpenReports('quote', q.id, u.id, env.REPORT_REVIEW_THRESHOLD);
+		expect((await listQuotes(u.id))[0]).toMatchObject({ text: 'grenzfall', underReview: false });
+
+		await addOpenReports('quote', q.id, u.id, 1);
+		expect((await listQuotes(u.id))[0]).toMatchObject({ text: null, underReview: true });
+
+		const mod = await testUser({ role: 'moderator' });
+		await resolveReports(
+			{ id: mod.id, username: mod.username, role: 'moderator' },
+			'quote',
+			q.id,
+			'dismissed'
+		);
+		await addOpenReports('quote', q.id, u.id, OVER_THRESHOLD);
+		expect((await listQuotes(u.id))[0]).toMatchObject({ text: 'grenzfall', underReview: false });
 	});
 });

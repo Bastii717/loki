@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from './db';
 import { quoteVotes, quotes } from './db/schema';
+import { underReviewSql } from './moderation';
 import type { SessionUser } from './auth/session';
 import type { VoteValue } from './votes';
 
@@ -25,8 +26,10 @@ export class QuotePermissionError extends Error {
 
 export interface QuoteItem {
 	id: number;
-	text: string;
+	/** null while under review, for viewers who may not see it (author is then blanked too). */
+	text: string | null;
 	author: string;
+	underReview: boolean;
 	createdAt: string;
 	score: number;
 	userVote: VoteValue;
@@ -41,6 +44,7 @@ const columns = (userId: number) => ({
 	id: quotes.id,
 	text: quotes.text,
 	author: quotes.author,
+	underReview: underReviewSql('quote', quotes.id, quotes.reviewedAt),
 	createdAt: quotes.createdAt,
 	score: scoreSql,
 	userVote: userVoteSql(userId)
@@ -50,6 +54,7 @@ const toItem = (r: {
 	id: number;
 	text: string;
 	author: string;
+	underReview: boolean;
 	createdAt: Date;
 	score: number;
 	userVote: number;
@@ -59,13 +64,16 @@ const toItem = (r: {
 	userVote: r.userVote as VoteValue
 });
 
-/** All quotes, newest first, with the viewer's own vote. */
-export async function listQuotes(userId: number): Promise<QuoteItem[]> {
+/** All quotes, newest first, with the viewer's own vote. Under-review text is nulled unless `revealAll`. */
+export async function listQuotes(userId: number, revealAll = false): Promise<QuoteItem[]> {
 	const rows = await db
 		.select(columns(userId))
 		.from(quotes)
 		.orderBy(desc(quotes.createdAt), desc(quotes.id));
-	return rows.map(toItem);
+	return rows.map((r) => {
+		const item = toItem(r);
+		return item.underReview && !revealAll ? { ...item, text: null, author: '' } : item;
+	});
 }
 
 export async function addQuote(userId: number, text: string, author: string): Promise<QuoteItem> {

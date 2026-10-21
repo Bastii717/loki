@@ -1,8 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
-import { comments, favorites, media, mediaTags, tags, votes } from './db/schema';
+import { comments, favorites, media, mediaTags, reports, tags, votes } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import { getFeedItem, getFeedPage } from './feed';
+import { getDiscoverBatch } from './discover';
+import { addOpenReports, OVER_THRESHOLD, timeOut } from './moderation-test-utils';
+import { env } from './env';
+import { resolveReports } from './moderation';
 
 beforeAll(setupDb);
 beforeEach(resetDb);
@@ -211,5 +215,128 @@ describe('getFeedItem', () => {
 		expect(item).toMatchObject({ id: a, userVote: 1, uploader: u.username });
 		expect(item!.mediaUrl).toMatch(/^\/media\//);
 		expect(await getFeedItem(u.id, 999999)).toBeNull();
+	});
+});
+
+describe('under review', () => {
+	const T = env.REPORT_REVIEW_THRESHOLD;
+
+	async function reportedMeme(reports: number) {
+		const author = await testUser();
+		const id = await addMedia(author.id, { title: 'secret title' });
+		await addOpenReports('meme', id, author.id, reports);
+		return { author, id };
+	}
+
+	it('exactly at the threshold the meme stays fully visible', async () => {
+		const { id } = await reportedMeme(T);
+		const viewer = await testUser();
+		const item = (await getFeedItem(viewer.id, id))!;
+		expect(item.underReview).toBe(false);
+		expect(item.title).toBe('secret title');
+		expect(item.thumbUrl).toMatch(/^\/media\/memes\/t/);
+	});
+
+	it('above the threshold a member gets no urls, title or tags - in feed, detail and discover', async () => {
+		const { id, author } = await reportedMeme(OVER_THRESHOLD);
+		const [{ id: tagId }] = await db.insert(tags).values({ name: 'geheim' }).returning();
+		await db.insert(mediaTags).values({ mediaId: id, tagId });
+		const viewer = await testUser();
+
+		const feed = await getFeedPage({ viewerId: viewer.id, sort: 'new' });
+		const detail = await getFeedItem(viewer.id, id);
+		const discover = await getDiscoverBatch(viewer.id);
+		for (const item of [feed.items[0], detail!, discover.items[0]]) {
+			expect(item.id).toBe(id);
+			expect(item).toMatchObject({
+				underReview: true,
+				thumbUrl: null,
+				mediaUrl: null,
+				title: '',
+				tags: []
+			});
+			expect(JSON.stringify(item)).not.toContain('secret title');
+			expect(JSON.stringify(item)).not.toContain('memes/');
+		}
+		// the author is no special case
+		const own = await getFeedItem(author.id, id);
+		expect(own).toMatchObject({ underReview: true, thumbUrl: null, mediaUrl: null, title: '' });
+	});
+
+	it('a moderator (revealAll) gets the full item, flagged', async () => {
+		const { id } = await reportedMeme(OVER_THRESHOLD);
+		const mod = await testUser({ role: 'moderator' });
+		const detail = (await getFeedItem(mod.id, id, true))!;
+		expect(detail).toMatchObject({ underReview: true, title: 'secret title' });
+		expect(detail.thumbUrl).toMatch(/^\/media\/memes\/t/);
+		expect(detail.mediaUrl).toMatch(/^\/media\/memes\/o/);
+		const page = await getFeedPage({ viewerId: mod.id, revealAll: true, sort: 'new' });
+		expect(page.items[0].mediaUrl).not.toBeNull();
+		const discover = await getDiscoverBatch(mod.id, undefined, [], true);
+		expect(discover.items[0].mediaUrl).not.toBeNull();
+	});
+
+	it('counts distinct reporters, not reports', async () => {
+		const author = await testUser();
+		const id = await addMedia(author.id);
+		const [reporter] = await addOpenReports('meme', id, author.id, 1);
+		for (let i = 0; i < T + 2; i++) {
+			await db.insert(reports).values({
+				contentType: 'meme',
+				contentId: id,
+				reporterId: reporter,
+				authorId: author.id,
+				category: 'spam',
+				excerpt: 'x'
+			});
+		}
+		expect((await getFeedItem(author.id, id))!.underReview).toBe(false);
+	});
+
+	it('reporters with an active timeout do not count', async () => {
+		const author = await testUser();
+		const id = await addMedia(author.id);
+		const reporters = await addOpenReports('meme', id, author.id, OVER_THRESHOLD);
+		const viewer = await testUser();
+		expect((await getFeedItem(viewer.id, id))!.underReview).toBe(true);
+		await timeOut(reporters[0], viewer.id);
+		expect((await getFeedItem(viewer.id, id))!.underReview).toBe(false);
+	});
+
+	it('resolved reports do not count', async () => {
+		const { id } = await reportedMeme(OVER_THRESHOLD);
+		const mod = {
+			id: (await testUser({ role: 'moderator' })).id,
+			username: 'm',
+			role: 'moderator' as const
+		};
+		await resolveReports(mod, 'meme', id, 'actioned');
+		expect((await getFeedItem(mod.id, id))!.underReview).toBe(false);
+	});
+
+	it('a released meme (reviewedAt) stays visible however many new reports arrive', async () => {
+		const { id, author } = await reportedMeme(OVER_THRESHOLD);
+		const mod = {
+			id: (await testUser({ role: 'moderator' })).id,
+			username: 'm',
+			role: 'moderator' as const
+		};
+		await resolveReports(mod, 'meme', id, 'dismissed');
+		await addOpenReports('meme', id, author.id, OVER_THRESHOLD + 2);
+		const viewer = await testUser();
+		const item = (await getFeedItem(viewer.id, id))!;
+		expect(item.underReview).toBe(false);
+		expect(item.mediaUrl).not.toBeNull();
+	});
+
+	it('reports on comments/quotes or other memes do not affect a meme', async () => {
+		const author = await testUser();
+		const id = await addMedia(author.id);
+		const other = await addMedia(author.id);
+		await addOpenReports('meme', other, author.id, OVER_THRESHOLD);
+		await addOpenReports('comment', id, author.id, OVER_THRESHOLD);
+		const items = (await getFeedPage({ viewerId: author.id, sort: 'new' })).items;
+		expect(items.find((i) => i.id === id)!.underReview).toBe(false);
+		expect(items.find((i) => i.id === other)!.underReview).toBe(true);
 	});
 });

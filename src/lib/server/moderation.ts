@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, lt, gt, notExists, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, lt, gt, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 import type { SessionUser } from './auth/session';
 import { db } from './db';
 import { auditLog, comments, media, quotes, reports, timeouts, users } from './db/schema';
@@ -312,33 +312,48 @@ export async function createReport(
 	});
 }
 
+/**
+ * The ONE definition of "open reporter count", as a SELECT (single column `n`): distinct reporters
+ * with an open report on the content, excluding reporters with an active timeout. `idExpr` is the
+ * content id as SQL (a column of the surrounding query, or a bound value). Used verbatim by
+ * openReportCount (standalone), by the feed (as a LATERAL join) and by the comment/quote/media
+ * read paths (as a scalar subquery), so the visibility rule cannot drift between them.
+ */
+export function openReporterCountSelect(contentType: ContentType, idExpr: SQL): SQL {
+	return sql`SELECT count(DISTINCT r.reporter_id)::int AS n
+		FROM reports r
+		WHERE r.content_type = ${contentType}
+			AND r.content_id = ${idExpr}
+			AND r.status = 'open'
+			AND NOT EXISTS (
+				SELECT 1 FROM timeouts t
+				WHERE t.user_id = r.reporter_id AND t.lifted_at IS NULL AND t.until > now()
+			)`;
+}
+
+/** The threshold test on a count expression: STRICTLY above REPORT_REVIEW_THRESHOLD. */
+export const overThresholdSql = (countExpr: SQL): SQL =>
+	sql`(${countExpr}) > ${env.REPORT_REVIEW_THRESHOLD}`;
+
+/** SQL predicate form of isUnderReview for a row in the surrounding query (scalar subquery). */
+export function underReviewSql(
+	contentType: ContentType,
+	idExpr: SQL | AnyColumn,
+	reviewedAtExpr: SQL | AnyColumn
+): SQL<boolean> {
+	return sql<boolean>`(${reviewedAtExpr} IS NULL AND ${overThresholdSql(
+		sql`${openReporterCountSelect(contentType, sql`${idExpr}`)}`
+	)})`;
+}
+
 /** Distinct open reporters of a content item, excluding reporters with an active timeout. */
 export async function openReportCount(
 	contentType: ContentType,
 	contentId: number
 ): Promise<number> {
-	const [row] = await db
-		.select({ n: sql<number>`count(distinct ${reports.reporterId})::int` })
-		.from(reports)
-		.where(
-			and(
-				eq(reports.contentType, contentType),
-				eq(reports.contentId, contentId),
-				eq(reports.status, 'open'),
-				notExists(
-					db
-						.select({ one: sql`1` })
-						.from(timeouts)
-						.where(
-							and(
-								eq(timeouts.userId, reports.reporterId),
-								isNull(timeouts.liftedAt),
-								gt(timeouts.until, sql`now()`)
-							)
-						)
-				)
-			)
-		);
+	const [row] = await db.execute<{ n: number }>(
+		openReporterCountSelect(contentType, sql`${contentId}::integer`)
+	);
 	return row.n;
 }
 
@@ -352,6 +367,23 @@ export async function isUnderReview(contentType: ContentType, contentId: number)
 	if (!row || row.reviewedAt !== null) return false;
 	return (await openReportCount(contentType, contentId)) > env.REPORT_REVIEW_THRESHOLD;
 }
+
+/**
+ * True when the stored media object (original OR thumbnail key) belongs to a meme that is under
+ * review. Unknown keys are not under review (nothing to hide).
+ */
+export async function isMediaKeyUnderReview(key: string): Promise<boolean> {
+	const [row] = await db
+		.select({ hidden: underReviewSql('meme', media.id, media.reviewedAt) })
+		.from(media)
+		.where(or(eq(media.objectKey, key), eq(media.thumbKey, key)))
+		.limit(1);
+	return row?.hidden === true;
+}
+
+/** Moderators and admins see under-review content in full. */
+export const canSeeUnderReview = (user: Pick<SessionUser, 'role'>): boolean =>
+	user.role === 'moderator' || user.role === 'admin';
 
 /**
  * Closes all open reports of a content item with `outcome`. 'dismissed' (release) also stamps the

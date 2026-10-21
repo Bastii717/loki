@@ -1,6 +1,7 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import { db } from './db';
 import { comments, media, mediaViews, users } from './db/schema';
+import { underReviewSql } from './moderation';
 import type { SessionUser } from './auth/session';
 import { MediaNotFoundError } from './votes';
 
@@ -27,7 +28,9 @@ export interface CommentItem {
 	mediaId: number;
 	authorId: number;
 	author: string;
-	text: string;
+	/** null while under review, for viewers who may not see it. */
+	text: string | null;
+	underReview: boolean;
 	createdAt: string;
 }
 
@@ -37,6 +40,7 @@ const columns = {
 	authorId: comments.authorId,
 	author: users.username,
 	text: comments.text,
+	underReview: underReviewSql('comment', comments.id, comments.reviewedAt),
 	createdAt: comments.createdAt
 };
 
@@ -45,15 +49,18 @@ const toItem = (r: Omit<CommentItem, 'createdAt'> & { createdAt: Date }): Commen
 	createdAt: r.createdAt.toISOString()
 });
 
-/** Comments of a meme, newest first. */
-export async function listComments(mediaId: number): Promise<CommentItem[]> {
+/** Comments of a meme, newest first. Under-review texts are nulled unless `revealAll` (moderators). */
+export async function listComments(mediaId: number, revealAll = false): Promise<CommentItem[]> {
 	const rows = await db
 		.select(columns)
 		.from(comments)
 		.innerJoin(users, eq(users.id, comments.authorId))
 		.where(eq(comments.mediaId, mediaId))
 		.orderBy(desc(comments.createdAt), desc(comments.id));
-	return rows.map(toItem);
+	return rows.map((r) => {
+		const item = toItem(r);
+		return item.underReview && !revealAll ? { ...item, text: null } : item;
+	});
 }
 
 export async function addComment(

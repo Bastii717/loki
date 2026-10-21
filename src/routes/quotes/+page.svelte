@@ -4,9 +4,11 @@
 	import ArrowBigDown from 'lucide-svelte/icons/arrow-big-down';
 	import ArrowBigUp from 'lucide-svelte/icons/arrow-big-up';
 	import Check from 'lucide-svelte/icons/check';
+	import EyeOff from 'lucide-svelte/icons/eye-off';
 	import Send from 'lucide-svelte/icons/send';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import X from 'lucide-svelte/icons/x';
+	import UnderReviewBadge from '../../lib/components/UnderReviewBadge.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -94,8 +96,13 @@
 			{#each items as q (q.id)}
 				<li class="card">
 					<div class="body">
-						<blockquote>„{q.text}“</blockquote>
-						<p class="author">— {q.author}</p>
+						{#if q.text === null}
+							<p class="review"><EyeOff size={14} aria-hidden="true" /> Wird geprüft</p>
+						{:else}
+							{#if q.underReview}<UnderReviewBadge />{/if}
+							<blockquote>„{q.text}“</blockquote>
+							<p class="author">— {q.author}</p>
+						{/if}
 						{#if data.canModerate}
 							{#if confirmingId === q.id}
 								<div class="confirm">
@@ -227,6 +234,14 @@
 		margin: 0;
 		overflow-wrap: anywhere;
 		white-space: pre-wrap;
+	}
+	.review {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin: 0;
+		color: var(--text-muted);
+		font-style: italic;
 	}
 	.author {
 		margin: 0;

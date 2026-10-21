@@ -53,7 +53,10 @@ export const media = pgTable(
 	},
 	(t) => [
 		index('media_hot_score_idx').on(t.hotScore),
-		index('media_created_at_idx').on(t.createdAt)
+		index('media_created_at_idx').on(t.createdAt),
+		// /media/[...key] resolves a requested key to its row to enforce under-review
+		index('media_object_key_idx').on(t.objectKey),
+		index('media_thumb_key_idx').on(t.thumbKey)
 	]
 );
 
