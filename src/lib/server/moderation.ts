@@ -386,46 +386,113 @@ export async function isMediaKeyUnderReview(key: string): Promise<boolean> {
 export const canSeeUnderReview = (user: Pick<SessionUser, 'role'>): boolean =>
 	user.role === 'moderator' || user.role === 'admin';
 
+/** Runs `fn` on the given executor, or in a fresh transaction when the caller has none. */
+const inTransaction = <T>(executor: Executor | undefined, fn: (tx: Executor) => Promise<T>) =>
+	executor ? fn(executor) : db.transaction((tx) => fn(tx));
+
+/** Closes the open reports of a content item and returns what was closed (excerpt, author). */
+function closeOpenReports(
+	tx: Executor,
+	actor: SessionUser,
+	contentType: ContentType,
+	contentId: number,
+	outcome: ReportOutcome
+) {
+	return tx
+		.update(reports)
+		.set({ status: 'resolved', outcome, resolvedAt: sql`now()`, resolvedBy: actor.id })
+		.where(
+			and(
+				eq(reports.contentType, contentType),
+				eq(reports.contentId, contentId),
+				eq(reports.status, 'open')
+			)
+		)
+		.returning({ excerpt: reports.excerpt, authorId: reports.authorId });
+}
+
 /**
- * Closes all open reports of a content item with `outcome`. 'dismissed' (release) also stamps the
- * content's reviewedAt, which grants permanent immunity from auto-hiding, and writes the audit row.
- * 'actioned' / 'removed' write none here: the caller audits the concrete action (content_deleted,
- * flags_forced, timeout_set) it performed.
+ * Closes all open reports of a content item with `outcome` and returns how many it closed (0 =
+ * nothing was open, e.g. somebody else was faster). 'dismissed' (release) also stamps the
+ * content's reviewedAt, which grants permanent immunity from auto-hiding, and writes the audit
+ * row, both only when at least one report was actually closed. 'actioned' / 'removed' write no
+ * audit row here: the caller audits the concrete action it performed (resolveWithAudit,
+ * timeout_set). Pass `executor` to run inside the caller's transaction.
  */
 export async function resolveReports(
 	actor: SessionUser,
 	contentType: ContentType,
 	contentId: number,
-	outcome: ReportOutcome
-): Promise<void> {
-	await db.transaction(async (tx) => {
-		const closed = await tx
-			.update(reports)
-			.set({ status: 'resolved', outcome, resolvedAt: sql`now()`, resolvedBy: actor.id })
-			.where(
-				and(
-					eq(reports.contentType, contentType),
-					eq(reports.contentId, contentId),
-					eq(reports.status, 'open')
-				)
-			)
-			.returning({ excerpt: reports.excerpt });
-
-		if (outcome !== 'dismissed') return;
+	outcome: ReportOutcome,
+	executor?: Executor
+): Promise<number> {
+	return inTransaction(executor, async (tx) => {
+		const closed = await closeOpenReports(tx, actor, contentType, contentId, outcome);
+		if (outcome !== 'dismissed' || closed.length === 0) return closed.length;
 
 		const table = contentTable[contentType];
 		await tx
 			.update(table)
 			.set({ reviewedAt: sql`now()` })
 			.where(eq(table.id, contentId));
-		const excerpt = closed[0]?.excerpt ?? '';
 		await audit(
 			actor.id,
 			AUDIT_ACTIONS.reportDismissed,
 			contentType,
 			contentId,
-			`${closed.length} Meldungen: ${excerpt}`,
+			`${closed.length} Meldungen: ${closed[0].excerpt}`,
 			tx
 		);
+		return closed.length;
 	});
+}
+
+/**
+ * A moderator's concrete action on someone else's content (`content_deleted` / `flags_forced`):
+ * closes the open reports as 'actioned' and writes the audit row, atomically. Does nothing (no
+ * audit row) when the content has no open reports. `note` prefixes the audit detail. Used by the
+ * content modules for inline actions and by the queue, so both behave identically.
+ */
+export async function resolveWithAudit(
+	actor: SessionUser,
+	contentType: ContentType,
+	contentId: number,
+	action: typeof AUDIT_ACTIONS.contentDeleted | typeof AUDIT_ACTIONS.flagsForced,
+	note = '',
+	executor?: Executor
+): Promise<number> {
+	return inTransaction(executor, async (tx) => {
+		const closed = await closeOpenReports(tx, actor, contentType, contentId, 'actioned');
+		if (closed.length === 0) return 0;
+		const [author] = await tx
+			.select({ username: users.username })
+			.from(users)
+			.where(eq(users.id, closed[0].authorId));
+		await audit(
+			actor.id,
+			action,
+			contentType,
+			contentId,
+			`${note}${author?.username ?? ''}: ${closed[0].excerpt}`,
+			tx
+		);
+		return closed.length;
+	});
+}
+
+/**
+ * Closes the open reports of content that was just deleted. The author's own deletion closes them
+ * as 'removed' (their own act, no audit row); anybody else is a moderator acting on foreign
+ * content: 'actioned' plus a content_deleted audit row.
+ */
+export function resolveAfterDelete(
+	actor: SessionUser,
+	contentType: ContentType,
+	contentId: number,
+	authorId: number | null,
+	executor?: Executor
+): Promise<number> {
+	return authorId === actor.id
+		? resolveReports(actor, contentType, contentId, 'removed', executor)
+		: resolveWithAudit(actor, contentType, contentId, AUDIT_ACTIONS.contentDeleted, '', executor);
 }

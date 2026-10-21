@@ -1,9 +1,10 @@
 import type { SessionUser } from './auth/session';
-import { deleteComment } from './comments';
+import { CommentNotFoundError, deleteComment } from './comments';
 import { deleteMedia, setFlags } from './memes';
-import { audit, AUDIT_ACTIONS, resolveReports, setTimeout_, type ContentType } from './moderation';
+import { resolveAfterDelete, resolveReports, setTimeout_, type ContentType } from './moderation';
 import { getOpenCase } from './moderation-queries';
-import { deleteQuote } from './quotes';
+import { deleteQuote, QuoteNotFoundError } from './quotes';
+import { MediaNotFoundError } from './votes';
 
 export type CaseErrorCode = 'notfound' | 'invalid' | 'own';
 
@@ -21,24 +22,31 @@ export type CaseAction =
 	| { type: 'delete' }
 	| { type: 'timeout'; days: number; reason: string };
 
+const isContentGone = (e: unknown) =>
+	e instanceof MediaNotFoundError ||
+	e instanceof CommentNotFoundError ||
+	e instanceof QuoteNotFoundError;
+
 /**
  * Queue actions on one case. The CALLER must have verified the actor's moderator role and that
  * the actor is not timed out (requireModerator); the underlying modules trust `actor`.
  *
- * Every action requires an open case (a double click or a second moderator gets 'notfound'), then
- * performs the concrete mutation through the existing module, writes the audit row for it and
- * finally closes the reports with the matching outcome:
- * - release: resolveReports 'dismissed' (stamps reviewedAt, audits report_dismissed itself)
- * - flags:   setFlags nsfw (memes only) + audit flags_forced + 'actioned'
- * - delete:  deleteMedia/Comment/Quote + audit content_deleted + 'actioned'
- * - timeout: setTimeout_ on the author (audits timeout_set itself) + 'actioned'
+ * Every action requires an open case (a double click or a second moderator gets 'notfound').
+ * The content modules close the reports and write the audit row for their own mutation, exactly
+ * as for an inline moderator action outside the queue (resolveWithAudit / resolveAfterDelete),
+ * so both paths behave identically:
+ * - release: resolveReports 'dismissed' (stamps reviewedAt, audits report_dismissed itself);
+ *            0 closed reports means another moderator was faster: 'notfound'
+ * - flags:   setFlags nsfw (memes only): flags_forced + 'actioned'
+ * - delete:  deleteMedia/Comment/Quote: content_deleted + 'actioned'. Content that is already gone
+ *            (an earlier attempt half-completed) is not an error: the case is still closed and audited.
+ * - timeout: setTimeout_ on the author (audits timeout_set itself), then 'actioned'
  * Self-dealing guard: on a case about the actor's OWN content, release and flags are refused
  * ('own'): nobody dismisses reports against themselves or earns auto-hide immunity that way.
  * Deleting one's own content stays allowed and closes the reports as 'removed' (the author's
  * own act, not a moderation decision; no audit row, like any own-delete). Timeout on oneself is
  * refused by setTimeout_.
- * The mutation comes first so a failed one (permission, timeout rules, vanished content) leaves
- * the case open; if closing the reports fails afterwards, the case stays open and can be released.
+ * The mutation comes first so a failed one (permission, timeout rules) leaves the case open.
  */
 export async function actOnCase(
 	actor: SessionUser,
@@ -53,41 +61,30 @@ export async function actOnCase(
 
 	switch (action.type) {
 		case 'release':
-			await resolveReports(actor, contentType, contentId, 'dismissed');
+			if ((await resolveReports(actor, contentType, contentId, 'dismissed')) === 0) {
+				throw new CaseError('notfound');
+			}
 			return;
 
 		case 'flags':
 			if (contentType !== 'meme') throw new CaseError('invalid');
 			await setFlags(actor, contentId, { nsfw: true });
-			await audit(
-				actor.id,
-				AUDIT_ACTIONS.flagsForced,
-				contentType,
-				contentId,
-				`NSFW erzwungen, ${open.author}: ${open.excerpt}`
-			);
-			break;
+			return;
 
 		case 'delete':
-			if (contentType === 'meme') await deleteMedia(actor, contentId);
-			else if (contentType === 'comment') await deleteComment(actor, contentId);
-			else await deleteQuote(actor, contentId);
-			if (own) {
-				await resolveReports(actor, contentType, contentId, 'removed');
-				return;
+			try {
+				if (contentType === 'meme') await deleteMedia(actor, contentId);
+				else if (contentType === 'comment') await deleteComment(actor, contentId);
+				else await deleteQuote(actor, contentId);
+			} catch (e) {
+				if (!isContentGone(e)) throw e;
+				await resolveAfterDelete(actor, contentType, contentId, open.authorId);
 			}
-			await audit(
-				actor.id,
-				AUDIT_ACTIONS.contentDeleted,
-				contentType,
-				contentId,
-				`${open.author}: ${open.excerpt}`
-			);
-			break;
+			return;
 
 		case 'timeout':
 			await setTimeout_(actor, open.authorId, action.days, action.reason);
-			break;
+			await resolveReports(actor, contentType, contentId, 'actioned');
+			return;
 	}
-	await resolveReports(actor, contentType, contentId, 'actioned');
 }

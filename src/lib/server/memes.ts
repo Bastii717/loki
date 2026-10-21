@@ -2,7 +2,12 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { SessionUser } from './auth/session';
 import { db } from './db';
 import { favorites, media } from './db/schema';
-import { assertNotTimedOut } from './moderation';
+import {
+	AUDIT_ACTIONS,
+	assertNotTimedOut,
+	resolveAfterDelete,
+	resolveWithAudit
+} from './moderation';
 import { deleteObjects } from './storage';
 import { MediaNotFoundError } from './votes';
 
@@ -44,7 +49,11 @@ export async function toggleFavorite(
 	});
 }
 
-/** Uploader or moderator/admin. Removes the row (dependents cascade), then both bucket objects. */
+/**
+ * Uploader or moderator/admin. Removes the row (dependents cascade) and closes its open reports in
+ * one transaction (the uploader's own deletion: 'removed'; a moderator's: 'actioned' + audit row),
+ * then removes both bucket objects. Objects that are already gone are no error (S3 deletes are idempotent).
+ */
 export async function deleteMedia(user: SessionUser, mediaId: number): Promise<void> {
 	const [row] = await db
 		.select({ uploaderId: media.uploaderId, objectKey: media.objectKey, thumbKey: media.thumbKey })
@@ -55,11 +64,18 @@ export async function deleteMedia(user: SessionUser, mediaId: number): Promise<v
 	// Deleting one's own meme stays allowed while timed out; acting on others' is moderation, which a timeout suspends.
 	if (row.uploaderId !== user.id) await assertNotTimedOut(user);
 
-	await db.delete(media).where(eq(media.id, mediaId));
+	await db.transaction(async (tx) => {
+		await tx.delete(media).where(eq(media.id, mediaId));
+		await resolveAfterDelete(user, 'meme', mediaId, row.uploaderId, tx);
+	});
 	await deleteObjects([row.objectKey, row.thumbKey]);
 }
 
-/** Moderators/admins on any media, the uploader on their own. Unspecified flags stay unchanged. */
+/**
+ * Moderators/admins on any media, the uploader on their own. Unspecified flags stay unchanged.
+ * A moderator switching a flag ON for someone else's meme is a forced flag: its open reports are
+ * closed as 'actioned' and flags_forced is audited. Own memes and switching flags off never are.
+ */
 export async function setFlags(
 	user: SessionUser,
 	mediaId: number,
@@ -78,5 +94,19 @@ export async function setFlags(
 	if (flags.nsfw !== undefined) set.nsfw = flags.nsfw;
 	if (flags.spoiler !== undefined) set.spoiler = flags.spoiler;
 	if (Object.keys(set).length === 0) return;
-	await db.update(media).set(set).where(eq(media.id, mediaId));
+	const forced = row.uploaderId !== user.id && (set.nsfw === true || set.spoiler === true);
+	await db.transaction(async (tx) => {
+		await tx.update(media).set(set).where(eq(media.id, mediaId));
+		if (forced) {
+			const what = [set.nsfw && 'NSFW', set.spoiler && 'Spoiler'].filter(Boolean).join(' und ');
+			await resolveWithAudit(
+				user,
+				'meme',
+				mediaId,
+				AUDIT_ACTIONS.flagsForced,
+				`${what} erzwungen, `,
+				tx
+			);
+		}
+	});
 }

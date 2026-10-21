@@ -226,16 +226,33 @@ describe('delete (Löschen)', () => {
 		}
 	);
 
-	it('answers 404 when the content is already gone and keeps the case open for release', async () => {
+	it('finishes a half-completed delete: content already gone, the case is still closed and audited', async () => {
 		const w = await world();
 		await db.delete(comments).where(eq(comments.id, w.ids.comment));
-		const body = { contentType: 'comment', contentId: w.ids.comment };
-		const { response } = await act(w.mod.session, { ...body, action: 'delete' });
-		expect(response.status).toBe(404);
-		expect(await openReports('comment', w.ids.comment)).toHaveLength(2);
-		expect(await auditFor('content_deleted', 'comment', w.ids.comment)).toHaveLength(0);
-		expect((await act(w.mod.session, { ...body, action: 'release' })).response.status).toBe(204);
+		const { response } = await act(w.mod.session, {
+			contentType: 'comment',
+			contentId: w.ids.comment,
+			action: 'delete'
+		});
+		expect(response.status).toBe(204);
 		expect(await openReports('comment', w.ids.comment)).toHaveLength(0);
+		expect((await resolvedReports('comment', w.ids.comment)).map((r) => r.outcome)).toEqual([
+			'actioned',
+			'actioned'
+		]);
+		expect(await auditFor('content_deleted', 'comment', w.ids.comment)).toHaveLength(1);
+	});
+
+	it('answers 404 for flags on a meme that is gone and keeps the case open for release', async () => {
+		const w = await world();
+		await db.delete(media).where(eq(media.id, w.ids.meme));
+		const body = { contentType: 'meme', contentId: w.ids.meme };
+		const { response } = await act(w.mod.session, { ...body, action: 'flags' });
+		expect(response.status).toBe(404);
+		expect(await openReports('meme', w.ids.meme)).toHaveLength(2);
+		expect(await auditFor('flags_forced', 'meme', w.ids.meme)).toHaveLength(0);
+		expect((await act(w.mod.session, { ...body, action: 'release' })).response.status).toBe(204);
+		expect(await openReports('meme', w.ids.meme)).toHaveLength(0);
 	});
 });
 
