@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
 	boolean,
 	doublePrecision,
@@ -194,7 +195,11 @@ export const reports = pgTable(
 	},
 	(t) => [
 		index('reports_content_idx').on(t.contentType, t.contentId, t.status),
-		index('reports_author_outcome_idx').on(t.authorId, t.outcome)
+		index('reports_author_outcome_idx').on(t.authorId, t.outcome),
+		// The hot paths (open-count subqueries, queue) only ever look at open reports.
+		index('reports_open_content_idx')
+			.on(t.contentType, t.contentId)
+			.where(sql`${t.status} = 'open'`)
 	]
 );
 

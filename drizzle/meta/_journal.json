@@ -29,6 +29,13 @@
       "when": 1792570162154,
       "tag": "0003_media_key_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792573064091,
+      "tag": "0004_reports_open_partial_index",
+      "breakpoints": true
     }
   ]
 }

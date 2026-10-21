@@ -1,0 +1,1 @@
+CREATE INDEX "reports_open_content_idx" ON "reports" USING btree ("content_type","content_id") WHERE "reports"."status" = 'open';
