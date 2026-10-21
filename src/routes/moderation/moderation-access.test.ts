@@ -4,7 +4,12 @@ import { db } from '../../lib/server/db';
 import { comments, media, quotes, reports, timeouts } from '../../lib/server/db/schema';
 import { resetDb, setupDb } from '../../lib/server/db/test-utils';
 import { setFlags } from '../../lib/server/memes';
-import { activeTimeout, resolveReports, setTimeout_ } from '../../lib/server/moderation';
+import {
+	activeTimeout,
+	liftTimeout,
+	resolveReports,
+	setTimeout_
+} from '../../lib/server/moderation';
 import {
 	addOpenReports,
 	insertComment,
@@ -423,5 +428,40 @@ describe('open-case badge in the root layout', () => {
 		expect((await load(null)).openCases).toBeNull();
 		expect((await load(w.mod.user)).openCases).toBe(1);
 		expect((await load(w.admin.user)).openCases).toBe(1);
+	});
+
+	it('is null for a timed-out moderator or admin (their moderation rights rest)', async () => {
+		const w = await world();
+		const load = (user: World['mod']['user']) =>
+			rootLayout({ locals: { user } } as never) as Promise<{ openCases: number | null }>;
+		expect((await load(w.lockedMod.user)).openCases).toBeNull();
+		expect((await load(w.lockedAdmin.user)).openCases).toBeNull();
+	});
+});
+
+describe('timeout banner data in the root layout', () => {
+	type Layout = { activeTimeout: { until: string; reason: string } | null };
+	const load = (user: World['mod']['user'] | null) =>
+		rootLayout({ locals: { user } } as never) as Promise<Layout>;
+
+	it('exposes the active timeout of a timed-out viewer', async () => {
+		const w = await world();
+		const { activeTimeout: t } = await load(w.lockedMod.user);
+		expect(t?.reason).toBe('test');
+		expect(new Date(t!.until).getTime()).toBeGreaterThan(Date.now());
+	});
+
+	it('is null for untimed users, anonymous visitors and lifted or expired timeouts', async () => {
+		const w = await world();
+		expect((await load(w.member.user)).activeTimeout).toBeNull();
+		expect((await load(w.mod.user)).activeTimeout).toBeNull();
+		expect((await load(null)).activeTimeout).toBeNull();
+		await liftTimeout(w.admin.user, w.lockedMod.user.id);
+		expect((await load(w.lockedMod.user)).activeTimeout).toBeNull();
+		await db
+			.update(timeouts)
+			.set({ until: new Date(Date.now() - 1000) })
+			.where(eq(timeouts.userId, w.lockedAdmin.user.id));
+		expect((await load(w.lockedAdmin.user)).activeTimeout).toBeNull();
 	});
 });
