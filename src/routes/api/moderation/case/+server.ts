@@ -71,6 +71,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
 		await actOnCase(actor, contentType as ContentType, contentId, action);
 	} catch (e) {
+		if (e instanceof CaseError && e.code === 'own') {
+			error(403, 'Über Meldungen zu eigenen Inhalten entscheidet ein anderes Teammitglied.');
+		}
 		if (e instanceof CaseError) {
 			error(
 				e.code === 'notfound' ? 404 : 400,

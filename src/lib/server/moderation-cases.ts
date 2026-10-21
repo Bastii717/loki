@@ -5,9 +5,10 @@ import { audit, AUDIT_ACTIONS, resolveReports, setTimeout_, type ContentType } f
 import { getOpenCase } from './moderation-queries';
 import { deleteQuote } from './quotes';
 
-export type CaseErrorCode = 'notfound' | 'invalid';
+export type CaseErrorCode = 'notfound' | 'invalid' | 'own';
 
-/** 'notfound' = the content has no open reports (anymore); 'invalid' = action does not fit the content. */
+/** 'notfound' = the content has no open reports (anymore); 'invalid' = action does not fit the content;
+ * 'own' = the actor is the author and may not decide on reports against themselves. */
 export class CaseError extends Error {
 	constructor(readonly code: CaseErrorCode) {
 		super(`Case action rejected: ${code}`);
@@ -31,6 +32,11 @@ export type CaseAction =
  * - flags:   setFlags nsfw (memes only) + audit flags_forced + 'actioned'
  * - delete:  deleteMedia/Comment/Quote + audit content_deleted + 'actioned'
  * - timeout: setTimeout_ on the author (audits timeout_set itself) + 'actioned'
+ * Self-dealing guard: on a case about the actor's OWN content, release and flags are refused
+ * ('own'): nobody dismisses reports against themselves or earns auto-hide immunity that way.
+ * Deleting one's own content stays allowed and closes the reports as 'removed' (the author's
+ * own act, not a moderation decision; no audit row, like any own-delete). Timeout on oneself is
+ * refused by setTimeout_.
  * The mutation comes first so a failed one (permission, timeout rules, vanished content) leaves
  * the case open; if closing the reports fails afterwards, the case stays open and can be released.
  */
@@ -42,6 +48,8 @@ export async function actOnCase(
 ): Promise<void> {
 	const open = await getOpenCase(contentType, contentId);
 	if (!open) throw new CaseError('notfound');
+	const own = open.authorId === actor.id;
+	if (own && (action.type === 'release' || action.type === 'flags')) throw new CaseError('own');
 
 	switch (action.type) {
 		case 'release':
@@ -64,6 +72,10 @@ export async function actOnCase(
 			if (contentType === 'meme') await deleteMedia(actor, contentId);
 			else if (contentType === 'comment') await deleteComment(actor, contentId);
 			else await deleteQuote(actor, contentId);
+			if (own) {
+				await resolveReports(actor, contentType, contentId, 'removed');
+				return;
+			}
 			await audit(
 				actor.id,
 				AUDIT_ACTIONS.contentDeleted,

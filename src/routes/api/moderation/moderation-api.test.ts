@@ -325,6 +325,68 @@ describe('timeout from a case', () => {
 	});
 });
 
+describe('self-dealing: cases about the own content of the actor', () => {
+	const OWN_MESSAGE = 'Über Meldungen zu eigenen Inhalten entscheidet ein anderes Teammitglied.';
+
+	async function ownCase(role: 'moderator' | 'admin') {
+		const w = await world();
+		const me = role === 'moderator' ? w.mod : w.admin;
+		const memeId = await insertMeme(me.user.id, 'Mein Meme');
+		await addOpenReports('meme', memeId, me.user.id, OVER_THRESHOLD);
+		return { w, me, memeId };
+	}
+
+	it.each(['moderator', 'admin'] as const)(
+		'%s: release and force-flags on the own content are 403, reports stay open, no immunity',
+		async (role) => {
+			const { w, me, memeId } = await ownCase(role);
+			const audits = await totalAudit();
+			for (const action of ['release', 'flags']) {
+				const { response } = await act(me.session, {
+					contentType: 'meme',
+					contentId: memeId,
+					action
+				});
+				expect(response.status).toBe(403);
+				expect(await response.text()).toBe(OWN_MESSAGE);
+			}
+			expect(await openReports('meme', memeId)).toHaveLength(OVER_THRESHOLD);
+			const [row] = await db.select().from(media).where(eq(media.id, memeId));
+			expect(row.reviewedAt).toBeNull();
+			expect(row.nsfw).toBe(false);
+			expect(await totalAudit()).toBe(audits);
+			void w;
+		}
+	);
+
+	it('another moderator can still release it', async () => {
+		const { w, memeId } = await ownCase('moderator');
+		const { response } = await act(w.admin.session, {
+			contentType: 'meme',
+			contentId: memeId,
+			action: 'release'
+		});
+		expect(response.status).toBe(204);
+		const [row] = await db.select().from(media).where(eq(media.id, memeId));
+		expect(row.reviewedAt).not.toBeNull();
+	});
+
+	it('deleting the own content is allowed and closes the reports as removed, without a mod audit row', async () => {
+		const { me, memeId } = await ownCase('moderator');
+		const { response } = await act(me.session, {
+			contentType: 'meme',
+			contentId: memeId,
+			action: 'delete'
+		});
+		expect(response.status).toBe(204);
+		expect(await db.select().from(media).where(eq(media.id, memeId))).toHaveLength(0);
+		const closed = await resolvedReports('meme', memeId);
+		expect(closed).toHaveLength(OVER_THRESHOLD);
+		expect(closed.every((r) => r.outcome === 'removed')).toBe(true);
+		expect(await auditFor('content_deleted', 'meme', memeId)).toHaveLength(0);
+	});
+});
+
 describe('request validation', () => {
 	it.each([
 		['not json', undefined],
