@@ -1,5 +1,5 @@
 import { error, fail } from '@sveltejs/kit';
-import { ReportError, TimeoutActiveError } from './moderation';
+import { ReportError, TimeoutActionError, TimeoutActiveError } from './moderation';
 
 const dateFormat = new Intl.DateTimeFormat('de-DE', {
 	day: '2-digit',
@@ -34,4 +34,22 @@ export function mapModerationError(e: unknown): never {
 export function timeoutFail<T extends Record<string, unknown>>(e: TimeoutActiveError, values?: T) {
 	const message = timeoutMessage(e);
 	return fail(403, { ...values, message, error: message });
+}
+
+/** Maps a rejected setTimeout_/liftTimeout to an HTTP error with a German message; rethrows anything else. */
+export function mapTimeoutActionError(e: unknown): never {
+	if (e instanceof TimeoutActionError) {
+		if (e.code === 'self') error(400, 'Du kannst dich nicht selbst stummschalten.');
+		if (e.code === 'forbidden') {
+			error(
+				403,
+				'Dazu fehlt dir die Berechtigung: Moderatoren können nur Mitglieder stummschalten.'
+			);
+		}
+		if (e.code === 'invalid') {
+			error(400, 'Bitte 1 bis 30 Tage und einen Grund (höchstens 500 Zeichen) angeben.');
+		}
+		error(404, 'Nutzer oder aktiver Timeout nicht gefunden.');
+	}
+	return mapModerationError(e);
 }
