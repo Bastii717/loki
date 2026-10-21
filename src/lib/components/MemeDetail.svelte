@@ -323,7 +323,7 @@
 				<h1>{withheld ? 'Wird geprüft' : item.title || 'Ohne Titel'}</h1>
 				{#if item.underReview && !withheld}<p class="review-note"><UnderReviewBadge /></p>{/if}
 				<p class="meta">
-					von {item.uploader} ·
+					{#if item.uploader}von {item.uploader} ·{/if}
 					<time datetime={item.createdAt}>{relativeTime(item.createdAt)}</time>
 					·
 					<span class="views" aria-label="{viewCount} Aufrufe"

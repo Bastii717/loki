@@ -77,7 +77,7 @@
 
 <div class="caption">
 	<b>{withheld ? 'Wird geprüft' : item.title || 'Ohne Titel'}</b>
-	<span>von {item.uploader}</span>
+	{#if item.uploader}<span>von {item.uploader}</span>{/if}
 	{#if item.underReview && !withheld}<UnderReviewBadge />{/if}
 </div>
 

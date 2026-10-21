@@ -25,7 +25,7 @@ export interface FeedItem {
 	uploader: string;
 	createdAt: string;
 	/**
-	 * Hidden by report threshold and not yet released. Non-moderators get empty title/tags and null
+	 * Hidden by report threshold and not yet released. Non-moderators get empty title/tags/uploader and null
 	 * URLs (enforced here, not in the UI); moderators get the full item with this flag set.
 	 */
 	underReview: boolean;
@@ -139,7 +139,13 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 		? sql`AND EXISTS (
 			SELECT 1 FROM media_tags mt JOIN tags t ON t.id = mt.tag_id
 			WHERE mt.media_id = m.id AND t.name = ${opts.tag}
-		)`
+		)
+		${
+			// A tag filter would otherwise act as an oracle for the tags of hidden items.
+			opts.revealAll
+				? sql``
+				: sql`AND NOT (m.reviewed_at IS NULL AND ${overThresholdSql(sql`rc.n`)})`
+		}`
 		: sql``;
 
 	const idFilter = opts.id !== undefined ? sql`AND m.id = ${opts.id}` : sql``;
@@ -219,7 +225,7 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 			userFavorite: r.user_favorite,
 			viewCount: r.view_count,
 			blurred: r.nsfw || r.score <= env.AUTO_BLUR_SCORE ? 'nsfw' : r.spoiler ? 'spoiler' : null,
-			uploader: r.uploader,
+			uploader: hide ? '' : r.uploader,
 			createdAt: new Date(r.created_at).toISOString(),
 			underReview: r.under_review
 		};

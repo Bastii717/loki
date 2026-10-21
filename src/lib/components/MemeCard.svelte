@@ -127,7 +127,7 @@
 				</ul>
 			{/if}
 			<p class="meta">
-				<span>von {item.uploader}</span>
+				{#if item.uploader}<span>von {item.uploader}</span>{/if}
 				<span class="stat" aria-label="{item.commentCount} Kommentare"
 					><MessageCircle size={14} aria-hidden="true" /> {item.commentCount}</span
 				>

@@ -253,7 +253,8 @@ describe('under review', () => {
 				thumbUrl: null,
 				mediaUrl: null,
 				title: '',
-				tags: []
+				tags: [],
+				uploader: ''
 			});
 			expect(JSON.stringify(item)).not.toContain('secret title');
 			expect(JSON.stringify(item)).not.toContain('memes/');
@@ -338,5 +339,48 @@ describe('under review', () => {
 		const items = (await getFeedPage({ viewerId: author.id, sort: 'new' })).items;
 		expect(items.find((i) => i.id === id)!.underReview).toBe(false);
 		expect(items.find((i) => i.id === other)!.underReview).toBe(true);
+	});
+
+	it('a tag filter never matches hidden memes for members (no tag oracle); mods still find them', async () => {
+		const { id } = await reportedMeme(OVER_THRESHOLD);
+		const [{ id: tagId }] = await db.insert(tags).values({ name: 'geheim' }).returning();
+		await db.insert(mediaTags).values({ mediaId: id, tagId });
+		const visible = await addMedia((await testUser()).id);
+		await db.insert(mediaTags).values({ mediaId: visible, tagId });
+		const viewer = await testUser();
+
+		const member = await getFeedPage({ viewerId: viewer.id, sort: 'new', tag: 'geheim' });
+		expect(member.items.map((i) => i.id)).toEqual([visible]);
+		const mod = await getFeedPage({
+			viewerId: viewer.id,
+			revealAll: true,
+			sort: 'new',
+			tag: 'geheim'
+		});
+		expect(mod.items.map((i) => i.id).sort()).toEqual([id, visible].sort());
+		expect(mod.items.find((i) => i.id === id)).toMatchObject({
+			title: 'secret title',
+			tags: ['geheim']
+		});
+
+		// the unfiltered feed still shows the placeholder, without uploader
+		const all = await getFeedPage({ viewerId: viewer.id, sort: 'new' });
+		expect(all.items.find((i) => i.id === id)).toMatchObject({ underReview: true, uploader: '' });
+	});
+
+	it('a released meme is findable by tag again', async () => {
+		const { id } = await reportedMeme(OVER_THRESHOLD);
+		const [{ id: tagId }] = await db.insert(tags).values({ name: 'x' }).returning();
+		await db.insert(mediaTags).values({ mediaId: id, tagId });
+		const mod = await testUser({ role: 'moderator' });
+		await resolveReports(
+			{ id: mod.id, username: mod.username, role: 'moderator' },
+			'meme',
+			id,
+			'dismissed'
+		);
+		const viewer = await testUser();
+		const page = await getFeedPage({ viewerId: viewer.id, sort: 'new', tag: 'x' });
+		expect(page.items.map((i) => i.id)).toEqual([id]);
 	});
 });
