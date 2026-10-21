@@ -47,7 +47,8 @@ export async function callRoute(call: RouteCall): Promise<RouteResult> {
 			set: (name: string, value: string, options: Record<string, unknown>) =>
 				void (set[name] = { value, options })
 		},
-		locals: {} as App.Locals
+		locals: {} as App.Locals,
+		parent: async () => ({})
 	} as unknown as RequestEvent;
 
 	const resolve = (async (e: RequestEvent) => {

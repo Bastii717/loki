@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../../lib/server/db';
 import { comments, media, quotes, reports, timeouts } from '../../lib/server/db/schema';
 import { resetDb, setupDb } from '../../lib/server/db/test-utils';
@@ -183,6 +183,43 @@ describe('Review Focus 1: members never reach the moderation area', () => {
 	});
 });
 
+describe('hooks-level prefix guard (defense in depth)', () => {
+	it.each(['/moderation', '/moderation/log', '/api/moderation/case', '/api/moderation/users'])(
+		'%s: a member is turned away before the route handler runs',
+		async (path) => {
+			const w = await world();
+			const handler = vi.fn(() => new Response('geheim'));
+			const { response } = await callRoute({ handler, path, session: w.member.session });
+			expect(response.status).toBe(403);
+			expect(await response.text()).not.toContain('geheim');
+			expect(handler).not.toHaveBeenCalled();
+		}
+	);
+
+	it('moderators and admins reach the handler, and lookalike paths are not affected', async () => {
+		const w = await world();
+		const handler = vi.fn(() => new Response('ok'));
+		for (const session of [w.mod.session, w.admin.session]) {
+			expect((await callRoute({ handler, path: '/moderation', session })).response.status).toBe(
+				200
+			);
+		}
+		const lookalike = await callRoute({
+			handler,
+			path: '/moderations',
+			session: w.member.session
+		});
+		expect(lookalike.response.status).toBe(200);
+	});
+
+	it('the per-route guard still rejects a member when the hook is bypassed', async () => {
+		const w = await world();
+		await expect(
+			moderationLayout({ locals: { user: w.member.user }, parent: async () => ({}) } as never)
+		).rejects.toMatchObject({ status: 403 });
+	});
+});
+
 describe('timed-out moderators lose their moderation rights', () => {
 	it.each(endpoints)('$name: a timed-out moderator gets 403 with the German notice', async (ep) => {
 		const w = await world();
@@ -343,15 +380,16 @@ describe('page data for moderators', () => {
 		).rejects.toMatchObject({ status: 403 });
 	});
 
-	it('the layout load returns the open-case count and admin flag', async () => {
+	it('the layout load takes the open-case count from the root layout and adds the admin flag', async () => {
 		const w = await world();
-		expect(await moderationLayout({ locals: { user: w.mod.user } } as never)).toEqual({
+		const parent = async () => ({ openCases: 1 });
+		expect(await moderationLayout({ locals: { user: w.mod.user }, parent } as never)).toEqual({
 			isAdmin: false,
 			openCases: 1
 		});
-		expect(await moderationLayout({ locals: { user: w.admin.user } } as never)).toMatchObject({
-			isAdmin: true
-		});
+		expect(
+			await moderationLayout({ locals: { user: w.admin.user }, parent } as never)
+		).toMatchObject({ isAdmin: true });
 	});
 
 	it('log filter ignores unknown actions and cursor garbage', async () => {

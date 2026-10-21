@@ -29,6 +29,11 @@ const isPublic = (path: string) =>
 	path.startsWith('/_app/immutable/') ||
 	path === '/_app/version.json';
 
+const MODERATION_ROOTS = ['/moderation', '/api/moderation'];
+const isModerationPath = (path: string) =>
+	MODERATION_ROOTS.some((root) => path === root || path.startsWith(`${root}/`));
+const FORBIDDEN_MESSAGE = 'Dieser Bereich ist nur für Moderatoren und Admins.';
+
 const SEEN_PATH = /^\/api\/memes\/\d+\/seen$/;
 const WRITE_METHODS = new Set(['POST', 'PATCH', 'DELETE']);
 const RATE_LIMITED_MESSAGE = 'Langsam, Lord! Zu viele Anfragen.';
@@ -124,6 +129,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 			return secure(json({ error: 'Unauthorized' }, { status: 401 }));
 		}
 		return secure(new Response(null, { status: 303, headers: { location: '/login' } }));
+	}
+	// Defense in depth: every moderation page and API checks the role itself (requireModerator);
+	// this keeps members out even if a future route forgets to. Timeouts are handled there.
+	const role = event.locals.user?.role;
+	if (role && role !== 'moderator' && role !== 'admin' && isModerationPath(path)) {
+		if (path.startsWith('/api/'))
+			return secure(json({ error: FORBIDDEN_MESSAGE }, { status: 403 }));
+		return secure(
+			new Response(FORBIDDEN_MESSAGE, {
+				status: 403,
+				headers: { 'content-type': 'text/plain; charset=utf-8' }
+			})
+		);
 	}
 	const retryAfter = event.locals.user
 		? retryAfterSeconds(event.request.method, path, event.locals.user.id)

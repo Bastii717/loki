@@ -146,6 +146,9 @@
 	{:else if mode === 'timeout'}
 		<form class="timeout" onsubmit={submitTimeout}>
 			<p class="muted">Stummschalten: {item.author}. Die Meldungen gelten dann als bestätigt.</p>
+			<p class="muted">
+				Der Inhalt bleibt dabei sichtbar — lösche oder blurre ihn zusätzlich, falls nötig.
+			</p>
 			<label>
 				Tage (1 bis 30)
 				<input class="field" type="number" min="1" max="30" step="1" required bind:value={days} />
