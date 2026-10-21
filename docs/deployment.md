@@ -34,6 +34,7 @@ Build the image yourself with `docker build -t ghcr.io/bastii717/loki:latest .`.
 | `MAX_UPLOAD_MB` | no | Default 50 |
 | `AUTO_BLUR_SCORE` | no | Default -3 |
 | `SESSION_ABSOLUTE_MAX_DAYS` | no | Default 90 |
+| `REPORT_REVIEW_THRESHOLD` | no | Default 3 (integer >= 1). Content is hidden from members pending moderator review once MORE than this many distinct members (reporters with an active timeout do not count) have an open report on it; moderators and admins always see it. A moderator releasing a case makes the item permanently immune to auto-hiding. |
 | `BODY_SIZE_LIMIT` | yes in practice | adapter-node rejects larger request bodies (default 512K). Must be at least `MAX_UPLOAD_MB`, e.g. `60M`. |
 | `PROTOCOL_HEADER` | behind proxy | `x-forwarded-proto` |
 | `HOST_HEADER` | behind proxy | `x-forwarded-host` |
