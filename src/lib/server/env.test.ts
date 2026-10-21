@@ -37,6 +37,7 @@ describe('loadEnv', () => {
 		expect(env.MAX_UPLOAD_MB).toBe(50);
 		expect(env.AUTO_BLUR_SCORE).toBe(-3);
 		expect(env.SESSION_ABSOLUTE_MAX_DAYS).toBe(90);
+		expect(env.REPORT_REVIEW_THRESHOLD).toBe(3);
 	});
 
 	it('parses numeric overrides', () => {
@@ -97,5 +98,20 @@ describe('loadEnv', () => {
 		expect([env.MAX_UPLOAD_MB, env.SESSION_ABSOLUTE_MAX_DAYS, env.AUTO_BLUR_SCORE]).toEqual([
 			1, 1, -10
 		]);
+	});
+
+	it.each(['0', '-1', '1.5', 'many'])(
+		'rejects REPORT_REVIEW_THRESHOLD=%s (positive integer required)',
+		(value) => {
+			process.env.REPORT_REVIEW_THRESHOLD = value;
+			expect(() => loadEnv()).toThrow(/REPORT_REVIEW_THRESHOLD/);
+		}
+	);
+
+	it('parses REPORT_REVIEW_THRESHOLD and accepts 1 as the lower bound', () => {
+		process.env.REPORT_REVIEW_THRESHOLD = '1';
+		expect(loadEnv().REPORT_REVIEW_THRESHOLD).toBe(1);
+		process.env.REPORT_REVIEW_THRESHOLD = '5';
+		expect(loadEnv().REPORT_REVIEW_THRESHOLD).toBe(5);
 	});
 });

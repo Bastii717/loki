@@ -1,7 +1,18 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from './index';
-import { comments, media, mediaTags, tags, votes } from './schema';
+import {
+	auditLog,
+	comments,
+	media,
+	mediaTags,
+	quotes,
+	reports,
+	tags,
+	timeouts,
+	users,
+	votes
+} from './schema';
 import { resetDb, setupDb, testUser } from './test-utils';
 
 async function testMedia(uploaderId: number) {
@@ -57,5 +68,79 @@ describe('schema', () => {
 		expect(await db.select().from(comments)).toHaveLength(0);
 		expect(await db.select().from(mediaTags)).toHaveLength(0);
 		expect(await db.select().from(tags)).toHaveLength(1);
+	});
+
+	it('keeps a report (with its excerpt) after the reported meme is deleted', async () => {
+		const author = await testUser();
+		const reporter = await testUser();
+		const m = await testMedia(author.id);
+		const [r] = await db
+			.insert(reports)
+			.values({
+				contentType: 'meme',
+				contentId: m.id,
+				reporterId: reporter.id,
+				authorId: author.id,
+				category: 'spam',
+				excerpt: 'my funny meme'
+			})
+			.returning();
+		expect(r).toMatchObject({
+			text: '',
+			status: 'open',
+			outcome: null,
+			resolvedAt: null,
+			resolvedBy: null
+		});
+
+		await db.delete(media).where(eq(media.id, m.id));
+
+		const rows = await db.select().from(reports);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({
+			contentId: m.id,
+			excerpt: 'my funny meme',
+			authorId: author.id
+		});
+	});
+
+	it('inserts timeouts, cascades on user deletion and defaults lift columns to null', async () => {
+		const target = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const [t] = await db
+			.insert(timeouts)
+			.values({
+				userId: target.id,
+				setBy: mod.id,
+				reason: 'spam',
+				until: new Date(Date.now() + 3600_000)
+			})
+			.returning();
+		expect(t).toMatchObject({ liftedAt: null, liftedBy: null });
+		expect(t.createdAt).toBeInstanceOf(Date);
+
+		await db.delete(users).where(eq(users.id, target.id));
+		expect(await db.select().from(timeouts)).toHaveLength(0);
+	});
+
+	it('appends audit log rows with a default empty detail', async () => {
+		const mod = await testUser({ role: 'moderator' });
+		const [a] = await db
+			.insert(auditLog)
+			.values({ actorId: mod.id, action: 'report.resolve', targetType: 'report', targetId: 1 })
+			.returning();
+		expect(a).toMatchObject({ actorId: mod.id, detail: '' });
+		expect(a.createdAt).toBeInstanceOf(Date);
+	});
+
+	it('adds a nullable reviewedAt to media, comments and quotes', async () => {
+		const user = await testUser();
+		const m = await testMedia(user.id);
+		const [c] = await db
+			.insert(comments)
+			.values({ mediaId: m.id, authorId: user.id, text: 'hi' })
+			.returning();
+		const [q] = await db.insert(quotes).values({ text: 'q', author: 'a' }).returning();
+		expect([m.reviewedAt, c.reviewedAt, q.reviewedAt]).toEqual([null, null, null]);
 	});
 });
