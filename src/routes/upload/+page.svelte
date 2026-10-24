@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { afterNavigate } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import X from 'lucide-svelte/icons/x';
 	import { onMount } from 'svelte';
 	import type { ActionData, PageData } from './$types';
@@ -25,6 +27,20 @@
 	let suggestions: string[] = $state([]);
 	let suggestTimer: ReturnType<typeof setTimeout> | undefined;
 	let suggestSeq = 0;
+
+	// The tab bar is hidden here, so the header's close control is the only way out. It goes back in
+	// history when the user came from inside the app, and to the feed on a direct entry (PWA share
+	// target, bookmark), where there is nothing to go back to.
+	let cameFromApp = $state(false);
+	afterNavigate(({ from }) => {
+		cameFromApp = from !== null;
+	});
+
+	function close(e: MouseEvent) {
+		if (!cameFromApp || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		e.preventDefault();
+		history.back();
+	}
 
 	function setPreview(file: File | undefined) {
 		if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -128,9 +144,16 @@
 
 <svelte:window onpaste={onPaste} />
 
-<main>
-	<h1>Meme posten</h1>
+<svelte:head>
+	<title>Meme posten · Loki</title>
+</svelte:head>
 
+<header class="top">
+	<a href={resolve('/')} class="close" aria-label="Schließen" onclick={close}><X size={22} /></a>
+	<h1>Meme posten</h1>
+</header>
+
+<main>
 	<form
 		method="POST"
 		enctype="multipart/form-data"
@@ -234,14 +257,31 @@
 </main>
 
 <style>
+	.top {
+		position: sticky;
+		top: 0;
+		z-index: 5;
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 6px 8px;
+		background: var(--bg);
+	}
+	.close {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 44px;
+		height: 44px;
+	}
+	h1 {
+		margin: 0;
+		font-size: 18px;
+	}
 	main {
 		max-width: 32rem;
 		margin: 0 auto;
-		padding: 1rem;
-	}
-	h1 {
-		font-size: 1.25rem;
-		margin: 0 0 1rem;
+		padding: 0.25rem 1rem calc(1rem + env(safe-area-inset-bottom));
 	}
 	form {
 		display: flex;
