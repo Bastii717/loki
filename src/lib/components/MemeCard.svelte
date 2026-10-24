@@ -89,6 +89,16 @@
 				/>
 			{/if}
 		</a>
+		<!-- Rendered before the badges, star and flag so those stay clickable on top of the overlay. -->
+		{#if hidden}
+			<button type="button" class="reveal" onclick={() => (revealed = true)}>
+				{#if item.blurred === 'nsfw'}
+					<EyeOff size={20} aria-hidden="true" /> Antippen zum Anzeigen
+				{:else}
+					<TriangleAlert size={20} aria-hidden="true" /> Spoiler — Antippen zum Anzeigen
+				{/if}
+			</button>
+		{/if}
 		{#if item.underReview && !withheld}<UnderReviewBadge overlay />{/if}
 		{#if item.kind !== 'image'}
 			<span class="badge">
@@ -105,15 +115,6 @@
 			><Star size={20} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true" /></button
 		>
 		<ReportButton contentType="meme" contentId={item.id} mine={item.mine} variant="overlay" />
-		{#if hidden}
-			<button type="button" class="reveal" onclick={() => (revealed = true)}>
-				{#if item.blurred === 'nsfw'}
-					<EyeOff size={20} aria-hidden="true" /> Antippen zum Anzeigen
-				{:else}
-					<TriangleAlert size={20} aria-hidden="true" /> Spoiler — Antippen zum Anzeigen
-				{/if}
-			</button>
-		{/if}
 	</div>
 
 	<div class="body">
