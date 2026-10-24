@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
+	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
 	import Pencil from 'lucide-svelte/icons/pencil';
 	import Save from 'lucide-svelte/icons/save';
 	import X from 'lucide-svelte/icons/x';
@@ -31,16 +33,20 @@
 	<title>{title} · Loki</title>
 </svelte:head>
 
-<main>
-	<header>
-		<h1>{title}</h1>
-		{#if data.canEdit && !editing}
-			<button type="button" onclick={openEditor}>
-				<Pencil size={16} aria-hidden="true" /> Bearbeiten
-			</button>
-		{/if}
-	</header>
+<!-- Reached from the profile, so the header matches the other profile sub pages. -->
+<header class="top">
+	<a href={resolve('/profil')} class="back" aria-label="Zurück zum Profil"
+		><ArrowLeft size={22} /></a
+	>
+	<h1>{title}</h1>
+	{#if data.canEdit && !editing}
+		<button type="button" class="edit" onclick={openEditor}>
+			<Pencil size={16} aria-hidden="true" /> Bearbeiten
+		</button>
+	{/if}
+</header>
 
+<main>
 	{#if editing}
 		<form
 			method="POST"
@@ -75,22 +81,37 @@
 </main>
 
 <style>
-	main {
-		padding: var(--gutter);
-		padding-bottom: calc(var(--tabbar-height) + var(--gutter));
-		max-width: 44rem;
-		margin: 0 auto;
-	}
-	header {
+	.top {
+		position: sticky;
+		top: 0;
+		z-index: 5;
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-		margin-bottom: 0.75rem;
+		gap: 4px;
+		padding: 6px 8px;
+		background: var(--bg);
+	}
+	.back {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		width: 44px;
+		height: 44px;
 	}
 	h1 {
+		flex: 1;
+		min-width: 0;
 		margin: 0;
-		font-size: 1.4rem;
+		font-size: 18px;
+	}
+	.edit {
+		margin-right: 2px;
+	}
+	main {
+		padding: 0 var(--gutter) calc(var(--tabbar-height) + var(--gutter));
+		max-width: 44rem;
+		margin: 0 auto;
 	}
 	button {
 		display: inline-flex;
