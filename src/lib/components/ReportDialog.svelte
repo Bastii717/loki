@@ -13,15 +13,15 @@
 	const MAX_TEXT = 500;
 
 	const CATEGORIES: { value: ReportCategory; label: string }[] = [
-		{ value: 'verletzend', label: 'Verletzend' },
-		{ value: 'verstoerend', label: 'Verstörend' },
-		{ value: 'falschinfo', label: 'Falschinfo & Schwurbelei' },
+		{ value: 'hurtful', label: 'Hurtful' },
+		{ value: 'disturbing', label: 'Disturbing' },
+		{ value: 'misinformation', label: 'Misinformation & nonsense' },
 		{ value: 'spam', label: 'Spam' },
-		{ value: 'sonstiges', label: 'Sonstiges' }
+		{ value: 'other', label: 'Other' }
 	];
 
-	const SUCCESS = 'Danke, deine Meldung ist eingegangen.';
-	const DUPLICATE = 'Du hast diesen Inhalt bereits gemeldet.';
+	const SUCCESS = 'Thanks, your report has been received.';
+	const DUPLICATE = 'You have already reported this content.';
 
 	let dialog = $state<HTMLDialogElement>();
 	let category = $state<ReportCategory | ''>('');
@@ -48,12 +48,12 @@
 			} else if (res.status === 409) {
 				failure = DUPLICATE;
 			} else if (res.status === 404) {
-				failure = 'Dieser Inhalt existiert nicht mehr.';
+				failure = 'This content no longer exists.';
 			} else {
-				failure = await apiErrorMessage(res, 'Meldung konnte nicht gesendet werden.');
+				failure = await apiErrorMessage(res, 'Could not send the report.');
 			}
 		} catch {
-			failure = 'Meldung konnte nicht gesendet werden.';
+			failure = 'Could not send the report.';
 		} finally {
 			sending = false;
 		}
@@ -62,16 +62,16 @@
 
 <dialog bind:this={dialog} {onclose} aria-labelledby="report-title">
 	{#if done}
-		<h2 id="report-title">Gemeldet</h2>
+		<h2 id="report-title">Reported</h2>
 		<p class="success" role="status">{SUCCESS}</p>
 		<div class="actions">
-			<button type="button" class="primary" onclick={() => dialog?.close()}>Schließen</button>
+			<button type="button" class="primary" onclick={() => dialog?.close()}>Close</button>
 		</div>
 	{:else}
 		<form onsubmit={submit}>
-			<h2 id="report-title">Inhalt melden</h2>
+			<h2 id="report-title">Report content</h2>
 			<fieldset>
-				<legend>Warum meldest du das?</legend>
+				<legend>Why are you reporting this?</legend>
 				{#each CATEGORIES as c (c.value)}
 					<label class="option">
 						<input type="radio" name="category" value={c.value} bind:group={category} required />
@@ -80,14 +80,14 @@
 				{/each}
 			</fieldset>
 			<label class="note">
-				<span>Anmerkung (optional)</span>
+				<span>Note (optional)</span>
 				<textarea bind:value={text} maxlength={MAX_TEXT} rows="3"></textarea>
 				<small aria-live="polite">{text.length} / {MAX_TEXT}</small>
 			</label>
 			{#if failure}<p class="error" role="alert">{failure}</p>{/if}
 			<div class="actions">
-				<button type="button" onclick={() => dialog?.close()}>Abbrechen</button>
-				<button type="submit" class="primary" disabled={!category || sending}>Melden</button>
+				<button type="button" onclick={() => dialog?.close()}>Cancel</button>
+				<button type="submit" class="primary" disabled={!category || sending}>Report</button>
 			</div>
 		</form>
 	{/if}

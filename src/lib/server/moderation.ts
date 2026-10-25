@@ -9,11 +9,11 @@ export type ReportCategory = (typeof reports.$inferInsert)['category'];
 export type ReportOutcome = NonNullable<(typeof reports.$inferInsert)['outcome']>;
 
 export const REPORT_CATEGORIES: readonly ReportCategory[] = [
-	'verletzend',
-	'verstoerend',
-	'falschinfo',
+	'hurtful',
+	'disturbing',
+	'misinformation',
 	'spam',
-	'sonstiges'
+	'other'
 ];
 
 export const AUDIT_ACTIONS = {

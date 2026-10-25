@@ -3,11 +3,11 @@ import type { ContentType, ReportCategory, ReportOutcome } from './server/modera
 /** German UI texts of the moderation area (client-safe: types only from the server module). */
 
 export const CATEGORY_LABELS: Record<ReportCategory, string> = {
-	verletzend: 'Verletzend',
-	verstoerend: 'Verstörend',
-	falschinfo: 'Falschinfo & Schwurbelei',
+	hurtful: 'Hurtful',
+	disturbing: 'Disturbing',
+	misinformation: 'Misinformation & nonsense',
 	spam: 'Spam',
-	sonstiges: 'Sonstiges'
+	other: 'Other'
 };
 
 export const CONTENT_LABELS: Record<ContentType, string> = {

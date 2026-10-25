@@ -65,14 +65,14 @@ describe('POST /api/report', () => {
 			['quote', w.quoteId]
 		] as const) {
 			const { response } = await post(
-				{ contentType, contentId, category: 'falschinfo', text: ' Quatsch ' },
+				{ contentType, contentId, category: 'misinformation', text: ' Quatsch ' },
 				w.reporterSession
 			);
 			expect(response.status, contentType).toBe(204);
 		}
 		const rows = await db.select().from(reports).where(eq(reports.reporterId, w.reporter.id));
 		expect(rows.map((r) => r.contentType).sort()).toEqual(['comment', 'meme', 'quote']);
-		expect(rows.every((r) => r.category === 'falschinfo' && r.text === 'Quatsch')).toBe(true);
+		expect(rows.every((r) => r.category === 'misinformation' && r.text === 'Quatsch')).toBe(true);
 	});
 
 	it('text is optional', async () => {
@@ -90,6 +90,7 @@ describe('POST /api/report', () => {
 		['non-string contentType', { contentType: 5, category: 'spam' }],
 		['missing contentType', { category: 'spam' }],
 		['unknown category', { contentType: 'meme', category: 'hass' }],
+		['old German category', { contentType: 'meme', category: 'verletzend' }],
 		['missing category', { contentType: 'meme' }],
 		['non-string text', { contentType: 'meme', category: 'spam', text: 7 }],
 		['over-long text', { contentType: 'meme', category: 'spam', text: 'x'.repeat(501) }]

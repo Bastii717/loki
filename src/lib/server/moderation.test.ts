@@ -115,7 +115,7 @@ describe('createReport', () => {
 		const reporter = await userWithRole();
 		const titled = await addMeme(author.id, 'Lustiger Titel');
 		const untitled = await addMeme(author.id, '');
-		await createReport(reporter, 'meme', titled, 'verletzend', ' bitte prüfen ');
+		await createReport(reporter, 'meme', titled, 'hurtful', ' bitte prüfen ');
 		await createReport(reporter, 'meme', untitled, 'spam');
 		const rows = await db.select().from(reports).orderBy(reports.id);
 		expect(rows[0]).toMatchObject({
@@ -123,7 +123,7 @@ describe('createReport', () => {
 			contentId: titled,
 			reporterId: reporter.id,
 			authorId: author.id,
-			category: 'verletzend',
+			category: 'hurtful',
 			text: 'bitte prüfen',
 			excerpt: 'Lustiger Titel',
 			status: 'open',
@@ -179,7 +179,7 @@ describe('createReport', () => {
 		const mod = await userWithRole('moderator');
 		const id = await addMeme(author.id);
 		await createReport(a, 'meme', id, 'spam');
-		await expectReportError(createReport(a, 'meme', id, 'verletzend'), 'duplicate');
+		await expectReportError(createReport(a, 'meme', id, 'hurtful'), 'duplicate');
 		await createReport(b, 'meme', id, 'spam');
 		await resolveReports(mod, 'meme', id, 'actioned');
 		await createReport(a, 'meme', id, 'spam');

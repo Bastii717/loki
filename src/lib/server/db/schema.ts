@@ -181,7 +181,7 @@ export const reports = pgTable(
 			.notNull()
 			.references(() => users.id),
 		category: text('category', {
-			enum: ['verletzend', 'verstoerend', 'falschinfo', 'spam', 'sonstiges']
+			enum: ['hurtful', 'disturbing', 'misinformation', 'spam', 'other']
 		}).notNull(),
 		text: text('text').notNull().default(''),
 		excerpt: text('excerpt').notNull(),
