@@ -11,6 +11,8 @@ export interface RouteCall {
 	params?: Record<string, string>;
 	/** JSON request body. */
 	body?: unknown;
+	/** Form-encoded body for a `use:enhance` form action; sent with `x-sveltekit-action`. */
+	form?: Record<string, string>;
 	/** Value of the session cookie; omit for an anonymous request. */
 	session?: string;
 	/** Other request cookies (e.g. OIDC flow cookies). */
@@ -37,8 +39,16 @@ export async function callRoute(call: RouteCall): Promise<RouteResult> {
 		url,
 		request: new Request(url, {
 			method: call.method ?? 'GET',
-			headers: call.body === undefined ? undefined : { 'content-type': 'application/json' },
-			body: call.body === undefined ? undefined : JSON.stringify(call.body)
+			headers: call.form
+				? { 'x-sveltekit-action': 'true' }
+				: call.body === undefined
+					? undefined
+					: { 'content-type': 'application/json' },
+			body: call.form
+				? new URLSearchParams(call.form)
+				: call.body === undefined
+					? undefined
+					: JSON.stringify(call.body)
 		}),
 		params: call.params ?? {},
 		cookies: {

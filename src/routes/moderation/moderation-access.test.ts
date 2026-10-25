@@ -35,6 +35,7 @@ import { load as done } from './resolved/+page.server';
 import { load as log } from './log/+page.server';
 import { load as usersPage } from './users/+page.server';
 import { load as timeoutsPage } from './timeouts/+page.server';
+import { actions as maintenanceActions, load as maintenancePage } from './maintenance/+page.server';
 
 /** Fixed far-future mute end, so the formatted date never depends on the run date. */
 const MUTED_UNTIL = new Date('2099-12-24T12:00:00Z');
@@ -108,6 +109,40 @@ const endpoints: Endpoint[] = [
 		page: true,
 		adminOnly: true,
 		call: (_w, session) => ({ handler: usersPage, path: '/moderation/users', session })
+	},
+	{
+		name: 'maintenance load',
+		page: true,
+		adminOnly: true,
+		call: (_w, session) => ({
+			handler: maintenancePage,
+			path: '/moderation/maintenance',
+			session
+		})
+	},
+	{
+		name: 'maintenance save action',
+		page: true, // a page form action: anonymous requests are redirected to /login
+		adminOnly: true,
+		call: (_w, session) => ({
+			handler: maintenanceActions.default,
+			path: '/moderation/maintenance',
+			method: 'POST',
+			session,
+			form: { message: '', startsAt: '', until: '' }
+		})
+	},
+	{
+		name: 'maintenance off action',
+		page: true, // a page form action: anonymous requests are redirected to /login
+		adminOnly: true,
+		call: (_w, session) => ({
+			handler: maintenanceActions.off,
+			path: '/moderation/maintenance?/off',
+			method: 'POST',
+			session,
+			form: {}
+		})
 	},
 	{
 		name: 'POST case',
