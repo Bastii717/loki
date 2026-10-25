@@ -413,6 +413,14 @@ describe('maintenance write guard', () => {
 		expect(await form.text()).toBe(MAINTENANCE_TEXT);
 	});
 
+	it('answers a percent-encoded /api path with the JSON shape', async () => {
+		enable();
+		const { session } = await userWithSession('member');
+		const res = await run('/%61pi/memes/1/vote', session, new Response('ok'), 'POST').response;
+		expect(res.status).toBe(503);
+		expect(await res.json()).toEqual({ message: MAINTENANCE_TEXT });
+	});
+
 	it('locks PATCH and DELETE but not reads', async () => {
 		enable();
 		const { session } = await userWithSession('member');

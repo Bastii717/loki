@@ -10,14 +10,13 @@ export function isWriteLockExempt(path: string): boolean {
 }
 
 /**
- * 503 for a locked write, in the shape the client of that request understands: JSON for `/api/*`,
+ * 503 for a locked write on `path` (the routed, decoded pathname), in the shape the client of that request understands: JSON for `/api/*`,
  * the ActionResult JSON for a `use:enhance` form action (`deserialize` expects devalue-encoded
  * `data`), plain text for a plain form post.
  */
-export function writeLockResponse(event: RequestEvent, message: string): Response {
+export function writeLockResponse(event: RequestEvent, message: string, path: string): Response {
 	const status = 503;
 	const headers = { 'retry-after': RETRY_AFTER };
-	const path = event.url.pathname;
 	if (path === '/api' || path.startsWith('/api/')) {
 		return json({ message }, { status, headers });
 	}

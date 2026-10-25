@@ -184,7 +184,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		const status = await currentStatus(event.locals.user);
 		if (!status.writable) {
 			return secure(
-				status.state === 'down' ? outagePage() : writeLockResponse(event, status.message!)
+				status.state === 'down' ? outagePage() : writeLockResponse(event, status.message!, path)
 			);
 		}
 	}
