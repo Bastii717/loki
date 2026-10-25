@@ -5,7 +5,8 @@
  *
  * Needs the dev server on http://localhost:5173 (see .claude/agents/readme-screenshots.md),
  * the demo data from scripts/seed-demo.ts, and a local Chromium (`npx playwright install chromium`).
- * Signs in through the mock OIDC provider with a throwaway demo account.
+ * Signs in through the mock OIDC provider: as a throwaway account for most shots, as the seeded
+ * demo user `lena` for the profile pages (the throwaway account has no memes to show).
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -18,7 +19,6 @@ const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'scr
 const MAX_BYTES = 600 * 1024;
 // Not one of the seeded users, so the viewer's own votes do not skew the picture.
 const DEMO_USERNAME = 'mia';
-const DEMO_CLAIMS = JSON.stringify({ preferred_username: DEMO_USERNAME, groups: ['loki-members'] });
 
 const MOBILE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 };
 const DESKTOP = { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 };
@@ -51,15 +51,33 @@ async function routeRequest(route: Route): Promise<void> {
 	return route.fulfill({ response });
 }
 
-async function login(page: Page): Promise<void> {
+interface Account {
+	/** The OIDC `sub`, typed into the mock provider's username field. */
+	sub: string;
+	username: string;
+	/** Group claims; the dev stack maps loki-members, loki-mods and loki-admins to the three roles. */
+	groups: string[];
+}
+
+const MEMBERS = ['loki-members'];
+const THROWAWAY: Account = { sub: DEMO_USERNAME, username: DEMO_USERNAME, groups: MEMBERS };
+// The moderation area needs a moderator or admin; every other shot is taken as a plain member.
+const ADMIN: Account = { ...THROWAWAY, groups: [...MEMBERS, 'loki-admins'] };
+// Profile pages need a user with memes, favorites and comments: the seeded `lena`.
+const OWNER: Account = { sub: 'demo-lena', username: 'lena', groups: MEMBERS };
+
+async function login(page: Page, account: Account): Promise<void> {
 	await page.goto(`${BASE_URL}/`);
 	await page.waitForURL('**/login**');
 	await page.getByRole('button', { name: 'Sign in with Authentik' }).click();
 
 	// navikt mock-oauth2-server: any username works; the claims field is optional.
 	await page.waitForSelector('input[name="username"]');
-	await page.fill('input[name="username"]', DEMO_USERNAME);
-	await page.fill('textarea[name="claims"]', DEMO_CLAIMS);
+	await page.fill('input[name="username"]', account.sub);
+	await page.fill(
+		'textarea[name="claims"]',
+		JSON.stringify({ preferred_username: account.username, groups: account.groups })
+	);
 	await page.locator('input[type="submit"]').click();
 
 	await page.waitForURL(`${BASE_URL}/**`);
@@ -99,11 +117,17 @@ async function save(name: string, png: Buffer): Promise<void> {
 	console.log(`${name}: ${meta.width}x${meta.height}, ${kb} KB${warn}`);
 }
 
+interface ContextOptions {
+	mobile: boolean;
+	colorScheme?: 'dark' | 'light';
+	account?: Account;
+}
+
 async function withContext(
 	browser: Browser,
 	profile: Profile,
 	run: (page: Page) => Promise<void>,
-	mobile: boolean
+	{ mobile, colorScheme = 'dark', account = THROWAWAY }: ContextOptions
 ): Promise<void> {
 	const context = await browser.newContext({
 		...profile,
@@ -111,7 +135,7 @@ async function withContext(
 		hasTouch: mobile,
 		locale: 'en-GB',
 		timezoneId: 'Europe/Berlin',
-		colorScheme: 'dark'
+		colorScheme
 	});
 	await context.route('**/*', routeRequest);
 	try {
@@ -120,7 +144,7 @@ async function withContext(
 			page.on('requestfailed', (r) => console.log('FAILED', r.url(), r.failure()?.errorText));
 			page.on('response', (r) => r.status() >= 300 && console.log(r.status(), r.url()));
 		}
-		await login(page);
+		await login(page, account);
 		await run(page);
 	} finally {
 		await context.close();
@@ -131,11 +155,101 @@ async function withContext(
 const only = process.argv.find((a) => a.startsWith('--only='))?.slice('--only='.length);
 const wants = (name: string) => !only || only.split(',').includes(name);
 
+/** Whether any of the named shots is wanted. */
+const wantsAny = (...names: string[]) => names.some(wants);
+
+type FeedItem = { id: number; commentCount: number; thumbUrl: string };
+
+/** The feed as the API serves it (newest first), fetched with the page's session. */
+function feedItems(page: Page): Promise<FeedItem[]> {
+	return page.evaluate(async () => {
+		const res = await fetch('/api/feed?sort=new');
+		return (await res.json()).items;
+	});
+}
+
+/** The meme with the most comments makes the best detail view. */
+async function shootDetail(page: Page, name: string): Promise<void> {
+	const items = await feedItems(page);
+	const best = [...items].sort((a, b) => b.commentCount - a.commentCount)[0];
+	await page.goto(`${BASE_URL}/meme/${best.id}`);
+	await page.getByText('Comments').first().waitFor();
+	await waitForImages(page);
+	await save(name, await page.screenshot());
+}
+
+/** The upload form with a picture, a title and two tags filled in (nothing is submitted). */
+async function shootUpload(page: Page): Promise<void> {
+	const [first] = await feedItems(page);
+	const thumb = await page.request.get(`${BASE_URL}${first.thumbUrl}`);
+	const png = await sharp(await thumb.body())
+		.png()
+		.toBuffer();
+	await page.goto(`${BASE_URL}/upload`);
+	// the change handler is only attached once the page has hydrated
+	await page.waitForLoadState('networkidle');
+	await page.waitForTimeout(500);
+	await page.setInputFiles('input[type=file][name=file]', {
+		name: 'meme.png',
+		mimeType: 'image/png',
+		buffer: png
+	});
+	await page.locator('img[alt="Preview"]').waitFor();
+	await page.fill('input[name=title]', 'Code review says: LGTM');
+	for (const tag of ['codereview', 'office']) {
+		await page.fill('#tag-input', tag);
+		await page.press('#tag-input', 'Enter');
+	}
+	await waitForImages(page);
+	await save('upload-mobile.png', await page.screenshot());
+}
+
+/** The report dialog on the first feed card, with a reason picked and a note typed (not sent). */
+async function shootReportDialog(page: Page): Promise<void> {
+	await page.goto(`${BASE_URL}/`);
+	await waitForImages(page);
+	await page.getByRole('button', { name: 'Report' }).first().click();
+	const dialog = page.getByRole('dialog');
+	await dialog.waitFor();
+	await dialog.getByLabel('Misinformation & nonsense').check();
+	await dialog.getByLabel('Note (optional)').fill('Prod was down because of a DNS change.');
+	await page.waitForTimeout(300);
+	await save('report-dialog-mobile.png', await page.screenshot());
+}
+
+/** A plain page: waits for a piece of text that proves the data is in, then shoots. */
+async function shootPage(page: Page, path: string, name: string, ready: string): Promise<void> {
+	await page.goto(`${BASE_URL}${path}`);
+	await page.getByText(ready).first().waitFor();
+	await page.waitForLoadState('networkidle');
+	await page.evaluate(() => document.fonts.ready);
+	await page.waitForTimeout(400);
+	await save(name, await page.screenshot());
+}
+
+async function shootQueue(page: Page, name: string): Promise<void> {
+	await page.goto(`${BASE_URL}/moderation`);
+	// the reporter's note sits in a collapsed <details>: open it so the reason shows
+	await page.getByText('Reporters (1)').click();
+	await page.getByText('DNS change').first().waitFor();
+	await waitForImages(page);
+	await save(name, await page.screenshot());
+}
+
 async function main(): Promise<void> {
 	await mkdir(OUT_DIR, { recursive: true });
 	const browser = await chromium.launch();
 	try {
-		if (wants('feed-mobile') || wants('detail-mobile'))
+		if (
+			wantsAny(
+				'feed-mobile',
+				'detail-mobile',
+				'discover-mobile',
+				'quotes-mobile',
+				'upload-mobile',
+				'report-dialog-mobile'
+			)
+		)
 			await withContext(
 				browser,
 				MOBILE,
@@ -145,32 +259,79 @@ async function main(): Promise<void> {
 						await waitForImages(page);
 						await save('feed-mobile.png', await page.screenshot());
 					}
-					if (!wants('detail-mobile')) return;
-
-					// The meme with the most comments makes the best detail view.
-					const link = await page.evaluate(async () => {
-						const res = await fetch('/api/feed?sort=new');
-						const { items } = await res.json();
-						const best = [...items].sort((a, b) => b.commentCount - a.commentCount)[0];
-						return `/meme/${best.id}`;
-					});
-					await page.goto(`${BASE_URL}${link}`);
-					await page.getByText('Comments').first().waitFor();
-					await waitForImages(page);
-					await save('detail-mobile.png', await page.screenshot());
+					if (wants('detail-mobile')) await shootDetail(page, 'detail-mobile.png');
+					if (wants('discover-mobile')) {
+						await page.goto(`${BASE_URL}/discover`);
+						await waitForImages(page);
+						await save('discover-mobile.png', await page.screenshot());
+					}
+					if (wants('quotes-mobile'))
+						await shootPage(page, '/quotes', 'quotes-mobile.png', 'It works on my machine.');
+					if (wants('upload-mobile')) await shootUpload(page);
+					if (wants('report-dialog-mobile')) await shootReportDialog(page);
 				},
-				true
+				{ mobile: true }
 			);
-		if (wants('feed-desktop'))
+		if (wantsAny('moderation-queue-mobile', 'moderation-timeouts-mobile'))
+			await withContext(
+				browser,
+				MOBILE,
+				async (page) => {
+					if (wants('moderation-queue-mobile'))
+						await shootQueue(page, 'moderation-queue-mobile.png');
+					if (wants('moderation-timeouts-mobile'))
+						await shootPage(
+							page,
+							'/moderation/timeouts',
+							'moderation-timeouts-mobile.png',
+							'Timeouts'
+						);
+				},
+				{ mobile: true, account: ADMIN }
+			);
+		if (wantsAny('profile-mobile', 'stats-mobile'))
+			await withContext(
+				browser,
+				MOBILE,
+				async (page) => {
+					if (wants('profile-mobile'))
+						await shootPage(page, '/profile', 'profile-mobile.png', OWNER.username);
+					if (wants('stats-mobile'))
+						await shootPage(page, '/profile/stats', 'stats-mobile.png', 'Stats');
+				},
+				{ mobile: true, account: OWNER }
+			);
+		if (wants('feed-light-mobile'))
+			await withContext(
+				browser,
+				MOBILE,
+				async (page) => {
+					await page.goto(`${BASE_URL}/`);
+					await waitForImages(page);
+					await save('feed-light-mobile.png', await page.screenshot());
+				},
+				{ mobile: true, colorScheme: 'light' }
+			);
+		if (wantsAny('feed-desktop', 'detail-desktop'))
 			await withContext(
 				browser,
 				DESKTOP,
 				async (page) => {
-					await page.goto(`${BASE_URL}/`);
-					await waitForImages(page);
-					await save('feed-desktop.png', await page.screenshot());
+					if (wants('feed-desktop')) {
+						await page.goto(`${BASE_URL}/`);
+						await waitForImages(page);
+						await save('feed-desktop.png', await page.screenshot());
+					}
+					if (wants('detail-desktop')) await shootDetail(page, 'detail-desktop.png');
 				},
-				false
+				{ mobile: false }
+			);
+		if (wants('moderation-queue-desktop'))
+			await withContext(
+				browser,
+				DESKTOP,
+				(page) => shootQueue(page, 'moderation-queue-desktop.png'),
+				{ mobile: false, account: ADMIN }
 			);
 	} finally {
 		await browser.close();

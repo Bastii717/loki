@@ -6,8 +6,8 @@
  *
  * Goes through the real server modules (createMedia, applyVote, addComment), so
  * thumbnails and S3 objects are real. Refuses to touch anything that is not a private
- * address unless LOKI_SEED_FORCE=1 is set. Idempotent: exits early if the board already
- * holds six or more memes.
+ * address unless LOKI_SEED_FORCE=1 is set. Idempotent: every block (memes, quotes, report,
+ * rules and FAQ, favorite) is skipped when its rows already exist.
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -50,19 +50,35 @@ function guardDatabase(): void {
 // Must run before the server modules are imported: importing ../src/lib/server/db opens a connection.
 guardDatabase();
 
-const [{ default: sharp }, { db, client }, schema, { createMedia }, votesMod, commentsMod, jobs] =
-	await Promise.all([
-		import('sharp'),
-		import('../src/lib/server/db'),
-		import('../src/lib/server/db/schema'),
-		import('../src/lib/server/media/create'),
-		import('../src/lib/server/votes'),
-		import('../src/lib/server/comments'),
-		import('../src/lib/server/jobs')
-	]);
-const { users, media, comments } = schema;
+const [
+	{ default: sharp },
+	{ db, client },
+	schema,
+	{ createMedia },
+	votesMod,
+	commentsMod,
+	jobs,
+	quotesMod,
+	moderationMod,
+	memesMod
+] = await Promise.all([
+	import('sharp'),
+	import('../src/lib/server/db'),
+	import('../src/lib/server/db/schema'),
+	import('../src/lib/server/media/create'),
+	import('../src/lib/server/votes'),
+	import('../src/lib/server/comments'),
+	import('../src/lib/server/jobs'),
+	import('../src/lib/server/quotes'),
+	import('../src/lib/server/moderation'),
+	import('../src/lib/server/memes')
+]);
+const { users, media, comments, quotes, reports, siteContent, favorites } = schema;
 const { applyVote } = votesMod;
 const { addComment } = commentsMod;
+const { addQuote, voteQuote } = quotesMod;
+const { createReport } = moderationMod;
+const { toggleFavorite } = memesMod;
 
 type DemoUser = { sub: string; username: string };
 
@@ -196,6 +212,69 @@ const MEMES: DemoMeme[] = [
 	}
 ];
 
+interface DemoQuote {
+	text: string;
+	author: string;
+	by: string;
+	up: string[];
+	down: string[];
+}
+
+const QUOTES: DemoQuote[] = [
+	{
+		text: 'It works on my machine.',
+		author: 'Every developer, shortly before the incident',
+		by: 'jonas',
+		up: ['lena', 'noah', 'mira', 'tobi', 'anke'],
+		down: []
+	},
+	{
+		text: "Let's take this offline.",
+		author: 'A manager, mid-meeting, eyeing the clock',
+		by: 'lena',
+		up: ['jonas', 'mira', 'kemal'],
+		down: ['yusuf']
+	},
+	{
+		text: 'This is just a quick fix.',
+		author: 'Famous last words, Friday 4:55 PM',
+		by: 'noah',
+		up: ['lena', 'jonas', 'tobi', 'anke', 'kemal', 'yusuf'],
+		down: []
+	}
+];
+
+const RULES_MARKDOWN = `# House rules
+
+Be kind, be funny, and please be funny in that order.
+
+## The basics
+
+- Post memes your colleagues will actually enjoy.
+- No hate, no doxxing, no drama.
+- Mark spoilers and NSFW memes, or the moderators will mark you.
+- Credit the original author when you know them.
+
+**Short version: do not be the reason for a rule change.**
+`;
+
+const FAQ_MARKDOWN = `# Frequently asked questions
+
+## How do I post a meme?
+
+Tap the plus button, pick an image or a short video, add a title and a few tags, done.
+
+## Why was my meme removed?
+
+Usually because it broke a house rule. Ask a moderator, they are friendlier than they look.
+
+## Who can see what I post?
+
+Everyone who is signed in, and nobody else. This is a closed board.
+
+**Still stuck? Ask in the office chat, someone will know.**
+`;
+
 const escapeXml = (s: string) =>
 	s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -203,8 +282,9 @@ const escapeXml = (s: string) =>
 async function renderMeme(m: DemoMeme): Promise<Buffer> {
 	const { width: w, height: h, hues, caption } = m;
 	const longest = Math.max(...caption.map((l) => l.length));
-	// Fit the longest line into ~88% of the width (bold sans caps are about 0.55em wide in Impact).
-	const fontSize = Math.min(w * 0.2, (w * 0.88) / (longest * 0.55));
+	// Fit the longest line into ~88% of the width. Bold sans caps are about 0.55em wide in Impact,
+	// but the fallback faces (Arial Black, DejaVu Sans Bold) run wider, so plan for 0.64em.
+	const fontSize = Math.min(w * 0.2, (w * 0.88) / (longest * 0.64));
 	const lineHeight = fontSize * 1.14;
 	const startY = h / 2 - ((caption.length - 1) * lineHeight) / 2 + fontSize * 0.34;
 	const stroke = Math.max(6, fontSize * 0.09);
@@ -265,15 +345,23 @@ async function main() {
 		?.slice('--preview='.length);
 	if (previewDir) return preview(previewDir);
 
-	const [{ n }] = await db.select({ n: count() }).from(media);
-	if (n >= MIN_MEMES) {
-		console.log(`Board already has ${n} memes (>= ${MIN_MEMES}); nothing to seed.`);
-		return;
-	}
-
 	const byName = new Map<string, Awaited<ReturnType<typeof ensureUser>>>();
 	for (const u of [...AUTHORS, ...VOTERS]) byName.set(u.username, await ensureUser(u));
 	console.log(`Users ready: ${[...byName.keys()].join(', ')}`);
+
+	await seedMemes(byName);
+	await seedExtras(byName);
+	console.log('Done.');
+}
+
+type UserMap = Map<string, Awaited<ReturnType<typeof ensureUser>>>;
+
+async function seedMemes(byName: UserMap) {
+	const [{ n }] = await db.select({ n: count() }).from(media);
+	if (n >= MIN_MEMES) {
+		console.log(`Board already has ${n} memes (>= ${MIN_MEMES}); not seeding memes.`);
+		return;
+	}
 
 	// Oldest first, so comment and vote ids follow the story.
 	for (const m of [...MEMES].sort((a, b) => b.hoursAgo - a.hoursAgo)) {
@@ -305,7 +393,56 @@ async function main() {
 	}
 
 	await jobs.recomputeHotScores();
-	console.log('Done.');
+}
+
+/** Quotes, one open report, rules and FAQ, one favorite. Each block skips itself when rows exist. */
+async function seedExtras(byName: UserMap) {
+	const [{ n: quoteCount }] = await db.select({ n: count() }).from(quotes);
+	if (quoteCount === 0) {
+		for (const q of QUOTES) {
+			const { id } = await addQuote(byName.get(q.by)!.id, q.text, q.author);
+			for (const name of q.up) await voteQuote(byName.get(name)!.id, id, 1);
+			for (const name of q.down) await voteQuote(byName.get(name)!.id, id, -1);
+		}
+		console.log(`Seeded ${QUOTES.length} quotes`);
+	}
+
+	const [{ n: reportCount }] = await db.select({ n: count() }).from(reports);
+	if (reportCount === 0) {
+		const [target] = await db
+			.select({ id: media.id })
+			.from(media)
+			.where(eq(media.title, 'Prod is down (not my fault)'));
+		const mira = byName.get('mira')!;
+		if (target) {
+			await createReport(
+				{ id: mira.id, username: mira.username, role: 'member' },
+				'meme',
+				target.id,
+				'misinformation',
+				'Prod was down because of a DNS change, not a deploy.'
+			);
+			console.log(`Seeded a report on #${target.id}`);
+		}
+	}
+
+	const [{ n: contentCount }] = await db.select({ n: count() }).from(siteContent);
+	if (contentCount === 0) {
+		await db.insert(siteContent).values([
+			{ key: 'rules', markdown: RULES_MARKDOWN },
+			{ key: 'faq', markdown: FAQ_MARKDOWN }
+		]);
+		console.log('Seeded rules and FAQ');
+	}
+
+	const [{ n: favoriteCount }] = await db.select({ n: count() }).from(favorites);
+	if (favoriteCount === 0) {
+		const [first] = await db.select({ id: media.id }).from(media).orderBy(media.id).limit(1);
+		if (first) {
+			await toggleFavorite(byName.get('lena')!.id, first.id);
+			console.log(`Seeded a favorite on #${first.id}`);
+		}
+	}
 }
 
 try {
