@@ -60,7 +60,7 @@
 		} else {
 			failure = result.message;
 			// someone else was faster: show the current state instead of a dead card
-			if (/bereits erledigt/.test(result.message)) await invalidateAll();
+			if (/already resolved/.test(result.message)) await invalidateAll();
 		}
 	}
 
@@ -70,20 +70,16 @@
 	}
 </script>
 
-<article class="card" aria-label="{CONTENT_LABELS[item.contentType]} von {item.author}">
+<article class="card" aria-label="{CONTENT_LABELS[item.contentType]} by {item.author}">
 	<header>
 		<span class="pill accent">{CONTENT_LABELS[item.contentType]}</span>
-		<span class="author">von <strong>{item.author}</strong></span>
+		<span class="author">by <strong>{item.author}</strong></span>
 		{#if item.underReview}<UnderReviewBadge />{/if}
 	</header>
 
 	<div class="preview">
 		{#if item.preview?.type === 'meme'}
-			<img
-				src={item.preview.thumbUrl}
-				alt={item.preview.title || 'Gemeldetes Meme'}
-				loading="lazy"
-			/>
+			<img src={item.preview.thumbUrl} alt={item.preview.title || 'Reported meme'} loading="lazy" />
 			<div class="text">
 				{#if item.preview.title}<p class="title">{item.preview.title}</p>{/if}
 				<p class="muted">
@@ -91,30 +87,30 @@
 						? 'Video'
 						: item.preview.kind === 'gif'
 							? 'GIF'
-							: 'Bild'}{item.preview.nsfw ? ', NSFW' : ''}{item.preview.spoiler ? ', Spoiler' : ''}
+							: 'Image'}{item.preview.nsfw ? ', NSFW' : ''}{item.preview.spoiler ? ', spoiler' : ''}
 				</p>
 			</div>
 		{:else if item.preview?.type === 'comment'}
 			<p class="quote">{item.preview.text}</p>
 		{:else if item.preview?.type === 'quote'}
-			<p class="quote">„{item.preview.text}“ <span class="muted">— {item.preview.author}</span></p>
+			<p class="quote">“{item.preview.text}” <span class="muted">— {item.preview.author}</span></p>
 		{:else}
 			<p class="muted">
-				Der Inhalt existiert nicht mehr. Auszug zum Meldezeitpunkt: {item.excerpt}
+				The content no longer exists. Excerpt at the time of the report: {item.excerpt}
 			</p>
 		{/if}
 	</div>
 
 	<div class="facts">
-		<span class="pill">{pluralize(item.reports.length, 'Meldung', 'Meldungen')}</span>
-		<span class="pill" title={formatDateTime(item.oldest)}>seit {relativeTime(item.oldest)}</span>
+		<span class="pill">{pluralize(item.reports.length, 'report', 'reports')}</span>
+		<span class="pill" title={formatDateTime(item.oldest)}>since {relativeTime(item.oldest)}</span>
 		{#each item.categories as c (c.category)}
 			<span class="pill">{CATEGORY_LABELS[c.category]} × {c.count}</span>
 		{/each}
 	</div>
 
 	<details>
-		<summary>Melder ({item.reports.length})</summary>
+		<summary>Reporters ({item.reports.length})</summary>
 		<ul class="reporters">
 			{#each item.reports as r, i (i)}
 				<li>
@@ -129,46 +125,44 @@
 	{#if failure}<p class="error" role="alert">{failure}</p>{/if}
 
 	{#if mode === 'delete'}
-		<div class="confirm" role="group" aria-label="Löschen bestätigen">
-			<span>{CONTENT_LABELS[item.contentType]} endgültig löschen?</span>
+		<div class="confirm" role="group" aria-label="Confirm delete">
+			<span>Delete this {CONTENT_LABELS[item.contentType].toLowerCase()} for good?</span>
 			<button
 				type="button"
 				class="btn danger"
 				disabled={busy}
 				onclick={() => run({ action: 'delete' })}
 			>
-				<Trash2 size={16} aria-hidden="true" /> Ja, löschen
+				<Trash2 size={16} aria-hidden="true" /> Yes, delete
 			</button>
 			<button type="button" class="btn" disabled={busy} onclick={() => (mode = null)}>
-				Abbrechen
+				Cancel
 			</button>
 		</div>
 	{:else if mode === 'timeout'}
 		<form class="timeout" onsubmit={submitTimeout}>
-			<p class="muted">Stummschalten: {item.author}. Die Meldungen gelten dann als bestätigt.</p>
-			<p class="muted">
-				Der Inhalt bleibt dabei sichtbar — lösche oder blurre ihn zusätzlich, falls nötig.
-			</p>
+			<p class="muted">Mute {item.author}. The reports then count as confirmed.</p>
+			<p class="muted">The content stays visible. Delete or blur it as well if needed.</p>
 			<label>
-				Tage (1 bis 30)
+				Days (1 to 30)
 				<input class="field" type="number" min="1" max="30" step="1" required bind:value={days} />
 			</label>
 			<label>
-				Grund
+				Reason
 				<textarea class="field" rows="2" maxlength="500" required bind:value={reason}></textarea>
 			</label>
 			<div class="row">
 				<button type="submit" class="btn danger" disabled={busy}>
-					<Timer size={16} aria-hidden="true" /> Timeout setzen
+					<Timer size={16} aria-hidden="true" /> Set timeout
 				</button>
 				<button type="button" class="btn" disabled={busy} onclick={() => (mode = null)}>
-					Abbrechen
+					Cancel
 				</button>
 			</div>
 		</form>
 	{:else}
 		{#if own}
-			<p class="muted">Über Meldungen zu eigenen Inhalten entscheidet ein anderes Teammitglied.</p>
+			<p class="muted">Reports on your own content are decided by another team member.</p>
 		{/if}
 		<div class="actions">
 			{#if !own}
@@ -179,7 +173,7 @@
 					onclick={() => run({ action: gone ? 'delete' : 'release' })}
 				>
 					<Check size={16} aria-hidden="true" />
-					{gone ? 'Schließen' : 'Freigeben'}
+					{gone ? 'Close' : 'Release'}
 				</button>
 			{/if}
 			{#if item.preview?.type === 'meme' && !item.preview.nsfw && !own}
@@ -189,7 +183,7 @@
 			{/if}
 			{#if !gone}
 				<button type="button" class="btn" disabled={busy} onclick={() => (mode = 'delete')}>
-					<Trash2 size={16} aria-hidden="true" /> Löschen
+					<Trash2 size={16} aria-hidden="true" /> Delete
 				</button>
 			{/if}
 			{#if canTimeoutAuthor}
@@ -199,7 +193,7 @@
 			{/if}
 			{#if openHref}
 				<a class="btn" href={resolve(openHref as '/')}>
-					<ExternalLink size={16} aria-hidden="true" /> Öffnen
+					<ExternalLink size={16} aria-hidden="true" /> Open
 				</a>
 			{/if}
 		</div>

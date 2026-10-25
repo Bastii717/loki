@@ -90,7 +90,7 @@ describe('POST /api/report', () => {
 		['non-string contentType', { contentType: 5, category: 'spam' }],
 		['missing contentType', { category: 'spam' }],
 		['unknown category', { contentType: 'meme', category: 'hass' }],
-		['old German category', { contentType: 'meme', category: 'verletzend' }],
+		['old category name', { contentType: 'meme', category: 'verletzend' }],
 		['missing category', { contentType: 'meme' }],
 		['non-string text', { contentType: 'meme', category: 'spam', text: 7 }],
 		['over-long text', { contentType: 'meme', category: 'spam', text: 'x'.repeat(501) }]
@@ -159,7 +159,7 @@ describe('POST /api/report', () => {
 		expect(response.status).toBe(404);
 	});
 
-	it('rejects a timed-out reporter with the German 403', async () => {
+	it('rejects a timed-out reporter with the 403', async () => {
 		const w = await world();
 		await timeOut(w.reporter.id, w.author.id);
 		const { response } = await post(

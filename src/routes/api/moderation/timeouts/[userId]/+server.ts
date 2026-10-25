@@ -8,7 +8,7 @@ import type { RequestHandler } from './$types';
 export const DELETE: RequestHandler = async ({ params, locals }) => {
 	const actor = await requireModerator(locals.user);
 	const userId = Number(params.userId);
-	if (!Number.isSafeInteger(userId) || userId <= 0) error(404, 'Nutzer nicht gefunden.');
+	if (!Number.isSafeInteger(userId) || userId <= 0) error(404, 'User not found.');
 	try {
 		await liftTimeout(actor, userId);
 	} catch (e) {

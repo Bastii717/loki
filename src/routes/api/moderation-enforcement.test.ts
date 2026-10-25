@@ -45,7 +45,7 @@ beforeEach(async () => {
 	await resetDb();
 });
 
-// far in the future so the fixture never expires, and a fixed date to assert the German format
+// far in the future so the fixture never expires, and a fixed date to assert the English format
 const UNTIL = new Date('2099-12-24T12:00:00Z');
 const REASON = 'Beleidigungen im Chat';
 const BLOCK_MESSAGE = `You are muted until 24 Dec 2099: ${REASON}`;
@@ -212,7 +212,7 @@ const allowed: [string, (w: World) => Call, number][] = [
 const run = (call: Call, session: string): Promise<RouteResult> => callRoute({ ...call, session });
 
 describe('timeout enforcement on every blocked endpoint', () => {
-	it.each(blocked)('%s: 403 with the German message', async (_name, build) => {
+	it.each(blocked)('%s: 403 with the English message', async (_name, build) => {
 		const w = await timedOutWorld();
 		const { response } = await run(build(w), w.session);
 		expect(response.status).toBe(403);
@@ -273,7 +273,7 @@ describe('form actions', () => {
 		role: 'member'
 	});
 
-	it('upload action returns the German message under message and error (403)', async () => {
+	it('upload action returns the English message under message and error (403)', async () => {
 		const w = await timedOutWorld();
 		const form = new FormData();
 		form.set('title', 'mein Meme');
@@ -305,7 +305,7 @@ describe('form actions', () => {
 		).rejects.toBeInstanceOf(TimeoutActiveError);
 	});
 
-	it('quotes add action returns the German message and keeps the typed values (403)', async () => {
+	it('quotes add action returns the English message and keeps the typed values (403)', async () => {
 		const w = await timedOutWorld();
 		const form = new FormData();
 		form.set('text', 'Ein Zitat');
@@ -328,7 +328,7 @@ describe('form actions', () => {
 		['rules', rulesActions],
 		['faq', faqActions]
 	] as const)(
-		'%s save action returns the German message and keeps the draft for a timed-out admin (403)',
+		'%s save action returns the English message and keeps the draft for a timed-out admin (403)',
 		async (_name, pageActions) => {
 			const w = await timedOutWorld();
 			const admin = await testUser({ role: 'admin' });

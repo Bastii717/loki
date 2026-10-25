@@ -197,7 +197,7 @@ describe('force NSFW blur (flags)', () => {
 	);
 });
 
-describe('delete (Löschen)', () => {
+describe('delete', () => {
 	it.each(['meme', 'comment', 'quote'] as const)(
 		'%s: removes the content, closes the reports as actioned, logs content_deleted with the excerpt',
 		async (type) => {
@@ -277,7 +277,7 @@ describe('timeout from a case', () => {
 		]);
 		const rows = await auditFor('timeout_set', 'user', w.author.user.id);
 		expect(rows).toHaveLength(1);
-		expect(rows[0].detail).toBe('3 Tage: Wiederholt beleidigend');
+		expect(rows[0].detail).toBe('3 days: Wiederholt beleidigend');
 		expect(await db.select().from(media).where(eq(media.id, w.ids.meme))).toHaveLength(1);
 		// the other cases of the same author stay open
 		expect(await openReports('comment', w.ids.comment)).toHaveLength(2);
@@ -343,7 +343,7 @@ describe('timeout from a case', () => {
 });
 
 describe('self-dealing: cases about the own content of the actor', () => {
-	const OWN_MESSAGE = 'Über Meldungen zu eigenen Inhalten entscheidet ein anderes Teammitglied.';
+	const OWN_MESSAGE = 'Reports on your own content are decided by another team member.';
 
 	async function ownCase(role: 'moderator' | 'admin') {
 		const w = await world();
@@ -534,10 +534,10 @@ describe('timeouts API', () => {
 		expect(await activeTimeout(target)).toMatchObject({ reason: 'Streit' });
 
 		expect(
-			(await setTimeoutCall(w.admin.session, { userId: target, days: 5, reason: 'Noch mal' }))
+			(await setTimeoutCall(w.admin.session, { userId: target, days: 5, reason: 'Once more' }))
 				.response.status
 		).toBe(204);
-		expect(await activeTimeout(target)).toMatchObject({ reason: 'Noch mal' });
+		expect(await activeTimeout(target)).toMatchObject({ reason: 'Once more' });
 		expect(await auditFor('timeout_lifted', 'user', target)).toHaveLength(1); // the replaced one
 		expect(await auditFor('timeout_set', 'user', target)).toHaveLength(2);
 
@@ -611,6 +611,6 @@ describe('user search for the timeout picker', () => {
 		const asAdmin = await search(w.admin.session, w.mod.user.username);
 		expect(asAdmin.find((u) => u.id === w.mod.user.id)?.timeoutable).toBe(true);
 		expect(asAdmin.find((u) => u.id === w.admin.user.id)).toBeUndefined();
-		expect(await search(w.mod.session, 'gibt-es-nicht')).toEqual([]);
+		expect(await search(w.mod.session, 'no-such-user')).toEqual([]);
 	});
 });

@@ -235,9 +235,9 @@ describe('timed-out moderators lose their moderation rights', () => {
 		const { response } = await callRoute(ep.call(w, w.lockedMod.session));
 		expect(response.status).toBe(403);
 		const body = await response.text();
-		if (ep.adminOnly) return expect(body).toContain('nur für Admins'); // the role check comes first
+		if (ep.adminOnly) return expect(body).toContain('This area is for admins only'); // the role check comes first
 		expect(body).toMatch(/You are muted until \d{1,2} [A-Z][a-z]{2} \d{4}: test/);
-		expect(body).toContain('Moderationsrechte ruhen');
+		expect(body).toContain('Your moderation rights are paused until then');
 	});
 
 	it.each(endpoints)('$name: a timed-out admin loses them as well', async (ep) => {
@@ -327,7 +327,7 @@ describe('timed-out moderators lose their moderation rights', () => {
 	});
 });
 
-describe('admin-only Nutzer page', () => {
+describe('admin-only Users page', () => {
 	const call = (user: World['mod']['user']) =>
 		usersPage({ locals: { user } } as never) as Promise<{
 			users: { id: number; username: string; role: string; confirmedReports: number }[];

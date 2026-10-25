@@ -243,7 +243,7 @@ describe('forced flags on foreign memes', () => {
 		const log = await audits();
 		expect(log).toHaveLength(1);
 		expect(log[0]).toMatchObject({ action: 'flags_forced', actorId: mod.id, targetId: id });
-		expect(log[0].detail).toContain('NSFW an');
+		expect(log[0].detail).toContain('NSFW on');
 		const [row] = await db.select().from(media).where(eq(media.id, id));
 		expect(row).toMatchObject({ nsfw: true, reviewedAt: null });
 	});
@@ -253,7 +253,7 @@ describe('forced flags on foreign memes', () => {
 		const mod = await user('moderator');
 		const id = await reportedItem('meme', author.id);
 		await setFlags(mod, id, { nsfw: true, spoiler: true });
-		expect((await audits())[0].detail).toContain('NSFW an, Spoiler an');
+		expect((await audits())[0].detail).toContain('NSFW on, Spoiler on');
 	});
 
 	it('audits a moderator switching flags off with the direction, without closing the case', async () => {
@@ -267,10 +267,10 @@ describe('forced flags on foreign memes', () => {
 		const log = await audits();
 		expect(log).toHaveLength(2);
 		expect(log[0]).toMatchObject({ action: 'flags_changed', actorId: mod.id, targetId: id });
-		expect(log[0].detail).toContain('NSFW aus');
+		expect(log[0].detail).toContain('NSFW off');
 		expect(log[0].detail).toContain(author.username);
 		expect(log[0].detail).toContain('Titel');
-		expect(log[1].detail).toContain('Spoiler aus');
+		expect(log[1].detail).toContain('Spoiler off');
 	});
 
 	it('audits flag changes on an unreported foreign meme, but not no-ops', async () => {
@@ -283,7 +283,7 @@ describe('forced flags on foreign memes', () => {
 		const log = await audits();
 		expect(log).toHaveLength(1);
 		expect(log[0]).toMatchObject({ action: 'flags_forced', targetId: id });
-		expect(log[0].detail).toContain('Spoiler an');
+		expect(log[0].detail).toContain('Spoiler on');
 	});
 
 	it('does not audit the uploader setting their own flags', async () => {

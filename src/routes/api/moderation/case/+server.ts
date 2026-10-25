@@ -29,19 +29,19 @@ function parseAction(body: Record<string, unknown>): CaseAction {
 				days < 1 ||
 				days > MAX_TIMEOUT_DAYS
 			) {
-				error(400, `Bitte 1 bis ${MAX_TIMEOUT_DAYS} Tage angeben.`);
+				error(400, `Please give 1 to ${MAX_TIMEOUT_DAYS} days.`);
 			}
 			if (
 				typeof reason !== 'string' ||
 				reason.trim() === '' ||
 				reason.length > MAX_TIMEOUT_REASON
 			) {
-				error(400, `Bitte einen Grund (höchstens ${MAX_TIMEOUT_REASON} Zeichen) angeben.`);
+				error(400, `Please give a reason (${MAX_TIMEOUT_REASON} characters max).`);
 			}
 			return { type: 'timeout', days, reason };
 		}
 		default:
-			error(400, 'Unbekannte Aktion.');
+			error(400, 'Unknown action.');
 	}
 }
 
@@ -56,15 +56,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
 		raw = await request.json();
 	} catch {
-		error(400, 'Ungültige Anfrage.');
+		error(400, 'Invalid request.');
 	}
 	const body = (raw ?? {}) as Record<string, unknown>;
 	const { contentType, contentId } = body;
 	if (typeof contentType !== 'string' || !CONTENT_TYPES.includes(contentType as ContentType)) {
-		error(400, 'Ungültiger Inhaltstyp.');
+		error(400, 'Invalid content type.');
 	}
 	if (typeof contentId !== 'number' || !Number.isSafeInteger(contentId) || contentId <= 0) {
-		error(400, 'Ungültige Inhalts-ID.');
+		error(400, 'Invalid content ID.');
 	}
 	const action = parseAction(body);
 
@@ -72,14 +72,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		await actOnCase(actor, contentType as ContentType, contentId, action);
 	} catch (e) {
 		if (e instanceof CaseError && e.code === 'own') {
-			error(403, 'Über Meldungen zu eigenen Inhalten entscheidet ein anderes Teammitglied.');
+			error(403, 'Reports on your own content are decided by another team member.');
 		}
 		if (e instanceof CaseError) {
 			error(
 				e.code === 'notfound' ? 404 : 400,
 				e.code === 'notfound'
-					? 'Dieser Fall ist bereits erledigt.'
-					: 'Diese Aktion passt nicht zu diesem Inhalt.'
+					? 'This case is already resolved.'
+					: 'This action does not fit this content.'
 			);
 		}
 		if (
@@ -87,14 +87,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			e instanceof CommentNotFoundError ||
 			e instanceof QuoteNotFoundError
 		) {
-			error(404, 'Der Inhalt existiert nicht mehr. Du kannst den Fall freigeben.');
+			error(404, 'The content no longer exists. You can release the case.');
 		}
 		if (
 			e instanceof MediaPermissionError ||
 			e instanceof CommentPermissionError ||
 			e instanceof QuotePermissionError
 		) {
-			error(403, 'Dazu fehlt dir die Berechtigung.');
+			error(403, 'You lack permission for that.');
 		}
 		mapTimeoutActionError(e);
 	}

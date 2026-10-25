@@ -12,27 +12,27 @@ const RANK: Record<SessionUser['role'], number> = { member: 0, moderator: 1, adm
  * so every load and handler calls this BEFORE touching a module. In order:
  * 1. no session -> 401, role below `level` -> 403 (members learn nothing, not even a timeout state),
  * 2. a timed-out moderator/admin loses moderation rights while the timeout lasts -> 403 with the
- *    German timeout notice.
+ *    English timeout notice.
  * Returns the verified user.
  */
 export async function requireModerator(
 	user: SessionUser | null | undefined,
 	level: ModerationLevel = 'moderator'
 ): Promise<SessionUser> {
-	if (!user) error(401, 'Nicht angemeldet.');
+	if (!user) error(401, 'Not signed in.');
 	if (RANK[user.role] < RANK[level]) {
 		error(
 			403,
 			level === 'admin'
-				? 'Dieser Bereich ist nur für Admins.'
-				: 'Dieser Bereich ist nur für Moderatoren und Admins.'
+				? 'This area is for admins only.'
+				: 'This area is for moderators and admins only.'
 		);
 	}
 	try {
 		await assertNotTimedOut(user);
 	} catch (e) {
 		if (e instanceof TimeoutActiveError) {
-			error(403, `${timeoutMessage(e)}. Deine Moderationsrechte ruhen bis dahin.`);
+			error(403, `${timeoutMessage(e)}. Your moderation rights are paused until then.`);
 		}
 		throw e;
 	}

@@ -6,26 +6,26 @@
 </script>
 
 <svelte:head>
-	<title>Nutzer · Moderation · Loki</title>
+	<title>Users · Moderation · Loki</title>
 </svelte:head>
 
-<section class="card hint" aria-labelledby="kick-title">
-	<h2 id="kick-title">Rauswurf</h2>
+<section class="card hint" aria-labelledby="removal-title">
+	<h2 id="removal-title">Removal</h2>
 	<p>
-		Wer dauerhaft nicht mehr dabei sein soll, fliegt über Authentik raus: Gruppenmitgliedschaft
-		entziehen, danach kann sich die Person nicht mehr anmelden. Loki sperrt keine Konten selbst. Die
-		Zahlen unten sind die Entscheidungsgrundlage.
+		Removing someone for good happens in Authentik: revoke the group membership and they can no
+		longer sign in. Loki never locks accounts itself. The numbers below are there to inform that
+		decision.
 	</p>
 </section>
 
-<h2 class="list-title">Alle Nutzer ({data.users.length})</h2>
+<h2 class="list-title">All users ({data.users.length})</h2>
 <ul class="list">
 	{#each data.users as u (u.id)}
 		<li class="card">
 			<div class="head">
 				<strong>{u.username}</strong>
 				<span class="pill" class:accent={u.role !== 'member'}>{ROLE_LABELS[u.role]}</span>
-				{#if u.activeTimeout}<span class="pill timeout">stummgeschaltet</span>{/if}
+				{#if u.activeTimeout}<span class="pill timeout">muted</span>{/if}
 			</div>
 			<dl>
 				<div>
@@ -33,7 +33,7 @@
 					<dd>{u.memes}</dd>
 				</div>
 				<div>
-					<dt>Kommentare</dt>
+					<dt>Comments</dt>
 					<dd>{u.comments}</dd>
 				</div>
 				<div>
@@ -41,31 +41,31 @@
 					<dd>{u.quotes}</dd>
 				</div>
 				<div>
-					<dt>Bestätigte Meldungen</dt>
+					<dt>Confirmed reports</dt>
 					<dd>{u.confirmedReports}</dd>
 				</div>
 			</dl>
 			{#if u.confirmedReports > 0}
 				<p class="muted">
 					in {u.confirmedCases}
-					{u.confirmedCases === 1 ? 'Fall' : 'Fällen'}
+					{u.confirmedCases === 1 ? 'case' : 'cases'}
 				</p>
 			{/if}
 			{#if u.activeTimeout}
 				<p class="active">
-					Timeout bis {formatDateTime(u.activeTimeout.until)}: {u.activeTimeout.reason}
-					<span class="muted">(von {u.activeTimeout.setBy})</span>
+					Timeout until {formatDateTime(u.activeTimeout.until)}: {u.activeTimeout.reason}
+					<span class="muted">(by {u.activeTimeout.setBy})</span>
 				</p>
 			{/if}
 			{#if u.pastTimeouts.length > 0}
 				<details>
-					<summary>Frühere Timeouts ({u.pastTimeouts.length})</summary>
+					<summary>Past timeouts ({u.pastTimeouts.length})</summary>
 					<ul class="past">
 						{#each u.pastTimeouts as t, i (i)}
 							<li>
-								{formatDate(t.createdAt)} bis {formatDate(t.until)}: {t.reason}
+								{formatDate(t.createdAt)} to {formatDate(t.until)}: {t.reason}
 								<span class="muted">
-									(von {t.setBy}{t.liftedAt ? `, aufgehoben ${formatDate(t.liftedAt)}` : ''})
+									(by {t.setBy}{t.liftedAt ? `, lifted ${formatDate(t.liftedAt)}` : ''})
 								</span>
 							</li>
 						{/each}

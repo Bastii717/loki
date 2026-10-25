@@ -17,13 +17,13 @@
 </script>
 
 <svelte:head>
-	<title>Erledigt · Moderation · Loki</title>
+	<title>Resolved · Moderation · Loki</title>
 </svelte:head>
 
 {#if data.cases.length === 0}
 	<div class="empty">
 		<Inbox size={36} aria-hidden="true" />
-		<p>Noch nichts erledigt.</p>
+		<p>Nothing resolved yet.</p>
 	</div>
 {:else}
 	<ul class="list">
@@ -36,11 +36,11 @@
 				</div>
 				<p class="excerpt">{c.excerpt}</p>
 				<p class="muted">
-					von {c.author}, {pluralize(c.reports.length, 'Meldung', 'Meldungen')}:
+					by {c.author}, {pluralize(c.reports.length, 'report', 'reports')}:
 					{c.categories.map((k) => `${CATEGORY_LABELS[k.category]} × ${k.count}`).join(', ')}
 				</p>
 				<details>
-					<summary>Melder ({c.reports.length})</summary>
+					<summary>Reporters ({c.reports.length})</summary>
 					<ul class="reporters">
 						{#each c.reports as r, i (i)}
 							<li>
@@ -57,10 +57,10 @@
 {/if}
 
 {#if data.nextCursor !== null || onLaterPage}
-	<nav class="pager" aria-label="Seiten">
-		{#if onLaterPage}<a href={resolve('/moderation/resolved')}>Zum Anfang</a>{/if}
+	<nav class="pager" aria-label="Pages">
+		{#if onLaterPage}<a href={resolve('/moderation/resolved')}>Back to start</a>{/if}
 		{#if data.nextCursor !== null}
-			<a href="{resolve('/moderation/resolved')}?cursor={data.nextCursor}">Ältere Fälle</a>
+			<a href="{resolve('/moderation/resolved')}?cursor={data.nextCursor}">Older cases</a>
 		{/if}
 	</nav>
 {/if}

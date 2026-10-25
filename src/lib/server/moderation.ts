@@ -199,12 +199,19 @@ export async function setTimeout_(
 			.where(activeTimeoutWhere(userId))
 			.returning({ id: timeouts.id });
 		if (previous) {
-			await audit(actor.id, AUDIT_ACTIONS.timeoutLifted, 'user', userId, 'ersetzt', tx);
+			await audit(actor.id, AUDIT_ACTIONS.timeoutLifted, 'user', userId, 'replaced', tx);
 		}
 
 		const until = new Date(Date.now() + days * DAY_MS);
 		await tx.insert(timeouts).values({ userId, setBy: actor.id, reason: trimmed, until });
-		await audit(actor.id, AUDIT_ACTIONS.timeoutSet, 'user', userId, `${days} Tage: ${trimmed}`, tx);
+		await audit(
+			actor.id,
+			AUDIT_ACTIONS.timeoutSet,
+			'user',
+			userId,
+			`${days} ${days === 1 ? 'day' : 'days'}: ${trimmed}`,
+			tx
+		);
 	});
 }
 
@@ -448,7 +455,7 @@ export async function resolveReports(
 			AUDIT_ACTIONS.reportDismissed,
 			contentType,
 			contentId,
-			`${closed.length} Meldungen: ${closed[0].excerpt}`,
+			`${closed.length} ${closed.length === 1 ? 'report' : 'reports'}: ${closed[0].excerpt}`,
 			tx
 		);
 		return closed.length;

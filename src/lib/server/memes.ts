@@ -107,10 +107,10 @@ export async function setFlags(
 	const changed =
 		(set.nsfw !== undefined && set.nsfw !== row.nsfw) ||
 		(set.spoiler !== undefined && set.spoiler !== row.spoiler);
-	// the audit detail names every requested flag with its direction ("NSFW an, Spoiler aus")
+	// the audit detail names every requested flag with its direction ("NSFW on, Spoiler off")
 	const what = [
-		set.nsfw !== undefined && `NSFW ${set.nsfw ? 'an' : 'aus'}`,
-		set.spoiler !== undefined && `Spoiler ${set.spoiler ? 'an' : 'aus'}`
+		set.nsfw !== undefined && `NSFW ${set.nsfw ? 'on' : 'off'}`,
+		set.spoiler !== undefined && `Spoiler ${set.spoiler ? 'on' : 'off'}`
 	]
 		.filter(Boolean)
 		.join(', ');

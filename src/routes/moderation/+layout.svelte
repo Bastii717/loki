@@ -22,8 +22,7 @@
 </script>
 
 <header class="top">
-	<a href={resolve('/profile')} class="back" aria-label="Zurück zum Profil"
-		><ArrowLeft size={22} /></a
+	<a href={resolve('/profile')} class="back" aria-label="Back to profile"><ArrowLeft size={22} /></a
 	>
 	<h1><Shield size={20} aria-hidden="true" /> Moderation</h1>
 </header>
@@ -35,7 +34,7 @@
 			aria-current={isActive(tab.href) ? 'page' : undefined}
 		>
 			{tab.label}
-			{#if tab.count > 0}<span class="count" aria-label="{tab.count} offen">{tab.count}</span>{/if}
+			{#if tab.count > 0}<span class="count" aria-label="{tab.count} open">{tab.count}</span>{/if}
 		</a>
 	{/each}
 </nav>

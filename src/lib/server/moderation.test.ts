@@ -115,7 +115,7 @@ describe('createReport', () => {
 		const reporter = await userWithRole();
 		const titled = await addMeme(author.id, 'Lustiger Titel');
 		const untitled = await addMeme(author.id, '');
-		await createReport(reporter, 'meme', titled, 'hurtful', ' bitte prüfen ');
+		await createReport(reporter, 'meme', titled, 'hurtful', ' please check ');
 		await createReport(reporter, 'meme', untitled, 'spam');
 		const rows = await db.select().from(reports).orderBy(reports.id);
 		expect(rows[0]).toMatchObject({
@@ -124,7 +124,7 @@ describe('createReport', () => {
 			reporterId: reporter.id,
 			authorId: author.id,
 			category: 'hurtful',
-			text: 'bitte prüfen',
+			text: 'please check',
 			excerpt: 'Lustiger Titel',
 			status: 'open',
 			outcome: null
@@ -419,6 +419,9 @@ describe('setTimeout_ permission matrix', () => {
 		});
 		expect((await activeTimeout(u.id))!.reason).toBe('dann');
 		expect(await auditActions()).toEqual(['timeout_set', 'timeout_lifted', 'timeout_set']);
+		expect((await listAudit()).entries.map((e) => e.detail).sort()).toEqual(
+			['10 days: dann', '2 days: erst', 'replaced'].sort()
+		);
 	});
 
 	it('does not touch earlier expired timeouts when setting a new one', async () => {
@@ -521,7 +524,7 @@ describe('resolveReports', () => {
 			targetType: 'meme',
 			targetId: id
 		});
-		expect(entries[0].detail).toContain('Titel');
+		expect(entries[0].detail).toBe('2 reports: Titel');
 	});
 
 	it('dismissal grants permanent immunity: fresh reports beyond the threshold stay below review', async () => {
