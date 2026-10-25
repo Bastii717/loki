@@ -12,7 +12,7 @@
 </svelte:head>
 
 <header class="top">
-	<a href={resolve('/profil')} class="back" aria-label="Zurück zum Profil"
+	<a href={resolve('/profile')} class="back" aria-label="Zurück zum Profil"
 		><ArrowLeft size={22} /></a
 	>
 	<h1>Meine Memes</h1>

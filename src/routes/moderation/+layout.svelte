@@ -9,9 +9,9 @@
 
 	const tabs = $derived([
 		{ href: '/moderation', label: 'Queue', count: data.openCases },
-		{ href: '/moderation/erledigt', label: 'Erledigt', count: 0 },
+		{ href: '/moderation/resolved', label: 'Resolved', count: 0 },
 		{ href: '/moderation/timeouts', label: 'Timeouts', count: 0 },
-		...(data.isAdmin ? [{ href: '/moderation/nutzer', label: 'Nutzer', count: 0 }] : []),
+		...(data.isAdmin ? [{ href: '/moderation/users', label: 'Users', count: 0 }] : []),
 		{ href: '/moderation/log', label: 'Log', count: 0 }
 	]);
 
@@ -22,7 +22,7 @@
 </script>
 
 <header class="top">
-	<a href={resolve('/profil')} class="back" aria-label="Zurück zum Profil"
+	<a href={resolve('/profile')} class="back" aria-label="Zurück zum Profil"
 		><ArrowLeft size={22} /></a
 	>
 	<h1><Shield size={20} aria-hidden="true" /> Moderation</h1>

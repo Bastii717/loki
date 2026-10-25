@@ -58,9 +58,9 @@
 
 {#if data.nextCursor !== null || onLaterPage}
 	<nav class="pager" aria-label="Seiten">
-		{#if onLaterPage}<a href={resolve('/moderation/erledigt')}>Zum Anfang</a>{/if}
+		{#if onLaterPage}<a href={resolve('/moderation/resolved')}>Zum Anfang</a>{/if}
 		{#if data.nextCursor !== null}
-			<a href="{resolve('/moderation/erledigt')}?cursor={data.nextCursor}">Ältere Fälle</a>
+			<a href="{resolve('/moderation/resolved')}?cursor={data.nextCursor}">Ältere Fälle</a>
 		{/if}
 	</nav>
 {/if}

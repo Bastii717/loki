@@ -5,17 +5,17 @@
 	import Plus from 'lucide-svelte/icons/plus';
 	import Quote from 'lucide-svelte/icons/quote';
 	import User from 'lucide-svelte/icons/user';
-	/** `badge`: open moderation cases, only passed for moderators/admins; shown as a dot-count on Profil. */
+	/** `badge`: open moderation cases, only passed for moderators/admins; shown as a dot-count on Profile. */
 	let { pathname, badge = 0 }: { pathname: string; badge?: number } = $props();
 
-	// Entdecken, Quotes and Profil arrive in later tasks; their links 404 until then.
+	// Discover, Quotes and Profile arrive in later tasks; their links 404 until then.
 	const left = [
 		{ href: '/', label: 'Feed', icon: House },
-		{ href: '/entdecken', label: 'Entdecken', icon: Compass }
+		{ href: '/discover', label: 'Discover', icon: Compass }
 	];
 	const right = [
 		{ href: '/quotes', label: 'Quotes', icon: Quote },
-		{ href: '/profil', label: 'Profil', icon: User }
+		{ href: '/profile', label: 'Profile', icon: User }
 	];
 
 	const isActive = (href: string) =>
@@ -33,7 +33,7 @@
 			<span class="label">{tab.label}</span>
 		</a>
 	{/each}
-	<a href={resolve('/upload')} class="fab" aria-label="Meme hochladen"
+	<a href={resolve('/upload')} class="fab" aria-label="Post a meme"
 		><Plus size={26} strokeWidth={2.5} aria-hidden="true" /></a
 	>
 	{#each right as tab (tab.href)}
@@ -44,7 +44,7 @@
 		>
 			<span class="icon">
 				<tab.icon size={22} aria-hidden="true" />
-				{#if tab.href === '/profil' && badge > 0}
+				{#if tab.href === '/profile' && badge > 0}
 					<span class="badge" role="img" aria-label="{badge} offene Meldungen"
 						>{badge > 9 ? '9+' : badge}</span
 					>

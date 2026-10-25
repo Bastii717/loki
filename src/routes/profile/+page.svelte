@@ -20,10 +20,10 @@
 
 	// Statistiken, Regeln and FAQ arrive in later tasks; their links 404 until then.
 	const links = [
-		{ href: '/profil/memes', label: 'Meine Memes', icon: Images },
-		{ href: '/profil/favoriten', label: 'Favoriten', icon: Star },
-		{ href: '/profil/statistiken', label: 'Statistiken', icon: ChartColumn },
-		{ href: '/regeln', label: 'Regeln', icon: BookOpen },
+		{ href: '/profile/memes', label: 'Meine Memes', icon: Images },
+		{ href: '/profile/favorites', label: 'Favoriten', icon: Star },
+		{ href: '/profile/stats', label: 'Statistiken', icon: ChartColumn },
+		{ href: '/rules', label: 'Regeln', icon: BookOpen },
 		{ href: '/faq', label: 'FAQ', icon: CircleQuestionMark }
 	] as const;
 </script>

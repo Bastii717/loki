@@ -31,9 +31,9 @@ import { DELETE as deleteQuote } from '../api/quotes/[id]/+server';
 import { load as rootLayout } from '../+layout.server';
 import { load as moderationLayout } from './+layout.server';
 import { load as queue } from './+page.server';
-import { load as done } from './erledigt/+page.server';
+import { load as done } from './resolved/+page.server';
 import { load as log } from './log/+page.server';
-import { load as nutzer } from './nutzer/+page.server';
+import { load as usersPage } from './users/+page.server';
 import { load as timeoutsPage } from './timeouts/+page.server';
 
 beforeAll(async () => {
@@ -86,9 +86,9 @@ const endpoints: Endpoint[] = [
 		call: (_w, session) => ({ handler: queue, path: '/moderation', session })
 	},
 	{
-		name: 'erledigt load',
+		name: 'resolved load',
 		page: true,
-		call: (_w, session) => ({ handler: done, path: '/moderation/erledigt', session })
+		call: (_w, session) => ({ handler: done, path: '/moderation/resolved', session })
 	},
 	{
 		name: 'timeouts load',
@@ -101,10 +101,10 @@ const endpoints: Endpoint[] = [
 		call: (_w, session) => ({ handler: log, path: '/moderation/log', session })
 	},
 	{
-		name: 'nutzer load',
+		name: 'users load',
 		page: true,
 		adminOnly: true,
-		call: (_w, session) => ({ handler: nutzer, path: '/moderation/nutzer', session })
+		call: (_w, session) => ({ handler: usersPage, path: '/moderation/users', session })
 	},
 	{
 		name: 'POST case',
@@ -329,7 +329,7 @@ describe('timed-out moderators lose their moderation rights', () => {
 
 describe('admin-only Nutzer page', () => {
 	const call = (user: World['mod']['user']) =>
-		nutzer({ locals: { user } } as never) as Promise<{
+		usersPage({ locals: { user } } as never) as Promise<{
 			users: { id: number; username: string; role: string; confirmedReports: number }[];
 		}>;
 
@@ -356,7 +356,7 @@ describe('admin-only Nutzer page', () => {
 		await setTimeout_(w.admin.user, w.victim.user.id, 3, 'erst');
 		await setTimeout_(w.admin.user, w.victim.user.id, 4, 'dann');
 
-		const { users } = (await nutzer({ locals: { user: w.admin.user } } as never)) as {
+		const { users } = (await usersPage({ locals: { user: w.admin.user } } as never)) as {
 			users: Record<string, unknown>[];
 		};
 		const victim = users.find((u) => u.id === w.victim.user.id)!;
