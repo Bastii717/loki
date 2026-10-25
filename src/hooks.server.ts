@@ -5,11 +5,36 @@ import { runMigrations } from './lib/server/db';
 import { env } from './lib/server/env';
 import { startJobs } from './lib/server/jobs';
 import { rateLimitRetryMs } from './lib/server/rate-limit';
+import { setMigrated } from './lib/server/readiness';
+
+const MIGRATION_RETRY_MS = 10_000;
 
 /** Runs once at server start so misconfiguration fails at boot, not on the first request. */
 export const init: ServerInit = async () => {
 	void env.DATABASE_URL; // validate the whole environment eagerly
-	await runMigrations();
+	try {
+		await runMigrations();
+		setMigrated(true);
+	} catch (e) {
+		// Stay up (serving /readyz and the maintenance page) and keep retrying instead of crashing.
+		console.error(`migrations failed, retrying every ${MIGRATION_RETRY_MS / 1000} s`, e);
+		setMigrated(false);
+		let running = false;
+		const retry = setInterval(async () => {
+			if (running) return;
+			running = true;
+			try {
+				await runMigrations();
+				setMigrated(true);
+				clearInterval(retry);
+			} catch {
+				// already logged once; the next tick tries again
+			} finally {
+				running = false;
+			}
+		}, MIGRATION_RETRY_MS);
+		retry.unref();
+	}
 	startJobs();
 };
 
@@ -17,6 +42,8 @@ const PUBLIC_PATHS = new Set([
 	'/login',
 	'/auth/callback',
 	'/healthz',
+	'/readyz',
+	'/maintenance.html',
 	'/favicon.ico',
 	'/favicon.svg',
 	'/manifest.webmanifest',
