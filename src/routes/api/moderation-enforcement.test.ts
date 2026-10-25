@@ -48,7 +48,7 @@ beforeEach(async () => {
 // far in the future so the fixture never expires, and a fixed date to assert the German format
 const UNTIL = new Date('2099-12-24T12:00:00Z');
 const REASON = 'Beleidigungen im Chat';
-const BLOCK_MESSAGE = `Du bist bis zum 24.12.2099 stummgeschaltet: ${REASON}`;
+const BLOCK_MESSAGE = `You are muted until 24 Dec 2099: ${REASON}`;
 
 async function timedOutWorld() {
 	const [victim, author, mod] = await Promise.all([

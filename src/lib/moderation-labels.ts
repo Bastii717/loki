@@ -39,17 +39,18 @@ export const ROLE_LABELS: Record<string, string> = {
 	admin: 'Admin'
 };
 
-const dateTime = new Intl.DateTimeFormat('de-DE', {
-	day: '2-digit',
-	month: '2-digit',
+const dateTime = new Intl.DateTimeFormat('en-GB', {
+	day: 'numeric',
+	month: 'short',
 	year: 'numeric',
 	hour: '2-digit',
 	minute: '2-digit',
+	hour12: false,
 	timeZone: 'Europe/Berlin'
 });
-const dateOnly = new Intl.DateTimeFormat('de-DE', {
-	day: '2-digit',
-	month: '2-digit',
+const dateOnly = new Intl.DateTimeFormat('en-GB', {
+	day: 'numeric',
+	month: 'short',
 	year: 'numeric',
 	timeZone: 'Europe/Berlin'
 });

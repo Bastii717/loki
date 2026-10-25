@@ -162,7 +162,7 @@ describe('Review Focus 1: members never reach the moderation area', () => {
 		const { response } = await callRoute(ep.call(w, w.member.session));
 		expect(response.status).toBe(403);
 		const body = await response.text();
-		expect(body).toMatch(/nur für/);
+		expect(body).toMatch(/This area is for moderators and admins only/);
 		expect(body).not.toContain(w.victim.user.username);
 	});
 
@@ -230,13 +230,13 @@ describe('hooks-level prefix guard (defense in depth)', () => {
 });
 
 describe('timed-out moderators lose their moderation rights', () => {
-	it.each(endpoints)('$name: a timed-out moderator gets 403 with the German notice', async (ep) => {
+	it.each(endpoints)('$name: a timed-out moderator gets 403 with the mute notice', async (ep) => {
 		const w = await world();
 		const { response } = await callRoute(ep.call(w, w.lockedMod.session));
 		expect(response.status).toBe(403);
 		const body = await response.text();
 		if (ep.adminOnly) return expect(body).toContain('nur für Admins'); // the role check comes first
-		expect(body).toMatch(/Du bist bis zum \d{2}\.\d{2}\.\d{4} stummgeschaltet: test/);
+		expect(body).toMatch(/You are muted until \d{1,2} [A-Z][a-z]{2} \d{4}: test/);
 		expect(body).toContain('Moderationsrechte ruhen');
 	});
 
@@ -244,7 +244,7 @@ describe('timed-out moderators lose their moderation rights', () => {
 		const w = await world();
 		const { response } = await callRoute(ep.call(w, w.lockedAdmin.session));
 		expect(response.status).toBe(403);
-		expect(await response.text()).toContain('stummgeschaltet');
+		expect(await response.text()).toContain('You are muted until');
 	});
 
 	it('the timed-out moderator gets access back once the timeout is lifted', async () => {
@@ -311,7 +311,7 @@ describe('timed-out moderators lose their moderation rights', () => {
 		];
 		for (const { response } of await Promise.all(calls)) {
 			expect(response.status).toBe(403);
-			expect(await response.text()).toContain('stummgeschaltet');
+			expect(await response.text()).toContain('You are muted until');
 		}
 		const [meme] = await db.select().from(media).where(eq(media.id, w.memeId));
 		expect(meme.nsfw).toBe(false);

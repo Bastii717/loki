@@ -229,7 +229,7 @@ describe('write rate limits', () => {
 });
 
 describe('429 responses', () => {
-	const MESSAGE = 'Langsam, Lord! Zu viele Anfragen.';
+	const MESSAGE = 'Slow down, Lord! Too many requests.';
 
 	async function tripUpload(headers: Record<string, string> = {}) {
 		const user = await testUser();

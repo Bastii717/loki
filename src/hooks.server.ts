@@ -45,11 +45,11 @@ const isPublic = (path: string) =>
 const MODERATION_ROOTS = ['/moderation', '/api/moderation'];
 const isModerationPath = (path: string) =>
 	MODERATION_ROOTS.some((root) => path === root || path.startsWith(`${root}/`));
-const FORBIDDEN_MESSAGE = 'Dieser Bereich ist nur für Moderatoren und Admins.';
+const FORBIDDEN_MESSAGE = 'This area is for moderators and admins only.';
 
 const SEEN_PATH = /^\/api\/memes\/\d+\/seen$/;
 const WRITE_METHODS = new Set(['POST', 'PATCH', 'DELETE']);
-const RATE_LIMITED_MESSAGE = 'Langsam, Lord! Zu viele Anfragen.';
+const RATE_LIMITED_MESSAGE = 'Slow down, Lord! Too many requests.';
 
 /** Per-user limits for state-changing requests (in-memory, see rate-limit.ts). Returns the seconds to wait, or 0 when allowed. */
 function retryAfterSeconds(method: string, path: string, userId: number): number {

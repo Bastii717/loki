@@ -167,7 +167,7 @@ describe('POST /api/report', () => {
 		);
 		expect(response.status).toBe(403);
 		expect(await response.text()).toMatch(
-			/^Du bist bis zum \d{2}\.\d{2}\.\d{4} stummgeschaltet: test$/
+			/^You are muted until \d{1,2} [A-Z][a-z]{2} \d{4}: test$/
 		);
 	});
 
