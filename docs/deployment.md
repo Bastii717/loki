@@ -164,8 +164,8 @@ cosign verify ghcr.io/bastii717/loki:latest \
 `POST /share` (the Android share sheet) is a multipart form POST, so SvelteKit's CSRF check
 applies: it is rejected with 403 when the `Origin` header is missing or `null`, and accepted
 when it equals the app's own origin. Verified against a production build (`node build`);
-`trustedOrigins` is deliberately not widened. Share-Target erfordert daher, dass der Browser
-beim Teilen einen `Origin`-Header mit der öffentlichen URL sendet (Chrome auf Android tut das
-nach unserem Kenntnisstand; auf echten Geräten prüfen). Bleibt das Teilen mit 403 hängen, ist
-das eine Betreiber-Entscheidung, nicht ein Konfigurationsfehler.
+`trustedOrigins` is deliberately not widened. The share target therefore requires the browser
+to send an `Origin` header with the public URL when sharing (Chrome on Android does, as far as
+we know; verify on real devices). If sharing keeps failing with 403, that is an operator
+decision, not a configuration error.
 

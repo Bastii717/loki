@@ -100,26 +100,26 @@ interface DemoMeme {
 
 const MEMES: DemoMeme[] = [
 	{
-		title: 'Montag, 7:00 Uhr',
-		caption: ['MONTAG,', '7:00 UHR'],
+		title: 'Monday, 7:00 AM',
+		caption: ['MONDAY,', '7:00 AM'],
 		width: 1080,
 		height: 1080,
 		hues: [222, 262],
 		author: 'lena',
-		tags: ['montag', 'office', 'kaffee'],
+		tags: ['monday', 'office', 'coffee'],
 		up: ['jonas', 'noah', 'mira', 'tobi', 'anke', 'kemal', 'yusuf'],
 		down: [],
 		hoursAgo: 6,
 		views: 33,
 		comments: [
-			{ by: 'jonas', text: 'Das bin ich, jeden einzelnen Montag.' },
-			{ by: 'mira', text: 'Der Kaffee hat noch nicht mal angefangen zu wirken.' },
-			{ by: 'noah', text: 'Und dann direkt das Daily um 9.' }
+			{ by: 'jonas', text: 'This is me, every single Monday.' },
+			{ by: 'mira', text: 'The coffee has not even kicked in yet.' },
+			{ by: 'noah', text: 'And then straight into the 9 AM standup.' }
 		]
 	},
 	{
-		title: 'Code Review sagt: LGTM',
-		caption: ['CODE REVIEW', 'SAGT: LGTM', '(2000 ZEILEN)'],
+		title: 'Code review says: LGTM',
+		caption: ['CODE REVIEW', 'SAYS: LGTM', '(2000 LINES)'],
 		width: 1200,
 		height: 900,
 		hues: [152, 190],
@@ -130,31 +130,31 @@ const MEMES: DemoMeme[] = [
 		hoursAgo: 2,
 		views: 41,
 		comments: [
-			{ by: 'lena', text: 'Gelesen hat das niemand, oder?' },
-			{ by: 'tobi', text: 'Approved nach 40 Sekunden. Respekt.' },
-			{ by: 'noah', text: 'LGTM heißt bei uns: Looks Great, Tests Missing.' }
+			{ by: 'lena', text: 'Nobody actually read this, did they?' },
+			{ by: 'tobi', text: 'Approved after 40 seconds. Respect.' },
+			{ by: 'noah', text: 'LGTM means Looks Great, Tests Missing around here.' }
 		]
 	},
 	{
-		title: 'Deploy am Freitag',
-		caption: ['DEPLOY', 'AM FREITAG', 'UM 16:55'],
+		title: 'Deploy on Friday',
+		caption: ['DEPLOY ON', 'FRIDAY AT', '4:55 PM'],
 		width: 900,
 		height: 1200,
 		hues: [8, 38],
 		author: 'noah',
-		tags: ['devops', 'freitag', 'prod'],
+		tags: ['devops', 'friday', 'prod'],
 		up: ['lena', 'jonas', 'mira', 'kemal', 'yusuf', 'anke', 'tobi', 'noah'],
 		down: [],
 		hoursAgo: 20,
 		views: 58,
 		comments: [
-			{ by: 'anke', text: 'Wer das macht, bringt am Montag Kuchen mit.' },
-			{ by: 'jonas', text: 'Wir haben nur noch ein kleines Hotfix.' }
+			{ by: 'anke', text: 'Whoever does this brings cake on Monday.' },
+			{ by: 'jonas', text: 'It is just one tiny hotfix.' }
 		]
 	},
 	{
-		title: 'Meeting, das eine Mail sein könnte',
-		caption: ['MEETING,', 'DAS EINE MAIL', 'SEIN KÖNNTE'],
+		title: 'A meeting that could have been an email',
+		caption: ['A MEETING THAT', 'COULD HAVE BEEN', 'AN EMAIL'],
 		width: 1080,
 		height: 1350,
 		hues: [284, 326],
@@ -164,16 +164,16 @@ const MEMES: DemoMeme[] = [
 		down: ['kemal'],
 		hoursAgo: 31,
 		views: 27,
-		comments: [{ by: 'mira', text: 'Zwei Stunden. Ohne Agenda.' }]
+		comments: [{ by: 'mira', text: 'Two hours. No agenda.' }]
 	},
 	{
-		title: 'Kaffee Nr. 4',
-		caption: ['KAFFEE', 'NR. 4'],
+		title: 'Coffee no. 4',
+		caption: ['COFFEE', 'NO. 4'],
 		width: 1200,
 		height: 900,
 		hues: [24, 48],
 		author: 'jonas',
-		tags: ['kaffee', 'office'],
+		tags: ['coffee', 'office'],
 		up: ['lena', 'noah'],
 		down: ['yusuf'],
 		hoursAgo: 52,
@@ -181,8 +181,8 @@ const MEMES: DemoMeme[] = [
 		comments: []
 	},
 	{
-		title: 'Prod ist down (nicht von mir)',
-		caption: ['PROD IST DOWN', '(NICHT VON MIR)'],
+		title: 'Prod is down (not my fault)',
+		caption: ['PROD IS DOWN', '(NOT MY FAULT)'],
 		width: 1080,
 		height: 1080,
 		hues: [350, 14],
@@ -192,7 +192,7 @@ const MEMES: DemoMeme[] = [
 		down: ['lena', 'anke'],
 		hoursAgo: 78,
 		views: 22,
-		comments: [{ by: 'lena', text: 'Das Git-Blame sieht das anders.' }]
+		comments: [{ by: 'lena', text: 'Blame says otherwise.' }]
 	}
 ];
 

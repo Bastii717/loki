@@ -4,29 +4,29 @@ Loki is a meme board for one team and nobody else. It is built for 25–50 peopl
 
 ## Features
 
-Planned and being built. The UI is German; code and docs are English.
+Planned and being built. The whole app is English: UI, code and docs.
 
 - **Card feed** with in-feed voting, comment counts and hashtag chips. Views for New, Hot and Hall of Fame.
-- **Entdecken**: fullscreen swipe through memes you have not seen yet, then random old gems.
+- **Discover**: fullscreen swipe through memes you have not seen yet, then random old gems.
 - **Comments**, **favorites** and swipe-between-memes in the detail view.
 - **Trending** via a periodically recomputed hot score, plus the **Hall of Fame**.
 - **Quotes** page with its own voting and submission form.
 - **Tags** with autocomplete and hashtag filtering.
 - **NSFW and spoiler blur**, set at upload or by moderators.
 - **Statistics**: uploads over time, top uploaders and voters, tag distribution.
-- **Meldungen und Moderation**: members report memes, comments and quotes. Content with too many open reports is hidden until a moderator decides in the moderation area (queue, timeouts, audit log).
+- **Reports and moderation**: members report memes, comments and quotes. Content with too many open reports is hidden until a moderator decides in the moderation area (queue, timeouts, audit log).
 - **Rules and FAQ**, editable by admins in the app.
 - **PWA** with a share target, so memes can be sent straight from the share sheet.
 
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/feed-mobile.png" alt="Feed auf dem Smartphone: Meme-Karten mit Abstimmung, Kommentaren und Hashtags, unten die Tab-Leiste" width="45%">
-  <img src="docs/screenshots/detail-mobile.png" alt="Detailansicht eines Memes auf dem Smartphone mit Hashtags und Kommentaren" width="45%">
+  <img src="docs/screenshots/feed-mobile.png" alt="Feed on a phone: meme cards with voting, comments and hashtags, tab bar at the bottom" width="45%">
+  <img src="docs/screenshots/detail-mobile.png" alt="Meme detail view on a phone with hashtags and comments" width="45%">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/feed-desktop.png" alt="Feed im Desktop-Browser im dunklen Design" width="100%">
+  <img src="docs/screenshots/feed-desktop.png" alt="Feed in a desktop browser with the dark theme" width="100%">
 </p>
 
 ## Security model

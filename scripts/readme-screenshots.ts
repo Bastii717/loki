@@ -54,7 +54,7 @@ async function routeRequest(route: Route): Promise<void> {
 async function login(page: Page): Promise<void> {
 	await page.goto(`${BASE_URL}/`);
 	await page.waitForURL('**/login**');
-	await page.getByRole('button', { name: 'Mit Authentik anmelden' }).click();
+	await page.getByRole('button', { name: 'Sign in with Authentik' }).click();
 
 	// navikt mock-oauth2-server: any username works; the claims field is optional.
 	await page.waitForSelector('input[name="username"]');
@@ -63,7 +63,7 @@ async function login(page: Page): Promise<void> {
 	await page.locator('input[type="submit"]').click();
 
 	await page.waitForURL(`${BASE_URL}/**`);
-	await page.getByRole('navigation', { name: 'Hauptnavigation' }).waitFor();
+	await page.getByRole('navigation', { name: 'Main navigation' }).waitFor();
 }
 
 /** Waits until every visible <img> is decoded and at least one is visible (no gray placeholders). */
@@ -109,7 +109,7 @@ async function withContext(
 		...profile,
 		isMobile: mobile,
 		hasTouch: mobile,
-		locale: 'de-DE',
+		locale: 'en-GB',
 		timezoneId: 'Europe/Berlin',
 		colorScheme: 'dark'
 	});
@@ -155,7 +155,7 @@ async function main(): Promise<void> {
 						return `/meme/${best.id}`;
 					});
 					await page.goto(`${BASE_URL}${link}`);
-					await page.getByText('Kommentare').first().waitFor();
+					await page.getByText('Comments').first().waitFor();
 					await waitForImages(page);
 					await save('detail-mobile.png', await page.screenshot());
 				},

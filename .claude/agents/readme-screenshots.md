@@ -21,7 +21,7 @@ You refresh the Loki README screenshots (`docs/screenshots/*.png`) from a seeded
    npx tsx --env-file=.env scripts/seed-demo.ts
    ```
 
-   This creates demo users, six generated meme images (real thumbnails and S3 objects via `createMedia`), German tags, votes (one negative) and comments. `--preview=DIR` only renders the images to DIR without touching anything.
+   This creates demo users, six generated meme images (real thumbnails and S3 objects via `createMedia`), English tags, votes (one negative) and comments. `--preview=DIR` only renders the images to DIR without touching anything.
 
 2. Start the dev server in the background (port 5173, must match `ORIGIN` in `.env`) and wait until `http://localhost:5173/login` answers:
 
@@ -39,16 +39,16 @@ You refresh the Loki README screenshots (`docs/screenshots/*.png`) from a seeded
 
 4. Stop the dev server again.
 
-5. Open each PNG with Read and check it: sharp images loaded (no gray placeholders), German UI, dark theme, tab bar at the bottom on mobile, votes and comments visible, no error banners or empty states. Retake if anything is off; fix the cause in the scripts rather than editing PNGs by hand.
+5. Open each PNG with Read and check it: sharp images loaded (no gray placeholders), English UI, dark theme, tab bar at the bottom on mobile, votes and comments visible, no error banners or empty states. Retake if anything is off; fix the cause in the scripts rather than editing PNGs by hand.
 
 ## Where things land and how the README uses them
 
 - Output: `docs/screenshots/feed-mobile.png`, `detail-mobile.png`, `feed-desktop.png`.
-- `README.md` has a `## Screenshots` section: the two mobile shots side by side in a `<p>` with two `<img>` at about 45% width, the desktop shot below at full width, relative paths, German alt texts. Keep file names stable so the README needs no change on a refresh.
+- `README.md` has a `## Screenshots` section: the two mobile shots side by side in a `<p>` with two `<img>` at about 45% width, the desktop shot below at full width, relative paths, English alt texts. Keep file names stable so the README needs no change on a refresh.
 
 ## House rules
 
-- German UI copy, captions and alt texts; English code and docs; no emojis anywhere.
+- English UI copy, captions and alt texts, code and docs; no emojis anywhere.
 - Dark theme only (the app default; the script forces `colorScheme: dark`).
 - Keep each PNG under about 600 KB; the script re-encodes with sharp and warns if it cannot. Do not reduce the 2x scale to save space unless the budget is truly out of reach.
 - Chromium may be blocked from LAN hosts on macOS (local network privacy). The script therefore routes LAN requests (OIDC, S3 behind the media redirect) through Node and blocks third-party hosts. Do not remove that.
