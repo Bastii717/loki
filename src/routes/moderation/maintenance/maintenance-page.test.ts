@@ -26,7 +26,7 @@ async function save(
 		method: 'POST',
 		body
 	});
-	return (await actions.default({ request, locals: { user } } as never)) as Result;
+	return (await actions.save({ request, locals: { user } } as never)) as Result;
 }
 
 const audits = () =>
@@ -101,6 +101,19 @@ describe('save action', () => {
 		});
 		expect(await audits()).toHaveLength(0);
 		expect(await save(user, { ...fields, message: 'a'.repeat(300) })).toEqual({ saved: true });
+	});
+
+	it('counts a CRLF line break as one character, like the browser does', async () => {
+		const { user } = await userWithSession('admin');
+		const message = `${'a'.repeat(150)}\r\n${'b'.repeat(148)}`; // 299 characters, 300 on the wire
+		expect(await save(user, { enabled: 'on', message, startsAt: '', until: '' })).toEqual({
+			saved: true
+		});
+		expect((await getMaintenance()).message).toBe(message.replace('\r\n', '\n'));
+	});
+
+	it('uses only named actions (SvelteKit rejects a default next to named ones)', () => {
+		expect(Object.keys(actions).sort()).toEqual(['off', 'save']);
 	});
 
 	it('rejects a malformed date', async () => {

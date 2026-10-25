@@ -45,12 +45,13 @@ function parseLocal(value: FormDataEntryValue | null): Date | null {
 }
 
 export const actions: Actions = {
-	default: async ({ locals, request }) => {
+	save: async ({ locals, request }) => {
 		const actor = await requireModerator(locals.user, 'admin');
 		const data = await request.formData();
 		const raw = {
 			enabled: data.get('enabled') === 'on',
-			message: String(data.get('message') ?? ''),
+			// browsers submit textarea line breaks as CRLF; count them like the client does
+			message: String(data.get('message') ?? '').replace(/\r\n/g, '\n'),
 			startsAt: String(data.get('startsAt') ?? ''),
 			until: String(data.get('until') ?? '')
 		};

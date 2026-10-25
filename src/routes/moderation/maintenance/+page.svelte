@@ -48,7 +48,7 @@
 		keep full access. Times are Berlin time.
 	</p>
 
-	<form method="POST" use:enhance={submit}>
+	<form method="POST" action="?/save" use:enhance={submit}>
 		<label class="toggle">
 			<input type="checkbox" name="enabled" bind:checked={enabled} />
 			<span>Maintenance mode is on</span>

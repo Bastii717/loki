@@ -125,8 +125,8 @@ const endpoints: Endpoint[] = [
 		page: true, // a page form action: anonymous requests are redirected to /login
 		adminOnly: true,
 		call: (_w, session) => ({
-			handler: maintenanceActions.default,
-			path: '/moderation/maintenance',
+			handler: maintenanceActions.save,
+			path: '/moderation/maintenance?/save',
 			method: 'POST',
 			session,
 			form: { message: '', startsAt: '', until: '' }
