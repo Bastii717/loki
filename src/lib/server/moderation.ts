@@ -24,7 +24,8 @@ export const AUDIT_ACTIONS = {
 	siteContentChanged: 'site_content_changed',
 	timeoutSet: 'timeout_set',
 	timeoutLifted: 'timeout_lifted',
-	contentReleased: 'content_released'
+	contentReleased: 'content_released',
+	maintenanceChanged: 'maintenance_changed'
 } as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
 
