@@ -132,7 +132,7 @@
 			{#if failed}
 				<button type="button" class="retry" onclick={loadMore}> Loading failed — try again </button>
 			{:else}
-				<span class="muted">Loading more …</span>
+				<span class="muted">Loading more…</span>
 			{/if}
 		</div>
 	{:else if items.length > 0}

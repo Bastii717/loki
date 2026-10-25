@@ -103,7 +103,9 @@
 
 	<div class="facts">
 		<span class="pill">{pluralize(item.reports.length, 'report', 'reports')}</span>
-		<span class="pill" title={formatDateTime(item.oldest)}>since {relativeTime(item.oldest)}</span>
+		<span class="pill" title={formatDateTime(item.oldest)}
+			>reported {relativeTime(item.oldest)}</span
+		>
 		{#each item.categories as c (c.category)}
 			<span class="pill">{CATEGORY_LABELS[c.category]} × {c.count}</span>
 		{/each}
@@ -178,7 +180,7 @@
 			{/if}
 			{#if item.preview?.type === 'meme' && !item.preview.nsfw && !own}
 				<button type="button" class="btn" disabled={busy} onclick={() => run({ action: 'flags' })}>
-					<EyeOff size={16} aria-hidden="true" /> NSFW-Blur
+					<EyeOff size={16} aria-hidden="true" /> Force blur
 				</button>
 			{/if}
 			{#if !gone}

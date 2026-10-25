@@ -246,7 +246,7 @@ const QUOTES: DemoQuote[] = [
 
 const RULES_MARKDOWN = `# House rules
 
-Be kind, be funny, and please be funny in that order.
+Be kind, be funny, in that order.
 
 ## The basics
 

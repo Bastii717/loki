@@ -58,7 +58,7 @@ On a desktop browser the layout stays a centered column.
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/detail-desktop.png" alt="Meme detail view in a desktop browser with comments" width="100%">
+  <img src="docs/screenshots/detail-desktop.png" alt="Meme detail view in a desktop browser with the large image, tags and comment box" width="100%">
 </p>
 
 <p align="center">

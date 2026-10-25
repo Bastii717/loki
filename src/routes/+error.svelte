@@ -7,7 +7,7 @@
 	// SvelteKit fills in terse defaults when nothing threw a message of its own; those get a friendlier
 	// line here. Everything the app throws itself (`error(404, 'Meme not found')`) is shown as is.
 	const GENERIC: Record<string, string> = {
-		'Not Found': 'That address does not exist, or not anymore.',
+		'Not Found': "That page doesn't exist or has moved.",
 		'Internal Error': 'Please try again later.',
 		'Unknown Error': 'Please try again later.'
 	};

@@ -11,6 +11,7 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
 	return new Date(iso).toLocaleDateString('en-GB', {
 		day: 'numeric',
 		month: 'short',
-		year: 'numeric'
+		year: 'numeric',
+		timeZone: 'Europe/Berlin'
 	});
 }

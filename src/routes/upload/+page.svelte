@@ -251,7 +251,7 @@
 		</label>
 
 		<button class="submit" type="submit" disabled={submitting}>
-			{submitting ? 'Posting …' : 'Post a meme'}
+			{submitting ? 'Posting…' : 'Post a meme'}
 		</button>
 	</form>
 </main>

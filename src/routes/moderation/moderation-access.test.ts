@@ -36,6 +36,9 @@ import { load as log } from './log/+page.server';
 import { load as usersPage } from './users/+page.server';
 import { load as timeoutsPage } from './timeouts/+page.server';
 
+/** Fixed far-future mute end, so the formatted date never depends on the run date. */
+const MUTED_UNTIL = new Date('2099-12-24T12:00:00Z');
+
 beforeAll(async () => {
 	await setupDb();
 	await ensureBucket(); // meme deletion removes bucket objects
@@ -61,8 +64,8 @@ async function world() {
 	]);
 	const memeId = await insertMeme(victim.user.id, 'Fall');
 	await addOpenReports('meme', memeId, victim.user.id, 2);
-	await timeOut(lockedMod.user.id, admin.user.id);
-	await timeOut(lockedAdmin.user.id, admin.user.id);
+	await timeOut(lockedMod.user.id, admin.user.id, MUTED_UNTIL);
+	await timeOut(lockedAdmin.user.id, admin.user.id, MUTED_UNTIL);
 	return { member, mod, admin, victim, lockedMod, lockedAdmin, memeId };
 }
 
@@ -236,7 +239,7 @@ describe('timed-out moderators lose their moderation rights', () => {
 		expect(response.status).toBe(403);
 		const body = await response.text();
 		if (ep.adminOnly) return expect(body).toContain('This area is for admins only'); // the role check comes first
-		expect(body).toMatch(/You are muted until \d{1,2} [A-Z][a-z]{2} \d{4}: test/);
+		expect(body).toContain('You are muted until 24 Dec 2099: test');
 		expect(body).toContain('Your moderation rights are paused until then');
 	});
 

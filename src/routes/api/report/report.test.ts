@@ -10,6 +10,9 @@ import { resetRateLimits } from '../../../lib/server/rate-limit';
 import { callRoute } from '../../../lib/server/test-request';
 import { POST } from './+server';
 
+/** Fixed far-future mute end, so the formatted date never depends on the run date. */
+const MUTED_UNTIL = new Date('2099-12-24T12:00:00Z');
+
 beforeAll(setupDb);
 beforeEach(async () => {
 	resetRateLimits();
@@ -161,15 +164,13 @@ describe('POST /api/report', () => {
 
 	it('rejects a timed-out reporter with the 403', async () => {
 		const w = await world();
-		await timeOut(w.reporter.id, w.author.id);
+		await timeOut(w.reporter.id, w.author.id, MUTED_UNTIL);
 		const { response } = await post(
 			{ contentType: 'meme', contentId: w.memeId, category: 'spam' },
 			w.reporterSession
 		);
 		expect(response.status).toBe(403);
-		expect(await response.text()).toMatch(
-			/^You are muted until \d{1,2} [A-Z][a-z]{2} \d{4}: test$/
-		);
+		expect(await response.text()).toBe('You are muted until 24 Dec 2099: test');
 	});
 
 	it('requires a session', async () => {
