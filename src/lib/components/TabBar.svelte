@@ -22,7 +22,7 @@
 		href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 </script>
 
-<nav class="tabbar" aria-label="Hauptnavigation">
+<nav class="tabbar" aria-label="Main navigation">
 	{#each left as tab (tab.href)}
 		<a
 			href={resolve(tab.href as '/')}
@@ -45,7 +45,7 @@
 			<span class="icon">
 				<tab.icon size={22} aria-hidden="true" />
 				{#if tab.href === '/profile' && badge > 0}
-					<span class="badge" role="img" aria-label="{badge} offene Meldungen"
+					<span class="badge" role="img" aria-label="{badge} open reports"
 						>{badge > 9 ? '9+' : badge}</span
 					>
 				{/if}

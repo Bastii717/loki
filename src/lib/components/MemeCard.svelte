@@ -80,7 +80,7 @@
 			href={memeHref}
 			onclick={open}
 			tabindex={hidden ? -1 : undefined}
-			aria-label={withheld ? 'Wird geprüft' : item.title || 'Meme'}
+			aria-label={withheld ? 'Under review' : item.title || 'Meme'}
 		>
 			{#if withheld}
 				<UnderReviewPanel />
@@ -92,7 +92,7 @@
 						: '4 / 3'}
 				>
 					<ImageOff size={28} aria-hidden="true" />
-					<span>Bild nicht verfügbar</span>
+					<span>Image unavailable</span>
 				</div>
 			{:else}
 				<img
@@ -113,9 +113,9 @@
 		{#if hidden}
 			<button type="button" class="reveal" onclick={() => (revealed = true)}>
 				{#if item.blurred === 'nsfw'}
-					<EyeOff size={20} aria-hidden="true" /> Antippen zum Anzeigen
+					<EyeOff size={20} aria-hidden="true" /> Tap to reveal
 				{:else}
-					<TriangleAlert size={20} aria-hidden="true" /> Spoiler — Antippen zum Anzeigen
+					<TriangleAlert size={20} aria-hidden="true" /> Spoiler — tap to reveal
 				{/if}
 			</button>
 		{/if}
@@ -129,7 +129,7 @@
 			type="button"
 			class="fav"
 			class:on={favorited}
-			aria-label={favorited ? 'Favorit entfernen' : 'Als Favorit speichern'}
+			aria-label={favorited ? 'Remove favorite' : 'Save as favorite'}
 			aria-pressed={favorited}
 			onclick={toggleFavorite}
 			><Star size={20} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true" /></button
@@ -140,7 +140,7 @@
 	<div class="body">
 		<div class="info">
 			{#if !withheld}
-				<a href={memeHref} onclick={open} class="title">{item.title || 'Ohne Titel'}</a>
+				<a href={memeHref} onclick={open} class="title">{item.title || 'Untitled'}</a>
 			{/if}
 			{#if item.tags.length > 0}
 				<ul class="tags">
@@ -150,11 +150,13 @@
 				</ul>
 			{/if}
 			<p class="meta">
-				{#if item.uploader}<span>von {item.uploader}</span>{/if}
-				<span class="stat" aria-label="{item.commentCount} Kommentare"
+				{#if item.uploader}<span>by {item.uploader}</span>{/if}
+				<span
+					class="stat"
+					aria-label="{item.commentCount} {item.commentCount === 1 ? 'comment' : 'comments'}"
 					><MessageCircle size={14} aria-hidden="true" /> {item.commentCount}</span
 				>
-				<span class="stat" aria-label="{item.viewCount} Aufrufe"
+				<span class="stat" aria-label="{item.viewCount} {item.viewCount === 1 ? 'view' : 'views'}"
 					><Eye size={14} aria-hidden="true" /> {item.viewCount}</span
 				>
 				<time datetime={item.createdAt}>{relativeTime(item.createdAt)}</time>
@@ -166,7 +168,7 @@
 				type="button"
 				class="arrow up"
 				class:active={userVote === 1}
-				aria-label="Hochwählen"
+				aria-label="Upvote"
 				aria-pressed={userVote === 1}
 				onclick={() => vote(1)}
 				><ArrowBigUp
@@ -180,7 +182,7 @@
 				type="button"
 				class="arrow down"
 				class:active={userVote === -1}
-				aria-label="Runterwählen"
+				aria-label="Downvote"
 				aria-pressed={userVote === -1}
 				onclick={() => vote(-1)}
 				><ArrowBigDown

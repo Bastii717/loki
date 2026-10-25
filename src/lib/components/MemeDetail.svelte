@@ -170,14 +170,14 @@
 
 	// ---- delete / flags (uploader or moderator)
 	async function deleteMeme() {
-		if (!confirm('Dieses Meme endgültig löschen?')) return;
+		if (!confirm('Delete this meme for good?')) return;
 		menuError = '';
 		try {
 			const res = await fetch(`/api/memes/${item.id}`, { method: 'DELETE' });
 			if (!res.ok && res.status !== 404) throw new Error(String(res.status));
 			await goto(resolve('/'), { invalidateAll: true });
 		} catch {
-			menuError = 'Meme konnte nicht gelöscht werden.';
+			menuError = 'Could not delete the meme.';
 		}
 	}
 
@@ -190,12 +190,12 @@
 				body: JSON.stringify({ [flag]: value })
 			});
 			if (!res.ok) {
-				menuError = await apiErrorMessage(res, 'Markierung konnte nicht geändert werden.');
+				menuError = await apiErrorMessage(res, 'Could not change the mark.');
 				return;
 			}
 			await invalidateAll();
 		} catch {
-			menuError = 'Markierung konnte nicht geändert werden.';
+			menuError = 'Could not change the mark.';
 		}
 	}
 
@@ -213,14 +213,14 @@
 				body: JSON.stringify({ text: value })
 			});
 			if (!res.ok) {
-				commentError = await apiErrorMessage(res, 'Kommentar konnte nicht gesendet werden.');
+				commentError = await apiErrorMessage(res, 'Could not send the comment.');
 				return;
 			}
 			comments.unshift((await res.json()) as CommentItem);
 			commentCount += 1;
 			text = '';
 		} catch {
-			commentError = 'Kommentar konnte nicht gesendet werden.';
+			commentError = 'Could not send the comment.';
 		} finally {
 			sending = false;
 		}
@@ -234,7 +234,7 @@
 			if (comments.some((x) => x.id === c.id)) commentCount = Math.max(0, commentCount - 1);
 			comments = comments.filter((x) => x.id !== c.id);
 		} catch {
-			commentError = 'Kommentar konnte nicht gelöscht werden.';
+			commentError = 'Could not delete the comment.';
 		}
 	}
 </script>
@@ -242,10 +242,10 @@
 <svelte:window onkeydown={onKeydown} />
 
 <header class="bar">
-	<button type="button" class="icon-btn" onclick={back} aria-label="Zurück"
+	<button type="button" class="icon-btn" onclick={back} aria-label="Back"
 		><ArrowLeft size={22} aria-hidden="true" /></button
 	>
-	<span class="bar-title">{withheld ? 'Wird geprüft' : item.title || 'Ohne Titel'}</span>
+	<span class="bar-title">{withheld ? 'Under review' : item.title || 'Untitled'}</span>
 	{#if feedIds}
 		<div class="pager">
 			<button
@@ -253,14 +253,14 @@
 				class="icon-btn"
 				disabled={prevId === null}
 				onclick={() => go(prevId)}
-				aria-label="Vorheriges Meme"><ChevronLeft size={24} aria-hidden="true" /></button
+				aria-label="Previous meme"><ChevronLeft size={24} aria-hidden="true" /></button
 			>
 			<button
 				type="button"
 				class="icon-btn"
 				disabled={nextId === null}
 				onclick={() => go(nextId)}
-				aria-label="Nächstes Meme"><ChevronRight size={24} aria-hidden="true" /></button
+				aria-label="Next meme"><ChevronRight size={24} aria-hidden="true" /></button
 			>
 		</div>
 	{/if}
@@ -270,7 +270,7 @@
 			<button
 				type="button"
 				class="icon-btn"
-				aria-label="Weitere Aktionen"
+				aria-label="More actions"
 				aria-haspopup="menu"
 				aria-expanded={menuOpen}
 				onclick={() => (menuOpen = !menuOpen)}><Ellipsis size={22} aria-hidden="true" /></button
@@ -284,7 +284,7 @@
 						onclick={() => setFlag('nsfw', !flags.nsfw)}
 					>
 						<EyeOff size={18} aria-hidden="true" />
-						{flags.nsfw ? 'NSFW-Markierung entfernen' : 'Als NSFW markieren'}
+						{flags.nsfw ? 'Remove NSFW mark' : 'Mark as NSFW'}
 					</button>
 					<button
 						type="button"
@@ -293,10 +293,10 @@
 						onclick={() => setFlag('spoiler', !flags.spoiler)}
 					>
 						<TriangleAlert size={18} aria-hidden="true" />
-						{flags.spoiler ? 'Spoiler-Markierung entfernen' : 'Als Spoiler markieren'}
+						{flags.spoiler ? 'Remove spoiler mark' : 'Mark as spoiler'}
 					</button>
 					<button type="button" role="menuitem" class="danger" onclick={deleteMeme}>
-						<Trash2 size={18} aria-hidden="true" /> Meme löschen
+						<Trash2 size={18} aria-hidden="true" /> Delete meme
 					</button>
 					{#if menuError}<p class="error" role="alert">{menuError}</p>{/if}
 				</div>
@@ -318,9 +318,9 @@
 		{#if !withheld && !revealed}
 			<button type="button" class="reveal" onclick={() => (revealed = true)}>
 				{#if item.blurred === 'nsfw'}
-					<EyeOff size={20} aria-hidden="true" /> Antippen zum Anzeigen
+					<EyeOff size={20} aria-hidden="true" /> Tap to reveal
 				{:else}
-					<TriangleAlert size={20} aria-hidden="true" /> Spoiler — Antippen zum Anzeigen
+					<TriangleAlert size={20} aria-hidden="true" /> Spoiler — tap to reveal
 				{/if}
 			</button>
 		{/if}
@@ -329,17 +329,19 @@
 	<section class="info">
 		<div class="row">
 			<div class="grow">
-				<h1>{withheld ? 'Wird geprüft' : item.title || 'Ohne Titel'}</h1>
+				<h1>{withheld ? 'Under review' : item.title || 'Untitled'}</h1>
 				{#if item.underReview && !withheld}<p class="review-note"><UnderReviewBadge /></p>{/if}
 				<p class="meta">
-					{#if item.uploader}von {item.uploader} ·{/if}
+					{#if item.uploader}by {item.uploader} ·{/if}
 					<time datetime={item.createdAt}>{relativeTime(item.createdAt)}</time>
 					·
-					<span class="views" aria-label="{viewCount} Aufrufe"
+					<span class="views" aria-label="{viewCount} {viewCount === 1 ? 'view' : 'views'}"
 						><Eye size={14} aria-hidden="true" /> {viewCount}</span
 					>
 					·
-					<span class="views" aria-label="{commentCount} Kommentare"
+					<span
+						class="views"
+						aria-label="{commentCount} {commentCount === 1 ? 'comment' : 'comments'}"
 						><MessageCircle size={14} aria-hidden="true" /> {commentCount}</span
 					>
 				</p>
@@ -349,7 +351,7 @@
 				class="star"
 				class:on={favorited}
 				aria-pressed={favorited}
-				aria-label={favorited ? 'Favorit entfernen' : 'Als Favorit speichern'}
+				aria-label={favorited ? 'Remove favorite' : 'Save as favorite'}
 				onclick={toggleFavorite}
 				><Star size={22} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true" />
 				<span>{favCount}</span></button
@@ -359,7 +361,7 @@
 					type="button"
 					class="arrow up"
 					class:active={userVote === 1}
-					aria-label="Hochwählen"
+					aria-label="Upvote"
 					aria-pressed={userVote === 1}
 					onclick={() => vote(1)}
 					><ArrowBigUp
@@ -373,7 +375,7 @@
 					type="button"
 					class="arrow down"
 					class:active={userVote === -1}
-					aria-label="Runterwählen"
+					aria-label="Downvote"
 					aria-pressed={userVote === -1}
 					onclick={() => vote(-1)}
 					><ArrowBigDown
@@ -394,21 +396,21 @@
 	</section>
 
 	<section class="comments" aria-labelledby="comments-h">
-		<h2 id="comments-h">Kommentare ({comments.length})</h2>
+		<h2 id="comments-h">Comments ({comments.length})</h2>
 		<form onsubmit={submit}>
 			<textarea
 				bind:value={text}
-				placeholder="Kommentieren…"
-				aria-label="Kommentieren"
+				placeholder="Write a comment…"
+				aria-label="Write a comment"
 				maxlength="2000"
 				rows="2"></textarea>
-			<button type="submit" disabled={sending || text.trim() === ''}>Senden</button>
+			<button type="submit" disabled={sending || text.trim() === ''}>Send</button>
 		</form>
 		{#if commentError}
 			<p class="error" role="alert">{commentError}</p>
 		{/if}
 		{#if comments.length === 0}
-			<p class="empty">Noch keine Kommentare — sei der Erste!</p>
+			<p class="empty">No comments yet — be the first!</p>
 		{:else}
 			<ul class="list">
 				{#each comments as c (c.id)}
@@ -422,7 +424,7 @@
 										type="button"
 										class="del"
 										onclick={() => remove(c)}
-										aria-label="Kommentar von {c.author} löschen">Löschen</button
+										aria-label="Delete comment by {c.author}">Delete</button
 									>
 								{/if}
 								<ReportButton
@@ -433,7 +435,7 @@
 							</span>
 						</div>
 						{#if c.text === null}
-							<p class="review"><EyeOff size={14} aria-hidden="true" /> Wird geprüft</p>
+							<p class="review"><EyeOff size={14} aria-hidden="true" /> Under review</p>
 						{:else}
 							{#if c.underReview}<p class="review-note"><UnderReviewBadge /></p>{/if}
 							<p>{c.text}</p>

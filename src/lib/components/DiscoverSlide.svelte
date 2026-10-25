@@ -68,17 +68,17 @@
 	{#if !withheld && !revealed}
 		<button type="button" class="reveal" onclick={() => (revealed = true)}>
 			{#if item.blurred === 'nsfw'}
-				<EyeOff size={20} aria-hidden="true" /> Antippen zum Anzeigen
+				<EyeOff size={20} aria-hidden="true" /> Tap to reveal
 			{:else}
-				<TriangleAlert size={20} aria-hidden="true" /> Spoiler — Antippen zum Anzeigen
+				<TriangleAlert size={20} aria-hidden="true" /> Spoiler — tap to reveal
 			{/if}
 		</button>
 	{/if}
 </div>
 
 <div class="caption">
-	<b>{withheld ? 'Wird geprüft' : item.title || 'Ohne Titel'}</b>
-	{#if item.uploader}<span>von {item.uploader}</span>{/if}
+	<b>{withheld ? 'Under review' : item.title || 'Untitled'}</b>
+	{#if item.uploader}<span>by {item.uploader}</span>{/if}
 	{#if item.underReview && !withheld}<UnderReviewBadge />{/if}
 </div>
 
@@ -87,7 +87,7 @@
 		type="button"
 		class="arrow up"
 		class:active={userVote === 1}
-		aria-label="Hochwählen"
+		aria-label="Upvote"
 		aria-pressed={userVote === 1}
 		onclick={() => vote(1)}
 		><ArrowBigUp size={26} fill={userVote === 1 ? 'currentColor' : 'none'} /></button
@@ -97,7 +97,7 @@
 		type="button"
 		class="arrow down"
 		class:active={userVote === -1}
-		aria-label="Runterwählen"
+		aria-label="Downvote"
 		aria-pressed={userVote === -1}
 		onclick={() => vote(-1)}
 		><ArrowBigDown size={26} fill={userVote === -1 ? 'currentColor' : 'none'} /></button
@@ -106,7 +106,9 @@
 		class="stat"
 		class:on={item.userFavorite}
 		role="img"
-		aria-label="{item.favoriteCount} Favoriten{item.userFavorite ? ', von dir favorisiert' : ''}"
+		aria-label="{item.favoriteCount} {item.favoriteCount === 1
+			? 'favorite'
+			: 'favorites'}{item.userFavorite ? ', favorited by you' : ''}"
 		><Star size={22} fill={item.userFavorite ? 'currentColor' : 'none'} /><small
 			>{item.favoriteCount}</small
 		></span
@@ -114,7 +116,7 @@
 	<a
 		class="stat"
 		href={resolve('/meme/[id]', { id: String(item.id) })}
-		aria-label="{item.commentCount} Kommentare"
+		aria-label="{item.commentCount} {item.commentCount === 1 ? 'comment' : 'comments'}"
 		><MessageCircle size={22} /><small>{item.commentCount}</small></a
 	>
 	<ReportButton contentType="meme" contentId={item.id} mine={item.mine} />
