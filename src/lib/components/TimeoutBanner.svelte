@@ -12,22 +12,15 @@
 
 <style>
 	.banner {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		z-index: 40;
 		display: flex;
 		align-items: flex-start;
 		gap: 8px;
 		padding: 8px var(--gutter);
-		padding-top: calc(8px + env(safe-area-inset-top));
 		font-size: 0.85rem;
 		line-height: 1.35;
 		color: var(--text);
 		background: var(--surface-raised);
 		border-bottom: 2px solid var(--down);
-		box-shadow: 0 2px 8px var(--overlay);
 	}
 
 	.banner :global(svg) {

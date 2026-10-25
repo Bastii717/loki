@@ -11,6 +11,7 @@
 	import ReportButton from '../../lib/components/ReportButton.svelte';
 	import UnderReviewBadge from '../../lib/components/UnderReviewBadge.svelte';
 	import { apiErrorMessage } from '../../lib/api-error';
+	import { lockMessage, useStatus } from '../../lib/status-context';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -21,9 +22,20 @@
 	let busy = $state(false);
 	let failure = $state<string | null>(null);
 
+	// While writes are locked the controls stay in the DOM (focusable, with the reason as title);
+	// activating one shows the reason in the failure line instead of calling the API.
+	const status = useStatus();
+	const locked = $derived(!status.value.writable);
+	const lockTitle = $derived(locked ? lockMessage(status.value) : undefined);
+	function blocked(): boolean {
+		if (!locked) return false;
+		failure = lockMessage(status.value);
+		return true;
+	}
+
 	async function vote(id: number, clicked: 1 | -1) {
 		const q = items.find((x) => x.id === id);
-		if (!q || busy) return;
+		if (!q || busy || blocked()) return;
 		busy = true;
 		failure = null;
 		const value = q.userVote === clicked ? 0 : clicked;
@@ -47,11 +59,15 @@
 	}
 
 	async function remove(id: number) {
+		if (blocked()) return;
 		busy = true;
 		failure = null;
 		try {
 			const res = await fetch(`/api/quotes/${id}`, { method: 'DELETE' });
-			if (!res.ok && res.status !== 404) throw new Error();
+			if (!res.ok && res.status !== 404) {
+				failure = await apiErrorMessage(res, 'Deleting failed.');
+				return;
+			}
 			confirmingId = null;
 			await invalidateAll();
 		} catch {
@@ -69,7 +85,14 @@
 <main>
 	<h1>Quotes</h1>
 
-	<form method="POST" action="?/add" class="submit" use:enhance>
+	<form
+		method="POST"
+		action="?/add"
+		class="submit"
+		use:enhance={({ cancel }) => {
+			if (blocked()) cancel();
+		}}
+	>
 		<textarea
 			name="text"
 			rows="3"
@@ -87,7 +110,13 @@
 				required
 				value={form?.author ?? ''}
 			/>
-			<button type="submit" class="send" aria-label="Add quote"><Send size={18} /></button>
+			<button
+				type="submit"
+				class="send"
+				aria-label="Add quote"
+				aria-disabled={locked ? 'true' : undefined}
+				title={lockTitle}><Send size={18} /></button
+			>
 		</div>
 		{#if form?.error}<p class="error" role="alert">{form.error}</p>{/if}
 	</form>
@@ -124,6 +153,8 @@
 									type="button"
 									class="icon"
 									aria-label="Delete quote"
+									aria-disabled={locked ? 'true' : undefined}
+									title={lockTitle}
 									onclick={() => (confirmingId = q.id)}
 								>
 									<Trash2 size={16} />
@@ -140,6 +171,8 @@
 							aria-label="Upvote"
 							aria-pressed={q.userVote === 1}
 							disabled={busy}
+							aria-disabled={locked ? 'true' : undefined}
+							title={lockTitle}
 							onclick={() => vote(q.id, 1)}
 						>
 							<ArrowBigUp size={22} />
@@ -152,6 +185,8 @@
 							aria-label="Downvote"
 							aria-pressed={q.userVote === -1}
 							disabled={busy}
+							aria-disabled={locked ? 'true' : undefined}
+							title={lockTitle}
 							onclick={() => vote(q.id, -1)}
 						>
 							<ArrowBigDown size={22} />
@@ -269,6 +304,10 @@
 		color: var(--text);
 		cursor: pointer;
 	}
+	[aria-disabled='true'] {
+		opacity: 0.5;
+	}
+
 	.icon {
 		display: grid;
 		place-items: center;

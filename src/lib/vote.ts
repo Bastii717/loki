@@ -1,3 +1,5 @@
+import { apiErrorMessage } from './api-error';
+
 export type VoteValue = -1 | 0 | 1;
 export type VoteState = { score: number; userVote: VoteValue };
 
@@ -13,12 +15,14 @@ export function optimisticVote(state: VoteState, dir: 1 | -1): VoteState {
  * failure. A click while a request is in flight is ignored.
  *
  * `read`/`write` bridge to the component's own reactive state; `memeId` is a getter so the
- * current id is used at click time.
+ * current id is used at click time. `onError` gets the user-facing text of a rejected vote (the
+ * maintenance notice of a 503, the timeout notice of a 403), other failures roll back silently.
  */
 export function createVoter(
 	memeId: () => number,
 	read: () => VoteState,
-	write: (state: VoteState) => void
+	write: (state: VoteState) => void,
+	onError?: (message: string) => void
 ): (dir: 1 | -1) => Promise<void> {
 	let inFlight = false;
 	return async (dir) => {
@@ -33,7 +37,12 @@ export function createVoter(
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ value: next.userVote })
 			});
-			if (!res.ok) throw new Error(String(res.status));
+			if (!res.ok) {
+				write(prev);
+				const message = await apiErrorMessage(res, '');
+				if (message) onError?.(message);
+				return;
+			}
 			write((await res.json()) as VoteState);
 		} catch {
 			write(prev);

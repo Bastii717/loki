@@ -10,6 +10,8 @@
 	import Play from 'lucide-svelte/icons/play';
 	import Star from 'lucide-svelte/icons/star';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
+	import { apiErrorMessage } from '../api-error';
+	import { lockMessage, useStatus } from '../status-context';
 	import { relativeTime } from '../time';
 	import { createVoter } from '../vote';
 	import type { FeedItem } from '../server/feed';
@@ -48,14 +50,30 @@
 	let favPending = false;
 	const scoreLabel = $derived(score > 0 ? `+${score}` : String(score));
 
+	// While writes are locked the controls stay in the DOM (focusable, with the reason as title);
+	// activating one shows the reason instead of calling the API.
+	const status = useStatus();
+	const locked = $derived(!status.value.writable);
+	let note = $state('');
+	function blocked(): boolean {
+		if (!locked) return false;
+		note = lockMessage(status.value);
+		return true;
+	}
+
 	async function toggleFavorite() {
-		if (favPending) return;
+		if (favPending || blocked()) return;
+		note = '';
 		favPending = true;
 		const prev = favorited;
 		favorited = !prev;
 		try {
 			const res = await fetch(`/api/memes/${item.id}/favorite`, { method: 'POST' });
-			if (!res.ok) throw new Error(String(res.status));
+			if (!res.ok) {
+				favorited = prev;
+				note = await apiErrorMessage(res, '');
+				return;
+			}
 			favorited = ((await res.json()) as { favorited: boolean }).favorited;
 		} catch {
 			favorited = prev;
@@ -70,8 +88,14 @@
 		(s) => {
 			score = s.score;
 			userVote = s.userVote;
-		}
+		},
+		(message) => (note = message)
 	);
+	function castVote(dir: 1 | -1) {
+		if (blocked()) return;
+		note = '';
+		void vote(dir);
+	}
 </script>
 
 <article class="card">
@@ -131,6 +155,8 @@
 			class:on={favorited}
 			aria-label={favorited ? 'Remove favorite' : 'Save as favorite'}
 			aria-pressed={favorited}
+			aria-disabled={locked ? 'true' : undefined}
+			title={locked ? lockMessage(status.value) : undefined}
 			onclick={toggleFavorite}
 			><Star size={20} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true" /></button
 		>
@@ -170,7 +196,9 @@
 				class:active={userVote === 1}
 				aria-label="Upvote"
 				aria-pressed={userVote === 1}
-				onclick={() => vote(1)}
+				aria-disabled={locked ? 'true' : undefined}
+				title={locked ? lockMessage(status.value) : undefined}
+				onclick={() => castVote(1)}
 				><ArrowBigUp
 					size={26}
 					fill={userVote === 1 ? 'currentColor' : 'none'}
@@ -184,7 +212,9 @@
 				class:active={userVote === -1}
 				aria-label="Downvote"
 				aria-pressed={userVote === -1}
-				onclick={() => vote(-1)}
+				aria-disabled={locked ? 'true' : undefined}
+				title={locked ? lockMessage(status.value) : undefined}
+				onclick={() => castVote(-1)}
 				><ArrowBigDown
 					size={26}
 					fill={userVote === -1 ? 'currentColor' : 'none'}
@@ -193,6 +223,7 @@
 			>
 		</div>
 	</div>
+	{#if note}<p class="error" role="alert">{note}</p>{/if}
 </article>
 
 <style>
@@ -370,6 +401,17 @@
 
 	.arrow.down.active {
 		color: var(--down);
+	}
+
+	[aria-disabled='true'] {
+		opacity: 0.5;
+	}
+
+	.error {
+		margin: 0;
+		padding: 0 12px 10px;
+		color: var(--down);
+		font-size: 13px;
 	}
 
 	.score {

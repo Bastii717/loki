@@ -5,6 +5,7 @@
 	import Pencil from 'lucide-svelte/icons/pencil';
 	import Save from 'lucide-svelte/icons/save';
 	import X from 'lucide-svelte/icons/x';
+	import { lockMessage, useStatus } from '../../lib/status-context';
 
 	let {
 		title,
@@ -22,9 +23,16 @@
 	let draft = $state('');
 	let submitted = $state(false);
 
+	// While writes are locked the save stays in the DOM (focusable, with the reason as title);
+	// saving shows the reason in the error line instead of posting.
+	const status = useStatus();
+	const locked = $derived(!status.value.writable);
+	let lockNote = $state('');
+
 	function openEditor() {
 		draft = data.markdown ?? '';
 		submitted = false;
+		lockNote = '';
 		editing = true;
 	}
 </script>
@@ -50,7 +58,12 @@
 		<form
 			method="POST"
 			action="?/save"
-			use:enhance={() => {
+			use:enhance={({ cancel }) => {
+				lockNote = locked ? lockMessage(status.value) : '';
+				if (locked) {
+					cancel();
+					return;
+				}
 				submitted = true;
 				return async ({ result, update }) => {
 					await update({ reset: false });
@@ -60,9 +73,18 @@
 		>
 			<label class="sr-only" for="markdown">{title} (Markdown)</label>
 			<textarea id="markdown" name="markdown" rows="16" bind:value={draft}></textarea>
-			{#if submitted && form?.error}<p class="error" role="alert">{form.error}</p>{/if}
+			{#if lockNote}
+				<p class="error" role="alert">{lockNote}</p>
+			{:else if submitted && form?.error}
+				<p class="error" role="alert">{form.error}</p>
+			{/if}
 			<div class="actions">
-				<button type="submit" class="primary">
+				<button
+					type="submit"
+					class="primary"
+					aria-disabled={locked ? 'true' : undefined}
+					title={locked ? lockMessage(status.value) : undefined}
+				>
 					<Save size={16} aria-hidden="true" /> Save
 				</button>
 				<button type="button" onclick={() => (editing = false)}>
@@ -124,6 +146,9 @@
 		color: var(--text);
 		background: var(--surface);
 		cursor: pointer;
+	}
+	button[aria-disabled='true'] {
+		opacity: 0.5;
 	}
 	button.primary {
 		background: var(--accent);

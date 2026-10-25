@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import X from 'lucide-svelte/icons/x';
 	import { onMount } from 'svelte';
+	import { lockMessage, useStatus } from '../../lib/status-context';
 	import type { ActionData, PageData } from './$types';
 
 	let { form, data }: { form: ActionData; data: PageData } = $props();
@@ -27,6 +28,12 @@
 	let suggestions: string[] = $state([]);
 	let suggestTimer: ReturnType<typeof setTimeout> | undefined;
 	let suggestSeq = 0;
+
+	// While writes are locked the submit stays in the DOM (focusable, with the reason as title);
+	// submitting shows the reason in the error line instead of posting.
+	const status = useStatus();
+	const locked = $derived(!status.value.writable);
+	let lockNote = $state('');
 
 	// The tab bar is hidden here, so the header's close control is the only way out. It goes back in
 	// history when the user came from inside the app, and to the feed on a direct entry (PWA share
@@ -157,7 +164,12 @@
 	<form
 		method="POST"
 		enctype="multipart/form-data"
-		use:enhance={({ formData }) => {
+		use:enhance={({ formData, cancel }) => {
+			lockNote = locked ? lockMessage(status.value) : '';
+			if (locked) {
+				cancel();
+				return;
+			}
 			// FormData is built before this callback runs, so a still-pending tag must be appended here
 			const pending = tagInput.trim() ? addTag(tagInput) : undefined;
 			if (pending) formData.append('tag', pending);
@@ -168,8 +180,8 @@
 			};
 		}}
 	>
-		{#if form?.message}
-			<p class="error" role="alert">{form.message}</p>
+		{#if lockNote || form?.message}
+			<p class="error" role="alert">{lockNote || form?.message}</p>
 		{/if}
 
 		<label
@@ -250,7 +262,13 @@
 			<span>Spoiler</span>
 		</label>
 
-		<button class="submit" type="submit" disabled={submitting}>
+		<button
+			class="submit"
+			type="submit"
+			disabled={submitting}
+			aria-disabled={locked ? 'true' : undefined}
+			title={locked ? lockMessage(status.value) : undefined}
+		>
 			{submitting ? 'Posting…' : 'Post a meme'}
 		</button>
 	</form>
@@ -416,6 +434,9 @@
 		background: var(--accent);
 		color: var(--accent-text);
 		cursor: pointer;
+	}
+	.submit[aria-disabled='true'] {
+		opacity: 0.5;
 	}
 	.submit:hover {
 		filter: brightness(1.08);

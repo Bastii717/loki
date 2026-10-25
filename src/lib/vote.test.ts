@@ -56,6 +56,38 @@ describe('createVoter', () => {
 		expect(t.get()).toEqual({ score: 3, userVote: 0 });
 	});
 
+	it('reports the message of a 503 and rolls back', async () => {
+		vi.stubGlobal('fetch', () =>
+			Promise.resolve(Response.json({ message: 'Posting is paused.' }, { status: 503 }))
+		);
+		let state: VoteState = { score: 3, userVote: 0 };
+		const errors: string[] = [];
+		const vote = createVoter(
+			() => 7,
+			() => state,
+			(s) => {
+				state = s;
+			},
+			(m) => errors.push(m)
+		);
+		await vote(1);
+		expect(state).toEqual({ score: 3, userVote: 0 });
+		expect(errors).toEqual(['Posting is paused.']);
+	});
+
+	it('stays silent for other failures', async () => {
+		vi.stubGlobal('fetch', () => Promise.resolve(new Response('no', { status: 500 })));
+		const errors: string[] = [];
+		const vote = createVoter(
+			() => 7,
+			() => ({ score: 3, userVote: 0 }),
+			() => {},
+			(m) => errors.push(m)
+		);
+		await vote(1);
+		expect(errors).toEqual([]);
+	});
+
 	it('rolls back when the request fails', async () => {
 		const t = setup({ score: 3, userVote: -1 }, (() =>
 			Promise.reject(new Error('offline'))) as typeof fetch);
