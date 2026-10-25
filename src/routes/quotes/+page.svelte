@@ -34,13 +34,13 @@
 				body: JSON.stringify({ value })
 			});
 			if (!res.ok) {
-				failure = await apiErrorMessage(res, 'Abstimmen fehlgeschlagen.');
+				failure = await apiErrorMessage(res, 'Voting failed.');
 				return;
 			}
 			const result: { score: number; userVote: 1 | -1 | 0 } = await res.json();
 			items = items.map((x) => (x.id === id ? { ...x, ...result } : x));
 		} catch {
-			failure = 'Abstimmen fehlgeschlagen.';
+			failure = 'Voting failed.';
 		} finally {
 			busy = false;
 		}
@@ -55,7 +55,7 @@
 			confirmingId = null;
 			await invalidateAll();
 		} catch {
-			failure = 'Löschen fehlgeschlagen.';
+			failure = 'Deleting failed.';
 		} finally {
 			busy = false;
 		}
@@ -74,20 +74,20 @@
 			name="text"
 			rows="3"
 			maxlength={data.limits.text}
-			placeholder="Zitat"
-			aria-label="Zitat"
+			placeholder="Quote"
+			aria-label="Quote"
 			required
 			value={form?.text ?? ''}></textarea>
 		<div class="row">
 			<input
 				name="author"
 				maxlength={data.limits.author}
-				placeholder="Wer hat das gesagt?"
-				aria-label="Wer hat das gesagt?"
+				placeholder="Who said that?"
+				aria-label="Who said that?"
 				required
 				value={form?.author ?? ''}
 			/>
-			<button type="submit" class="send" aria-label="Zitat hinzufügen"><Send size={18} /></button>
+			<button type="submit" class="send" aria-label="Add quote"><Send size={18} /></button>
 		</div>
 		{#if form?.error}<p class="error" role="alert">{form.error}</p>{/if}
 	</form>
@@ -95,35 +95,35 @@
 	{#if failure}<p class="error" role="alert">{failure}</p>{/if}
 
 	{#if items.length === 0}
-		<p class="empty">Noch keine Zitate. Sei der Erste!</p>
+		<p class="empty">No quotes yet. Be the first!</p>
 	{:else}
 		<ul>
 			{#each items as q (q.id)}
 				<li class="card">
 					<div class="body">
 						{#if q.text === null}
-							<p class="review"><EyeOff size={14} aria-hidden="true" /> Wird geprüft</p>
+							<p class="review"><EyeOff size={14} aria-hidden="true" /> Under review</p>
 						{:else}
 							{#if q.underReview}<UnderReviewBadge />{/if}
-							<blockquote>„{q.text}“</blockquote>
+							<blockquote>“{q.text}”</blockquote>
 							<p class="author">— {q.author}</p>
 						{/if}
 						{#if data.canModerate}
 							{#if confirmingId === q.id}
 								<div class="confirm">
-									<span>Zitat wirklich löschen?</span>
+									<span>Really delete this quote?</span>
 									<button type="button" class="danger" disabled={busy} onclick={() => remove(q.id)}>
-										<Check size={16} /> Löschen
+										<Check size={16} /> Delete
 									</button>
 									<button type="button" onclick={() => (confirmingId = null)}>
-										<X size={16} /> Abbrechen
+										<X size={16} /> Cancel
 									</button>
 								</div>
 							{:else}
 								<button
 									type="button"
 									class="icon"
-									aria-label="Zitat löschen"
+									aria-label="Delete quote"
 									onclick={() => (confirmingId = q.id)}
 								>
 									<Trash2 size={16} />
@@ -137,7 +137,7 @@
 							type="button"
 							class="icon up"
 							class:active={q.userVote === 1}
-							aria-label="Positiv bewerten"
+							aria-label="Upvote"
 							aria-pressed={q.userVote === 1}
 							disabled={busy}
 							onclick={() => vote(q.id, 1)}
@@ -149,7 +149,7 @@
 							type="button"
 							class="icon down"
 							class:active={q.userVote === -1}
-							aria-label="Negativ bewerten"
+							aria-label="Downvote"
 							aria-pressed={q.userVote === -1}
 							disabled={busy}
 							onclick={() => vote(q.id, -1)}

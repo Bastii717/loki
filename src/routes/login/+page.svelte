@@ -5,13 +5,13 @@
 
 	const messages: Record<string, string> = {
 		no_access: NO_ACCESS_MESSAGE,
-		failed: 'Anmeldung fehlgeschlagen. Bitte versuche es erneut.'
+		failed: 'Sign-in failed. Please try again.'
 	};
 	const message = $derived(data.error ? (messages[data.error] ?? messages.failed) : null);
 </script>
 
 <svelte:head>
-	<title>Anmelden · Loki</title>
+	<title>Sign in · Loki</title>
 </svelte:head>
 
 <main>
@@ -29,12 +29,12 @@
 			/>
 		</svg>
 		<h1>Loki</h1>
-		<p class="tagline">Internes Meme-Board</p>
+		<p class="tagline">The team's meme board</p>
 		{#if message}
 			<p class="error" role="alert">{message}</p>
 		{/if}
 		<form method="POST">
-			<button type="submit">Mit Authentik anmelden</button>
+			<button type="submit">Sign in with Authentik</button>
 		</form>
 	</section>
 </main>

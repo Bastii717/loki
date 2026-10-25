@@ -8,7 +8,6 @@
 	/** `badge`: open moderation cases, only passed for moderators/admins; shown as a dot-count on Profile. */
 	let { pathname, badge = 0 }: { pathname: string; badge?: number } = $props();
 
-	// Discover, Quotes and Profile arrive in later tasks; their links 404 until then.
 	const left = [
 		{ href: '/', label: 'Feed', icon: House },
 		{ href: '/discover', label: 'Discover', icon: Compass }

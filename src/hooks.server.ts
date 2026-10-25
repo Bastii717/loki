@@ -69,7 +69,7 @@ function retryAfterSeconds(method: string, path: string, userId: number): number
 /**
  * 429 for a `use:enhance` form action. The client's `deserialize` only understands the
  * ActionResult JSON (`data` is devalue-encoded), so a plain-text body would surface as a
- * generic error instead of the German message in the form's error slot.
+ * generic error instead of the message in the form's error slot.
  */
 function actionRateLimited(retryAfter: number): Response {
 	return json(

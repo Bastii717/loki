@@ -23,7 +23,7 @@ export interface FeedItem {
 	viewCount: number;
 	blurred: 'nsfw' | 'spoiler' | null;
 	uploader: string;
-	/** The viewer uploaded this meme (never offer "Melden" on it). */
+	/** The viewer uploaded this meme (never offer "Report" on it). */
 	mine: boolean;
 	createdAt: string;
 	/**

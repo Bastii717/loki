@@ -1,5 +1,5 @@
 /**
- * The German message the API sent with a rejected write (`{message}`, e.g. the timeout notice on
+ * The user-facing message the API sent with a rejected write (`{message}`, e.g. the timeout notice on
  * 403), or `fallback` for anything else. Only 403 carries user-facing text; other bodies are
  * technical English and stay hidden.
  */

@@ -5,4 +5,4 @@
 	let { data, form }: PageProps = $props();
 </script>
 
-<ContentPage title="Regeln" {data} {form} />
+<ContentPage title="Rules" {data} {form} />

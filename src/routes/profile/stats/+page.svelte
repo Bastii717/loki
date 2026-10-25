@@ -50,7 +50,7 @@
 </script>
 
 <svelte:head>
-	<title>Statistiken · Loki</title>
+	<title>Stats · Loki</title>
 </svelte:head>
 
 {#snippet ranking(
@@ -61,7 +61,7 @@
 	<section class="card">
 		<h2>{title}</h2>
 		{#if rows.length === 0}
-			<p class="empty">Noch keine Daten.</p>
+			<p class="empty">No data yet.</p>
 		{:else}
 			<ol class="rank">
 				{#each rows as row, i (i)}
@@ -86,20 +86,19 @@
 {/snippet}
 
 <header class="top">
-	<a href={resolve('/profile')} class="back" aria-label="Zurück zum Profil"
-		><ArrowLeft size={22} /></a
+	<a href={resolve('/profile')} class="back" aria-label="Back to profile"><ArrowLeft size={22} /></a
 	>
-	<h1>Statistiken</h1>
+	<h1>Stats</h1>
 </header>
 
 <main>
 	<section class="card">
-		<h2>Uploads pro Woche</h2>
+		<h2>Uploads per week</h2>
 		<figure>
 			<svg
 				viewBox="0 0 {W} {H}"
 				role="img"
-				aria-label="Uploads pro Woche, letzte 8 Wochen. {weekSummary}"
+				aria-label="Uploads per week, last 8 weeks. {weekSummary}"
 			>
 				<line class="base" x1="0" x2={W} y1={PAD_TOP + plotH} y2={PAD_TOP + plotH} />
 				{#each weekBars as b (b.week)}
@@ -109,7 +108,7 @@
 							d="M{b.x},{b.y + b.h} V{b.y + 4} a4,4 0 0 1 4,-4 h{barW - 8} a4,4 0 0 1 4,4 V{b.y +
 								b.h} Z"
 						>
-							<title>{b.week}: {b.count} Uploads</title>
+							<title>{b.week}: {b.count} uploads</title>
 						</path>
 					{/if}
 					{#if b.count > 0}
@@ -119,8 +118,8 @@
 				{/each}
 			</svg>
 			<table class="sr">
-				<caption>Uploads pro Woche</caption>
-				<thead><tr><th>Woche</th><th>Uploads</th></tr></thead>
+				<caption>Uploads per week</caption>
+				<thead><tr><th>Week</th><th>Uploads</th></tr></thead>
 				<tbody>
 					{#each data.uploadsPerWeek as w (w.week)}
 						<tr><td>{w.week}</td><td>{w.count}</td></tr>
@@ -130,9 +129,9 @@
 		</figure>
 	</section>
 
-	{@render ranking('Top-Uploader', uploaderRows, 'Uploads')}
-	{@render ranking('Top-Memes', memeRows, 'Punkte')}
-	{@render ranking('Top-Tags', tagRows, 'Memes')}
+	{@render ranking('Top uploaders', uploaderRows, 'uploads')}
+	{@render ranking('Top memes', memeRows, 'points')}
+	{@render ranking('Top tags', tagRows, 'memes')}
 </main>
 
 <style>

@@ -14,7 +14,7 @@
 	let { data }: PageProps = $props();
 
 	const sorts = [
-		{ key: 'new', label: 'Neu', icon: Clock },
+		{ key: 'new', label: 'New', icon: Clock },
 		{ key: 'hot', label: 'Hot', icon: Flame },
 		{ key: 'hof', label: 'Hall of Fame', icon: Trophy }
 	] as const;
@@ -85,15 +85,15 @@
 	<div class="actions">
 		<ThemeToggle />
 		<form method="POST" action="/logout">
-			<button type="submit" class="logout" title="Angemeldet als {data.user?.username}">
-				Abmelden
+			<button type="submit" class="logout" title="Signed in as {data.user?.username}">
+				Sign out
 			</button>
 		</form>
 	</div>
 </header>
 
 <main class="feed">
-	<nav class="filters" aria-label="Sortierung">
+	<nav class="filters" aria-label="Sort">
 		{#each sorts as s (s.key)}
 			<a
 				href="{resolve('/')}{feedQuery(s.key, data.tag)}"
@@ -108,7 +108,7 @@
 		<p class="active-tag">
 			<span class="chip tag">
 				#{data.tag}
-				<a href="{resolve('/')}{feedQuery(data.sort, null)}" aria-label="Tag-Filter entfernen"
+				<a href="{resolve('/')}{feedQuery(data.sort, null)}" aria-label="Remove tag filter"
 					><X size={14} aria-hidden="true" /></a
 				>
 			</span>
@@ -117,7 +117,7 @@
 
 	{#if items.length === 0}
 		<p class="empty">
-			{data.tag ? `Keine Memes mit #${data.tag}.` : 'Noch keine Memes — lade das erste hoch!'}
+			{data.tag ? `No memes tagged #${data.tag}.` : 'No memes yet — upload the first one!'}
 		</p>
 	{:else}
 		<div class="list">
@@ -130,15 +130,13 @@
 	{#if nextCursor}
 		<div class="more" bind:this={sentinel}>
 			{#if failed}
-				<button type="button" class="retry" onclick={loadMore}>
-					Laden fehlgeschlagen — Erneut versuchen
-				</button>
+				<button type="button" class="retry" onclick={loadMore}> Loading failed — try again </button>
 			{:else}
-				<span class="muted">Lade mehr …</span>
+				<span class="muted">Loading more …</span>
 			{/if}
 		</div>
 	{:else if items.length > 0}
-		<p class="end muted">Das war's — du bist am Ende.</p>
+		<p class="end muted">That's everything — you've hit the bottom.</p>
 	{/if}
 </main>
 

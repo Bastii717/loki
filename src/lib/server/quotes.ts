@@ -35,7 +35,7 @@ export interface QuoteItem {
 	text: string | null;
 	author: string;
 	underReview: boolean;
-	/** The viewer submitted this quote (never offer "Melden" on it). */
+	/** The viewer submitted this quote (never offer "Report" on it). */
 	mine: boolean;
 	createdAt: string;
 	score: number;

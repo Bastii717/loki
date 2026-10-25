@@ -18,15 +18,15 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 export const actions: Actions = {
 	save: async ({ locals, request }) => {
-		if (!locals.user) error(401, 'Nicht angemeldet');
+		if (!locals.user) error(401, 'Not signed in');
 		const markdown = String((await request.formData()).get('markdown') ?? '');
 		if (markdown.length > MAX_CONTENT_LENGTH) {
-			return fail(400, { error: 'Der Text ist zu lang.', markdown });
+			return fail(400, { error: 'That text is too long.', markdown });
 		}
 		try {
 			await saveContent(locals.user, 'faq', markdown);
 		} catch (e) {
-			if (e instanceof ContentPermissionError) error(403, 'Nur Admins dürfen das bearbeiten');
+			if (e instanceof ContentPermissionError) error(403, 'Only admins can edit this');
 			if (e instanceof TimeoutActiveError) return timeoutFail(e, { markdown });
 			throw e;
 		}
