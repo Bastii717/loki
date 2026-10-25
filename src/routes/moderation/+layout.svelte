@@ -71,7 +71,8 @@
 
 	.tabs {
 		position: sticky;
-		top: 0;
+		/* below the status banner strip, when there is one */
+		top: var(--banners-height, 0px);
 		z-index: 5;
 		display: flex;
 		gap: 4px;

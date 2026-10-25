@@ -19,6 +19,11 @@
 		}
 	});
 
+	// The banner strip is in flow and sticky; pages offset their sticky headers (and Discover its
+	// full-height container) by its measured height through `--banners-height`.
+	let bannersHeight = $state(0);
+	const showBanners = $derived(Boolean(data.status.message || data.activeTimeout));
+
 	// the toggle only lives on the feed page, the meta must follow the theme on every page
 	onMount(watchThemeColor);
 
@@ -30,9 +35,9 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<!-- One fixed strip: the status banner first, the timeout banner below it, so neither hides the other. -->
-{#if data.status.message || data.activeTimeout}
-	<div class="banners">
+<!-- One sticky strip: the status banner first, the timeout banner below it, so neither hides the other. -->
+{#if showBanners}
+	<div class="banners" bind:clientHeight={bannersHeight}>
 		<StatusBanner state={data.status.state} message={data.status.message} />
 		{#if data.activeTimeout}
 			<TimeoutBanner until={data.activeTimeout.until} reason={data.activeTimeout.reason} />
@@ -40,7 +45,9 @@
 	</div>
 {/if}
 
-{@render children()}
+<div class="shell" style:--banners-height="{showBanners ? bannersHeight : 0}px">
+	{@render children()}
+</div>
 
 {#if showTabs}
 	<TabBar pathname={page.url.pathname} badge={data.openCases ?? 0} />
@@ -48,10 +55,8 @@
 
 <style>
 	.banners {
-		position: fixed;
+		position: sticky;
 		top: 0;
-		left: 0;
-		right: 0;
 		z-index: 40;
 		padding-top: env(safe-area-inset-top);
 		background: var(--surface-raised);

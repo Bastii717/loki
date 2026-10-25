@@ -5,7 +5,6 @@
 	import Plus from 'lucide-svelte/icons/plus';
 	import Quote from 'lucide-svelte/icons/quote';
 	import User from 'lucide-svelte/icons/user';
-	import { lockMessage, useStatus } from '../status-context';
 	/** `badge`: open moderation cases, only passed for moderators/admins; shown as a dot-count on Profile. */
 	let { pathname, badge = 0 }: { pathname: string; badge?: number } = $props();
 
@@ -17,10 +16,6 @@
 		{ href: '/quotes', label: 'Quotes', icon: Quote },
 		{ href: '/profile', label: 'Profile', icon: User }
 	];
-
-	// The link stays reachable: the upload page itself explains the lock and shows a disabled form.
-	const status = useStatus();
-	const locked = $derived(!status.value.writable);
 
 	const isActive = (href: string) =>
 		href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
@@ -37,12 +32,7 @@
 			<span class="label">{tab.label}</span>
 		</a>
 	{/each}
-	<a
-		href={resolve('/upload')}
-		class="fab"
-		aria-label="Post a meme"
-		aria-disabled={locked ? 'true' : undefined}
-		title={locked ? lockMessage(status.value) : undefined}
+	<a href={resolve('/upload')} class="fab" aria-label="Post a meme"
 		><Plus size={26} strokeWidth={2.5} aria-hidden="true" /></a
 	>
 	{#each right as tab (tab.href)}
@@ -132,9 +122,5 @@
 		background: var(--accent);
 		color: var(--accent-text);
 		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
-	}
-
-	.fab[aria-disabled='true'] {
-		opacity: 0.5;
 	}
 </style>
