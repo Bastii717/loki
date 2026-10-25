@@ -12,6 +12,9 @@ import { resetDb, setupDb, testUser } from './lib/server/db/test-utils';
 // @ts-expect-error kit's internal module ships no declarations
 import { init_transport } from '../node_modules/@sveltejs/kit/src/runtime/app/internal/transport.js';
 import { resetRateLimits } from './lib/server/rate-limit';
+import { configureMaintenance, resetMaintenance } from './lib/server/maintenance';
+import { userWithSession } from './lib/server/moderation-test-utils';
+import { configureReadiness, resetReadiness, setMigrated } from './lib/server/readiness';
 import { handle, mediaOrigin } from './hooks.server';
 
 beforeAll(async () => {
@@ -20,6 +23,11 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
 	resetRateLimits();
+	resetReadiness();
+	resetMaintenance();
+	setMigrated(true);
+	// the readiness probes would hit the real database and bucket; these tests steer them by hand
+	configureReadiness({ dbProbe: async () => true, storageProbe: async () => true });
 	await resetDb();
 });
 
@@ -289,5 +297,194 @@ describe('429 responses', () => {
 		expect(res.status).toBe(429);
 		expect(res.headers.get('retry-after')).toBe('60');
 		expect(await res.json()).toEqual({ error: MESSAGE });
+	});
+});
+
+describe('outage page', () => {
+	const TITLE = 'Loki is taking a break';
+
+	// /healthz and /readyz are routes of their own; here `resolve` stands in for them
+	const readyz = (ready: boolean) => new Response(null, { status: ready ? 200 : 503 });
+
+	async function expectOutageWithProbes() {
+		const page = await run('/').response;
+		expect(page.status).toBe(503);
+		expect(page.headers.get('content-type')).toContain('text/html');
+		expect(page.headers.get('retry-after')).toBe('30');
+		expect(await page.text()).toContain(TITLE);
+		const api = run('/api/feed');
+		expect((await api.response).status).toBe(503);
+		expect(api.calls()).toBe(0);
+		const healthz = run('/healthz');
+		expect((await healthz.response).status).toBe(200);
+		expect(healthz.calls()).toBe(1);
+		const ready = run('/readyz', undefined, readyz(false));
+		expect((await ready.response).status).toBe(503);
+		expect(ready.calls()).toBe(1);
+	}
+
+	it('serves the outage page while the database is down', async () => {
+		configureReadiness({ dbProbe: async () => false });
+		await expectOutageWithProbes();
+	});
+
+	it('serves the outage page while the migrations have not run', async () => {
+		setMigrated(false);
+		await expectOutageWithProbes();
+	});
+
+	it('serves the outage page before the session is resolved (login and callback too)', async () => {
+		configureReadiness({ dbProbe: async () => false });
+		const { session } = await userWithSession();
+		for (const path of ['/login', '/auth/callback', '/memes']) {
+			const r = run(path, session);
+			expect((await r.response).status).toBe(503);
+			expect(r.calls()).toBe(0);
+			expect(r.event.locals.user).toBeUndefined();
+		}
+	});
+
+	it('leaves the public assets alone', async () => {
+		configureReadiness({ dbProbe: async () => false });
+		for (const path of [
+			'/maintenance.html',
+			'/favicon.ico',
+			'/manifest.webmanifest',
+			'/robots.txt',
+			'/icons/icon-192.png',
+			'/_app/immutable/x.js',
+			'/_app/version.json'
+		]) {
+			const r = run(path);
+			expect((await r.response).status).toBe(200);
+			expect(r.calls()).toBe(1);
+		}
+	});
+
+	it('treats an unreadable maintenance row as an outage, not a 500', async () => {
+		const { session } = await userWithSession();
+		configureMaintenance({
+			load: () => {
+				throw new Error('relation missing');
+			}
+		});
+		const res = await run('/', session).response;
+		expect(res.status).toBe(503);
+		expect(await res.text()).toContain(TITLE);
+	});
+});
+
+describe('maintenance write guard', () => {
+	const MAINTENANCE_TEXT = 'Loki is under maintenance. Reading works, posting is paused.';
+	const STARTING_TEXT =
+		'Loki is still starting up. Posting, voting and commenting are back in a moment.';
+	const enable = () =>
+		configureMaintenance({
+			load: async () => ({ enabled: true, message: '', startsAt: null, until: null })
+		});
+
+	it('locks member writes with the three response shapes', async () => {
+		enable();
+		const { session } = await userWithSession('member');
+
+		const api = run('/api/memes/1/vote', session, new Response('ok'), 'POST');
+		const apiRes = await api.response;
+		expect(apiRes.status).toBe(503);
+		expect(apiRes.headers.get('retry-after')).toBe('60');
+		expect(apiRes.headers.get('content-type')).toContain('application/json');
+		expect(await apiRes.json()).toEqual({ message: MAINTENANCE_TEXT });
+		expect(api.calls()).toBe(0);
+
+		const action = await run('/upload', session, new Response('ok'), 'POST', {
+			'x-sveltekit-action': 'true'
+		}).response;
+		expect(action.status).toBe(503);
+		expect(action.headers.get('retry-after')).toBe('60');
+		expect(deserialize(await action.text())).toEqual({
+			type: 'failure',
+			status: 503,
+			data: { message: MAINTENANCE_TEXT, error: MAINTENANCE_TEXT }
+		});
+
+		const form = await run('/quotes', session, new Response('ok'), 'POST').response;
+		expect(form.status).toBe(503);
+		expect(form.headers.get('retry-after')).toBe('60');
+		expect(form.headers.get('content-type')).toContain('text/plain');
+		expect(await form.text()).toBe(MAINTENANCE_TEXT);
+	});
+
+	it('locks PATCH and DELETE but not reads', async () => {
+		enable();
+		const { session } = await userWithSession('member');
+		for (const method of ['PATCH', 'DELETE']) {
+			const res = await run('/api/memes/1', session, new Response('ok'), method).response;
+			expect(res.status).toBe(503);
+		}
+		const read = run('/api/feed', session);
+		expect((await read.response).status).toBe(200);
+		expect(read.calls()).toBe(1);
+	});
+
+	it('lets an admin write during maintenance', async () => {
+		enable();
+		const { session } = await userWithSession('admin');
+		const r = run('/api/memes/1/vote', session, new Response('ok'), 'POST');
+		const res = await r.response;
+		expect(res.status).toBe(200);
+		expect(r.calls()).toBe(1);
+	});
+
+	it('locks moderators like members', async () => {
+		enable();
+		const { session } = await userWithSession('moderator');
+		const res = await run('/api/memes/1/vote', session, new Response('ok'), 'POST').response;
+		expect(res.status).toBe(503);
+	});
+
+	it('locks admins too while storage is not ready', async () => {
+		configureReadiness({ storageProbe: async () => false });
+		const { session } = await userWithSession('admin');
+		const res = await run('/api/memes/1/vote', session, new Response('ok'), 'POST').response;
+		expect(res.status).toBe(503);
+		expect(await res.json()).toEqual({ message: STARTING_TEXT });
+	});
+
+	it('keeps these paths writable during maintenance', async () => {
+		enable();
+		// a moderator is locked like a member but may reach /moderation
+		const { session } = await userWithSession('moderator');
+		for (const path of [
+			'/logout',
+			'/api/memes/1/seen',
+			'/share',
+			'/moderation/maintenance',
+			'/moderation/maintenance?/off'
+		]) {
+			const r = run(path, session, new Response('ok'), 'POST');
+			expect((await r.response).status, path).not.toBe(503);
+			expect(r.calls(), path).toBe(1);
+		}
+	});
+
+	it('matches the exemptions exactly', async () => {
+		enable();
+		const { session } = await userWithSession('member');
+		for (const path of ['/api/memes/1/seen/x', '/api/memes/x/seen', '/logout/x', '/share/x']) {
+			const res = await run(path, session, new Response('ok'), 'POST').response;
+			expect(res.status, path).toBe(503);
+		}
+	});
+
+	it('does not guard unauthenticated requests (the auth guard answers them)', async () => {
+		enable();
+		const res = await run('/api/memes/1/vote', undefined, new Response('ok'), 'POST').response;
+		expect(res.status).toBe(401);
+	});
+
+	it('writes normally when the switch is off', async () => {
+		const { session } = await userWithSession('member');
+		const r = run('/api/memes/1/vote', session, new Response('ok'), 'POST');
+		expect((await r.response).status).toBe(200);
+		expect(r.calls()).toBe(1);
 	});
 });
