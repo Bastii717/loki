@@ -5,6 +5,18 @@
 	const heading = $derived(
 		page.status === 404 ? 'Seite nicht gefunden' : 'Da ist was schiefgelaufen'
 	);
+
+	// SvelteKit fills in English defaults when nothing threw a message of its own; everything the
+	// app throws itself (`error(404, 'Meme nicht gefunden')`) is already German and shown as is.
+	const GENERIC: Record<string, string> = {
+		'Not Found': 'Diese Adresse gibt es nicht oder nicht mehr.',
+		'Internal Error': 'Bitte versuche es später noch einmal.',
+		'Unknown Error': 'Bitte versuche es später noch einmal.'
+	};
+	const message = $derived.by(() => {
+		const raw = page.error?.message ?? '';
+		return GENERIC[raw] ?? raw;
+	});
 </script>
 
 <svelte:head>
@@ -14,7 +26,9 @@
 <main>
 	<p class="status">{page.status}</p>
 	<h1>{heading}</h1>
-	<p class="message">{page.error?.message}</p>
+	{#if message}
+		<p class="message">{message}</p>
+	{/if}
 	<a class="home" href={resolve('/')}>Zur Startseite</a>
 </main>
 

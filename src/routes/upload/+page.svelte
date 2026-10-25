@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { afterNavigate } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import X from 'lucide-svelte/icons/x';
 	import { onMount } from 'svelte';
 	import type { ActionData, PageData } from './$types';
@@ -25,6 +27,20 @@
 	let suggestions: string[] = $state([]);
 	let suggestTimer: ReturnType<typeof setTimeout> | undefined;
 	let suggestSeq = 0;
+
+	// The tab bar is hidden here, so the header's close control is the only way out. It goes back in
+	// history when the user came from inside the app, and to the feed on a direct entry (PWA share
+	// target, bookmark), where there is nothing to go back to.
+	let cameFromApp = $state(false);
+	afterNavigate(({ from }) => {
+		cameFromApp = from !== null;
+	});
+
+	function close(e: MouseEvent) {
+		if (!cameFromApp || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		e.preventDefault();
+		history.back();
+	}
 
 	function setPreview(file: File | undefined) {
 		if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -128,9 +144,16 @@
 
 <svelte:window onpaste={onPaste} />
 
-<main>
-	<h1>Meme posten</h1>
+<svelte:head>
+	<title>Meme posten · Loki</title>
+</svelte:head>
 
+<header class="top">
+	<a href={resolve('/')} class="close" aria-label="Schließen" onclick={close}><X size={22} /></a>
+	<h1>Meme posten</h1>
+</header>
+
+<main>
 	<form
 		method="POST"
 		enctype="multipart/form-data"
@@ -234,14 +257,31 @@
 </main>
 
 <style>
+	.top {
+		position: sticky;
+		top: 0;
+		z-index: 5;
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 6px 8px;
+		background: var(--bg);
+	}
+	.close {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 44px;
+		height: 44px;
+	}
+	h1 {
+		margin: 0;
+		font-size: 18px;
+	}
 	main {
 		max-width: 32rem;
 		margin: 0 auto;
-		padding: 1rem;
-	}
-	h1 {
-		font-size: 1.25rem;
-		margin: 0 0 1rem;
+		padding: 0.25rem 1rem calc(1rem + env(safe-area-inset-bottom));
 	}
 	form {
 		display: flex;
@@ -251,8 +291,8 @@
 	.error {
 		margin: 0;
 		padding: 0.75rem;
-		border-radius: 0.5rem;
-		background: color-mix(in srgb, crimson 25%, transparent);
+		border-radius: var(--radius);
+		background: color-mix(in srgb, var(--down) 18%, transparent);
 	}
 	.hint {
 		margin: -0.5rem 0 0;
@@ -267,20 +307,20 @@
 		justify-content: center;
 		min-height: 12rem;
 		padding: 0.5rem;
-		border: 2px dashed color-mix(in srgb, currentColor 40%, transparent);
-		border-radius: 0.75rem;
+		border: 2px dashed var(--border);
+		border-radius: var(--radius);
 		text-align: center;
 		cursor: pointer;
 		overflow: hidden;
 	}
 	.drop.dragging {
-		border-color: currentColor;
+		border-color: var(--accent);
 	}
 	.drop img,
 	.drop video {
 		max-width: 100%;
 		max-height: 60vh;
-		border-radius: 0.5rem;
+		border-radius: var(--radius);
 	}
 	/* the real input stays in the DOM (form submission, required, camera) but is covered by the label */
 	.drop input[type='file'] {
@@ -299,8 +339,8 @@
 	input[type='text'] {
 		font: inherit;
 		padding: 0.65rem;
-		border-radius: 0.5rem;
-		border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+		border-radius: var(--radius);
+		border: 1px solid var(--border);
 		background: transparent;
 		color: inherit;
 	}
@@ -310,8 +350,8 @@
 		gap: 0.4rem;
 		align-items: center;
 		padding: 0.4rem;
-		border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-		border-radius: 0.5rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
 	}
 	.chips input[type='text'] {
 		flex: 1;
@@ -324,8 +364,9 @@
 		align-items: center;
 		gap: 0.25rem;
 		padding: 0.2rem 0.3rem 0.2rem 0.6rem;
-		border-radius: 999px;
-		background: color-mix(in srgb, currentColor 15%, transparent);
+		border-radius: var(--radius-pill);
+		background: var(--accent-soft);
+		color: var(--accent-soft-text);
 	}
 	.chip button {
 		display: inline-flex;
@@ -350,8 +391,8 @@
 	.suggestions button {
 		font: inherit;
 		padding: 0.4rem 0.7rem;
-		border-radius: 999px;
-		border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+		border-radius: var(--radius-pill);
+		border: 1px solid var(--border);
 		background: none;
 		color: inherit;
 		cursor: pointer;
@@ -371,10 +412,13 @@
 		font-weight: 600;
 		min-height: 3rem;
 		border: 0;
-		border-radius: 0.6rem;
-		background: #6d5efc;
-		color: white;
+		border-radius: var(--radius);
+		background: var(--accent);
+		color: var(--accent-text);
 		cursor: pointer;
+	}
+	.submit:hover {
+		filter: brightness(1.08);
 	}
 	.submit:disabled {
 		opacity: 0.6;

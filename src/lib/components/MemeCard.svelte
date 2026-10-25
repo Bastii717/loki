@@ -5,6 +5,7 @@
 	import ArrowBigUp from 'lucide-svelte/icons/arrow-big-up';
 	import Eye from 'lucide-svelte/icons/eye';
 	import EyeOff from 'lucide-svelte/icons/eye-off';
+	import ImageOff from 'lucide-svelte/icons/image-off';
 	import MessageCircle from 'lucide-svelte/icons/message-circle';
 	import Play from 'lucide-svelte/icons/play';
 	import Star from 'lucide-svelte/icons/star';
@@ -19,6 +20,13 @@
 	let { item, feedIds }: { item: FeedItem; feedIds?: number[] } = $props();
 
 	let revealed = $state(false);
+	// The thumbnail could not be loaded (object gone, media route failed): show a placeholder
+	// instead of an empty box.
+	let broken = $state(false);
+	function watchBroken(img: HTMLImageElement) {
+		// An error fired before hydration is not replayed, so also check the current state.
+		if (img.complete && img.naturalWidth === 0) broken = true;
+	}
 	const memeHref = $derived(resolve('/meme/[id]', { id: String(item.id) }));
 
 	// Client-side nav that hands the feed's id order to the detail view for swipe navigation.
@@ -76,6 +84,16 @@
 		>
 			{#if withheld}
 				<UnderReviewPanel />
+			{:else if broken}
+				<div
+					class="missing"
+					style:aspect-ratio={item.width && item.height
+						? `${item.width} / ${item.height}`
+						: '4 / 3'}
+				>
+					<ImageOff size={28} aria-hidden="true" />
+					<span>Bild nicht verfügbar</span>
+				</div>
 			{:else}
 				<img
 					src={item.thumbUrl}
@@ -86,9 +104,21 @@
 					decoding="async"
 					class:fallback={item.width === null || item.height === null}
 					class:blurred={hidden}
+					onerror={() => (broken = true)}
+					use:watchBroken
 				/>
 			{/if}
 		</a>
+		<!-- Rendered before the badges, star and flag so those stay clickable on top of the overlay. -->
+		{#if hidden}
+			<button type="button" class="reveal" onclick={() => (revealed = true)}>
+				{#if item.blurred === 'nsfw'}
+					<EyeOff size={20} aria-hidden="true" /> Antippen zum Anzeigen
+				{:else}
+					<TriangleAlert size={20} aria-hidden="true" /> Spoiler — Antippen zum Anzeigen
+				{/if}
+			</button>
+		{/if}
 		{#if item.underReview && !withheld}<UnderReviewBadge overlay />{/if}
 		{#if item.kind !== 'image'}
 			<span class="badge">
@@ -105,15 +135,6 @@
 			><Star size={20} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true" /></button
 		>
 		<ReportButton contentType="meme" contentId={item.id} mine={item.mine} variant="overlay" />
-		{#if hidden}
-			<button type="button" class="reveal" onclick={() => (revealed = true)}>
-				{#if item.blurred === 'nsfw'}
-					<EyeOff size={20} aria-hidden="true" /> Antippen zum Anzeigen
-				{:else}
-					<TriangleAlert size={20} aria-hidden="true" /> Spoiler — Antippen zum Anzeigen
-				{/if}
-			</button>
-		{/if}
 	</div>
 
 	<div class="body">
@@ -203,6 +224,18 @@
 	img.blurred {
 		filter: blur(28px);
 		transform: scale(1.1);
+	}
+
+	.missing {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		width: 100%;
+		max-height: 60vh;
+		color: var(--text-muted);
+		font-size: 13px;
 	}
 
 	.fav {
