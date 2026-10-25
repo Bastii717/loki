@@ -27,6 +27,8 @@ export interface StatusView {
 	state: AppState;
 	message: string | null;
 	writable: boolean;
+	/** ISO of the earliest future start or end of the window that changes the state, else null. */
+	nextChangeAt: string | null;
 }
 
 export const MAX_MAINTENANCE_MESSAGE = 300;
@@ -120,11 +122,25 @@ export function resolveState(readiness: Readiness, row: MaintenanceRow, now: Dat
 	return 'maintenance';
 }
 
+/** The earliest `startsAt`/`until` still ahead of `now` for an enabled switch; null when none. */
+export function nextChangeAt(row: MaintenanceRow, now: Date): string | null {
+	if (!row.enabled) return null;
+	const ahead = [row.startsAt, row.until]
+		.filter((d): d is Date => d !== null && d.getTime() > now.getTime())
+		.map((d) => d.getTime());
+	return ahead.length ? new Date(Math.min(...ahead)).toISOString() : null;
+}
+
 /** Admins keep writing during maintenance; moderators count as members. */
 export function canWrite(state: AppState, role: Role | null): boolean {
 	if (state === 'ok' || state === 'announced') return true;
 	if (state === 'maintenance') return role === 'admin';
 	return false;
+}
+
+/** Admin-written text gets a sentence terminator before anything is appended to it. */
+function terminated(text: string): string {
+	return /[.!?…]$/.test(text) ? text : `${text}.`;
 }
 
 /** User-facing text for a state; null when there is nothing to say (`ok`, and `down`: the outage page has its own). */
@@ -136,8 +152,10 @@ export function statusMessage(
 	switch (state) {
 		case 'maintenance': {
 			let text = row.message.trim() || DEFAULT_MAINTENANCE_TEXT;
-			if (row.until) text += ` Back around ${formatDateTime(row.until.toISOString())}.`;
-			if (role === 'admin') text += ` ${ADMIN_ADDENDUM}`;
+			if (row.until) {
+				text = `${terminated(text)} Back around ${formatDateTime(row.until.toISOString())}.`;
+			}
+			if (role === 'admin') text = `${terminated(text)} ${ADMIN_ADDENDUM}`;
 			return text;
 		}
 		case 'announced': {
@@ -159,7 +177,7 @@ export function statusMessage(
  */
 export async function currentStatus(user: SessionUser | null, now?: Date): Promise<StatusView> {
 	const role = user?.role ?? null;
-	const down: StatusView = { state: 'down', message: null, writable: false };
+	const down: StatusView = { state: 'down', message: null, writable: false, nextChangeAt: null };
 	const readiness = await getReadiness();
 	if (!readiness.db || !readiness.migrated) return down;
 	let row: MaintenanceRow;
@@ -168,6 +186,12 @@ export async function currentStatus(user: SessionUser | null, now?: Date): Promi
 	} catch {
 		return down;
 	}
-	const state = resolveState(readiness, row, now ?? clock());
-	return { state, message: statusMessage(state, row, role), writable: canWrite(state, role) };
+	const at = now ?? clock();
+	const state = resolveState(readiness, row, at);
+	return {
+		state,
+		message: statusMessage(state, row, role),
+		writable: canWrite(state, role),
+		nextChangeAt: state === 'announced' || state === 'maintenance' ? nextChangeAt(row, at) : null
+	};
 }

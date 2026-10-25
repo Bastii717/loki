@@ -118,6 +118,23 @@ describe('messages', () => {
 		);
 	});
 
+	it('terminates an unpunctuated admin message before the suffix and the addendum', () => {
+		const until = at('2026-10-24T16:30:00Z');
+		const row = { ...on, message: 'Deploy in progress', until };
+		expect(statusMessage('maintenance', row, 'member')).toBe(
+			'Deploy in progress. Back around 24 Oct 2026, 18:30.'
+		);
+		expect(statusMessage('maintenance', { ...on, message: 'Deploy in progress' }, 'admin')).toBe(
+			'Deploy in progress. You are an admin, so you can still post.'
+		);
+		expect(statusMessage('maintenance', { ...row, message: 'Deploy in progress!' }, 'member')).toBe(
+			'Deploy in progress! Back around 24 Oct 2026, 18:30.'
+		);
+		expect(statusMessage('maintenance', { ...on, message: 'Is it done?' }, 'admin')).toBe(
+			'Is it done? You are an admin, so you can still post.'
+		);
+	});
+
 	it('announced: with and without an end', () => {
 		const startsAt = at('2026-10-24T16:00:00Z');
 		expect(statusMessage('announced', { ...on, startsAt }, 'member')).toBe(
@@ -221,7 +238,12 @@ describe('currentStatus', () => {
 
 	it('ok: null message, writable', async () => {
 		ready();
-		expect(await currentStatus(member)).toEqual({ state: 'ok', message: null, writable: true });
+		expect(await currentStatus(member)).toEqual({
+			state: 'ok',
+			message: null,
+			writable: true,
+			nextChangeAt: null
+		});
 	});
 
 	it('maintenance: members blocked, admins writable with addendum, anonymous blocked', async () => {
@@ -231,12 +253,14 @@ describe('currentStatus', () => {
 		expect(await currentStatus(member)).toEqual({
 			state: 'maintenance',
 			message: text,
-			writable: false
+			writable: false,
+			nextChangeAt: null
 		});
 		expect(await currentStatus(adminUser)).toEqual({
 			state: 'maintenance',
 			message: `${text} You are an admin, so you can still post.`,
-			writable: true
+			writable: true,
+			nextChangeAt: null
 		});
 		expect((await currentStatus(null)).writable).toBe(false);
 	});
@@ -247,6 +271,21 @@ describe('currentStatus', () => {
 		configureMaintenance({ load: async () => row, now: () => NOW });
 		expect((await currentStatus(member)).state).toBe('announced');
 		expect((await currentStatus(member, at('2026-10-24T17:30:00Z'))).state).toBe('maintenance');
+	});
+
+	it('nextChangeAt is the earliest future start or end of the window', async () => {
+		ready();
+		const startsAt = at('2026-10-24T17:00:00Z');
+		const until = at('2026-10-24T19:00:00Z');
+		configureMaintenance({ load: async () => ({ ...on, startsAt, until }), now: () => NOW });
+		expect((await currentStatus(member)).nextChangeAt).toBe(startsAt.toISOString());
+		const during = await currentStatus(member, at('2026-10-24T17:30:00Z'));
+		expect(during.state).toBe('maintenance');
+		expect(during.nextChangeAt).toBe(until.toISOString());
+		configureMaintenance({ load: async () => on });
+		expect((await currentStatus(member)).nextChangeAt).toBeNull();
+		configureMaintenance({ load: async () => ({ ...off, startsAt, until }) });
+		expect((await currentStatus(member)).nextChangeAt).toBeNull();
 	});
 
 	it('not_ready when storage is down', async () => {
@@ -264,7 +303,8 @@ describe('currentStatus', () => {
 		expect(await currentStatus(adminUser)).toEqual({
 			state: 'down',
 			message: null,
-			writable: false
+			writable: false,
+			nextChangeAt: null
 		});
 	});
 

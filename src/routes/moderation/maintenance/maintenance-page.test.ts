@@ -182,7 +182,7 @@ describe('load', () => {
 			until: '2099-12-01T12:00',
 			state: 'maintenance'
 		});
-		expect(data.preview.member).toBe('Database upgrade Back around 1 Dec 2099, 12:00.');
+		expect(data.preview.member).toBe('Database upgrade. Back around 1 Dec 2099, 12:00.');
 		expect(data.preview.admin).toBe(
 			`${data.preview.member} You are an admin, so you can still post.`
 		);

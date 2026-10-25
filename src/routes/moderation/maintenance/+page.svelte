@@ -14,11 +14,17 @@
 		down: 'Down'
 	};
 
-	// Inputs start from the saved switch; after a rejected save they keep what was typed.
-	let enabled = $state(false);
-	let message = $state('');
-	let startsAt = $state('');
-	let until = $state('');
+	// Inputs start from the saved switch (seeded at declaration so the server-rendered page shows
+	// it, and a submit before hydration cannot switch it off); after a rejected save they keep
+	// what was typed. The effect below only follows later updates.
+	// svelte-ignore state_referenced_locally
+	let enabled = $state(form?.error ? form.enabled : data.enabled);
+	// svelte-ignore state_referenced_locally
+	let message = $state(form?.error ? form.message : data.message);
+	// svelte-ignore state_referenced_locally
+	let startsAt = $state(form?.error ? form.startsAt : data.startsAt);
+	// svelte-ignore state_referenced_locally
+	let until = $state(form?.error ? form.until : data.until);
 	let busy = $state(false);
 
 	$effect(() => {

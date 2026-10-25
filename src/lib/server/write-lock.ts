@@ -1,10 +1,16 @@
 import { json, type RequestEvent } from '@sveltejs/kit';
 
 const RETRY_AFTER = '60';
-const EXEMPT_PATHS = new Set(['/logout', '/share', '/moderation/maintenance']);
+const EXEMPT_PATHS = new Set([
+	'/logout',
+	'/login',
+	'/auth/callback',
+	'/share',
+	'/moderation/maintenance'
+]);
 const SEEN_PATH = /^\/api\/memes\/\d+\/seen$/;
 
-/** Paths that keep working while writes are locked: signing out, seen-tracking, the share target and the switch itself. */
+/** Paths that keep working while writes are locked: signing out and in, seen-tracking, the share target and the switch itself. */
 export function isWriteLockExempt(path: string): boolean {
 	return EXEMPT_PATHS.has(path) || SEEN_PATH.test(path);
 }

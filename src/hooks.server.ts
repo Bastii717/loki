@@ -61,6 +61,9 @@ const OUTAGE_EXEMPT_PATHS = new Set([
 const isOutageExempt = (path: string) =>
 	OUTAGE_EXEMPT_PATHS.has(path) || path.startsWith('/icons/') || path.startsWith('/_app/');
 
+/** Liveness and readiness never need a user, and must keep answering when the session lookup cannot (database down). */
+const HEALTH_PATHS = new Set(['/healthz', '/readyz']);
+
 const MODERATION_ROOTS = ['/moderation', '/api/moderation'];
 const isModerationPath = (path: string) =>
 	MODERATION_ROOTS.some((root) => path === root || path.startsWith(`${root}/`));
@@ -155,7 +158,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		return secure(outagePage());
 	}
 
-	const token = event.cookies.get(SESSION_COOKIE);
+	const token = HEALTH_PATHS.has(path) ? undefined : event.cookies.get(SESSION_COOKIE);
 	const session = token ? await resolveSession(token) : null;
 	event.locals.user = session?.user ?? null;
 	if (token && session?.renewed) event.cookies.set(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);

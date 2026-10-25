@@ -1,3 +1,4 @@
+import { invalidate } from '$app/navigation';
 import { getContext } from 'svelte';
 import type { StatusView } from './server/maintenance';
 
@@ -5,7 +6,7 @@ import type { StatusView } from './server/maintenance';
 export const STATUS_KEY = 'loki:status';
 
 const WRITABLE: { readonly value: StatusView } = {
-	value: { state: 'ok', message: null, writable: true }
+	value: { state: 'ok', message: null, writable: true, nextChangeAt: null }
 };
 
 /**
@@ -19,4 +20,9 @@ export function useStatus(): { readonly value: StatusView } {
 /** The text for a locked control: the status message, or a generic line when there is none. */
 export function lockMessage(status: StatusView): string {
 	return status.message ?? 'Posting is paused right now.';
+}
+
+/** Re-reads the status from the server (a tap on a locked control: the window may be over by now). */
+export function refreshStatus(): void {
+	void invalidate('loki:status').catch(() => {});
 }

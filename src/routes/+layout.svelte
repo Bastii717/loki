@@ -1,12 +1,14 @@
 <script lang="ts">
 	import '../app.css';
 	import favicon from '#lib/assets/favicon.svg';
+	import { invalidate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount, setContext } from 'svelte';
 	import StatusBanner from '#lib/components/StatusBanner.svelte';
 	import TabBar from '#lib/components/TabBar.svelte';
 	import TimeoutBanner from '#lib/components/TimeoutBanner.svelte';
 	import { STATUS_KEY } from '../lib/status-context';
+	import { nextRefreshDelay } from '../lib/status-refresh';
 	import { watchThemeColor } from '../lib/theme';
 	import type { LayoutProps } from './$types';
 
@@ -23,6 +25,38 @@
 	// full-height container) by its measured height through `--banners-height`.
 	let bannersHeight = $state(0);
 	const showBanners = $derived(Boolean(data.status.message || data.activeTimeout));
+
+	// While a lock is shown, ask the server again every minute, when the tab becomes visible and
+	// just after the window is due to start or end, so the lock lifts without a reload.
+	$effect(() => {
+		if (data.status.state === 'ok') return;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		let handled: string | null = null;
+		const refresh = () => void invalidate('loki:status').catch(() => {});
+		const schedule = () => {
+			const { state, nextChangeAt } = data.status;
+			// a change instant that was already acted on and is still reported (clock skew) is ignored
+			const delay = nextRefreshDelay(
+				{ state, nextChangeAt: nextChangeAt === handled ? null : nextChangeAt },
+				Date.now()
+			);
+			if (delay === null) return;
+			timer = setTimeout(() => {
+				handled = data.status.nextChangeAt;
+				refresh();
+				schedule();
+			}, delay);
+		};
+		const onVisible = () => {
+			if (document.visibilityState === 'visible') refresh();
+		};
+		schedule();
+		document.addEventListener('visibilitychange', onVisible);
+		return () => {
+			clearTimeout(timer);
+			document.removeEventListener('visibilitychange', onVisible);
+		};
+	});
 
 	// the toggle only lives on the feed page, the meta must follow the theme on every page
 	onMount(watchThemeColor);

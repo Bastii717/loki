@@ -46,15 +46,23 @@ async function probeDb(): Promise<boolean> {
 }
 
 async function probeStorage(): Promise<boolean> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
 	try {
-		const result = await s3Client().send(
-			new HeadObjectCommand({ Bucket: env.S3_BUCKET, Key: PROBE_KEY }),
-			{ abortSignal: AbortSignal.timeout(STORAGE_TIMEOUT_MS) }
-		);
+		// the abort signal asks the SDK to give up; the race is the hard bound if it never does
+		const result = await Promise.race([
+			s3Client().send(new HeadObjectCommand({ Bucket: env.S3_BUCKET, Key: PROBE_KEY }), {
+				abortSignal: AbortSignal.timeout(STORAGE_TIMEOUT_MS)
+			}),
+			new Promise<never>((_, reject) => {
+				timer = setTimeout(() => reject(new Error('storage probe timed out')), STORAGE_TIMEOUT_MS);
+			})
+		]);
 		return classifyStorageOutcome({ status: result.$metadata.httpStatusCode });
 	} catch (e) {
 		const err = e as { name?: string; $metadata?: { httpStatusCode?: number } };
 		return classifyStorageOutcome({ status: err.$metadata?.httpStatusCode, errorName: err.name });
+	} finally {
+		clearTimeout(timer);
 	}
 }
 

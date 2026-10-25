@@ -16,7 +16,7 @@
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import { apiErrorMessage } from '../api-error';
-	import { lockMessage, useStatus } from '../status-context';
+	import { lockMessage, refreshStatus, useStatus } from '../status-context';
 	import { relativeTime } from '../time';
 	import { createVoter } from '../vote';
 	import type { CommentItem } from '../server/comments';
@@ -75,6 +75,7 @@
 	/** Explains the lock via `show` and returns true while writes are locked. */
 	function blocked(show: (message: string) => void): boolean {
 		if (!locked) return false;
+		refreshStatus();
 		show(lockMessage(status.value));
 		return true;
 	}

@@ -344,6 +344,21 @@ describe('outage page', () => {
 		}
 	});
 
+	it('answers /healthz and /readyz with a session cookie while the database is down, not a 500', async () => {
+		const { session } = await userWithSession();
+		configureReadiness({ dbProbe: async () => false });
+		const healthz = run('/healthz', session);
+		expect((await healthz.response).status).toBe(200);
+		expect(healthz.calls()).toBe(1);
+		const ready = run('/readyz', session, readyz(false));
+		expect((await ready.response).status).toBe(503);
+		expect(ready.calls()).toBe(1);
+		// no session lookup happened for either
+		expect(healthz.event.locals.user).toBeNull();
+		expect(ready.event.locals.user).toBeNull();
+		expect(healthz.deleted).toEqual([]);
+	});
+
 	it('leaves the public assets alone', async () => {
 		configureReadiness({ dbProbe: async () => false });
 		for (const path of [
@@ -463,6 +478,8 @@ describe('maintenance write guard', () => {
 		const { session } = await userWithSession('moderator');
 		for (const path of [
 			'/logout',
+			'/login',
+			'/auth/callback',
 			'/api/memes/1/seen',
 			'/share',
 			'/moderation/maintenance',
@@ -477,7 +494,14 @@ describe('maintenance write guard', () => {
 	it('matches the exemptions exactly', async () => {
 		enable();
 		const { session } = await userWithSession('member');
-		for (const path of ['/api/memes/1/seen/x', '/api/memes/x/seen', '/logout/x', '/share/x']) {
+		for (const path of [
+			'/api/memes/1/seen/x',
+			'/api/memes/x/seen',
+			'/logout/x',
+			'/login/x',
+			'/auth/callback/x',
+			'/share/x'
+		]) {
 			const res = await run(path, session, new Response('ok'), 'POST').response;
 			expect(res.status, path).toBe(503);
 		}

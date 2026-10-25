@@ -11,7 +11,7 @@
 	import ReportButton from '../../lib/components/ReportButton.svelte';
 	import UnderReviewBadge from '../../lib/components/UnderReviewBadge.svelte';
 	import { apiErrorMessage } from '../../lib/api-error';
-	import { lockMessage, useStatus } from '../../lib/status-context';
+	import { lockMessage, refreshStatus, useStatus } from '../../lib/status-context';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -29,6 +29,7 @@
 	const lockTitle = $derived(locked ? lockMessage(status.value) : undefined);
 	function blocked(): boolean {
 		if (!locked) return false;
+		refreshStatus();
 		failure = lockMessage(status.value);
 		return true;
 	}

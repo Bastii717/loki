@@ -144,7 +144,7 @@ Copy `static/maintenance.html` from the repository to `/srv/loki/maintenance.htm
 
 The app is always in one of five states: **ok**, **announced** (maintenance is scheduled and reading keeps working), **maintenance** (admins write, everyone else reads), **not ready** (the storage probe fails, so writes are refused) and **down** (the database is unreachable or migrations are pending, so the app answers every page with a 503 outage page). The first three follow the switch and the schedule; the last two follow the readiness checks.
 
-Admins control the switch on the page **Moderation > Maintenance** (`/moderation/maintenance`): an on/off toggle, a message, and an optional start and end time in Berlin time. While maintenance is on, the app shows a status banner to everyone, disables the write controls and refuses writes server-side, except for admins, who see a short addendum and can keep working. A switch with an end time in the past counts as off. "Turn off" clears it at once.
+Admins control the switch on the page **Moderation > Maintenance** (`/moderation/maintenance`): an on/off toggle, a message, and an optional start and end time in Berlin time. While maintenance is on, the app shows a status banner to everyone, disables the write controls and refuses writes server-side, except for admins, who see a short addendum and can keep working. A switch with an end time in the past counts as off. "Switch off now" clears it at once.
 
 Two probes are available without logging in:
 

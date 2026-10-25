@@ -461,7 +461,9 @@ describe('open-case badge in the root layout', () => {
 	it('is null for members and anonymous, the count for moderators and admins', async () => {
 		const w = await world();
 		const load = (user: World['mod']['user'] | null) =>
-			rootLayout({ locals: { user } } as never) as Promise<{ openCases: number | null }>;
+			rootLayout({ locals: { user }, depends: () => {} } as never) as Promise<{
+				openCases: number | null;
+			}>;
 		expect((await load(w.member.user)).openCases).toBeNull();
 		expect((await load(null)).openCases).toBeNull();
 		expect((await load(w.mod.user)).openCases).toBe(1);
@@ -471,16 +473,26 @@ describe('open-case badge in the root layout', () => {
 	it('is null for a timed-out moderator or admin (their moderation rights rest)', async () => {
 		const w = await world();
 		const load = (user: World['mod']['user']) =>
-			rootLayout({ locals: { user } } as never) as Promise<{ openCases: number | null }>;
+			rootLayout({ locals: { user }, depends: () => {} } as never) as Promise<{
+				openCases: number | null;
+			}>;
 		expect((await load(w.lockedMod.user)).openCases).toBeNull();
 		expect((await load(w.lockedAdmin.user)).openCases).toBeNull();
+	});
+});
+
+describe('status data in the root layout', () => {
+	it("depends on 'loki:status' so the client can refresh it", async () => {
+		const depends = vi.fn();
+		await rootLayout({ locals: { user: null }, depends } as never);
+		expect(depends).toHaveBeenCalledWith('loki:status');
 	});
 });
 
 describe('timeout banner data in the root layout', () => {
 	type Layout = { activeTimeout: { until: string; reason: string } | null };
 	const load = (user: World['mod']['user'] | null) =>
-		rootLayout({ locals: { user } } as never) as Promise<Layout>;
+		rootLayout({ locals: { user }, depends: () => {} } as never) as Promise<Layout>;
 
 	it('exposes the active timeout of a timed-out viewer', async () => {
 		const w = await world();

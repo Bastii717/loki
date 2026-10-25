@@ -37,8 +37,8 @@ function withStatus(writable: boolean) {
 			STATUS_KEY,
 			{
 				value: writable
-					? { state: 'ok', message: null, writable: true }
-					: { state: 'maintenance', message: MAINTENANCE, writable: false }
+					? { state: 'ok', message: null, writable: true, nextChangeAt: null }
+					: { state: 'maintenance', message: MAINTENANCE, writable: false, nextChangeAt: null }
 			}
 		]
 	]);

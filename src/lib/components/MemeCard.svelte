@@ -11,7 +11,7 @@
 	import Star from 'lucide-svelte/icons/star';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import { apiErrorMessage } from '../api-error';
-	import { lockMessage, useStatus } from '../status-context';
+	import { lockMessage, refreshStatus, useStatus } from '../status-context';
 	import { relativeTime } from '../time';
 	import { createVoter } from '../vote';
 	import type { FeedItem } from '../server/feed';
@@ -57,6 +57,7 @@
 	let note = $state('');
 	function blocked(): boolean {
 		if (!locked) return false;
+		refreshStatus();
 		note = lockMessage(status.value);
 		return true;
 	}
