@@ -11,14 +11,19 @@ export async function recomputeHotScores(): Promise<void> {
 	);
 }
 
+/** The hot-score job only runs while the database is reachable and migrated. */
+export async function hotScoreJobShouldRun(): Promise<boolean> {
+	const readiness = await getReadiness();
+	return readiness.db && readiness.migrated;
+}
+
 let timer: ReturnType<typeof setInterval> | undefined;
 
 /** Starts the periodic jobs; calling it again is a no-op. */
 export function startJobs(): void {
 	if (timer) return;
 	const run = async () => {
-		const ready = await getReadiness();
-		if (!ready.db || !ready.migrated) return;
+		if (!(await hotScoreJobShouldRun())) return;
 		await recomputeHotScores().catch((e) => console.error('hot score recompute failed', e));
 	};
 	void run();

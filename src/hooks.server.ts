@@ -1,40 +1,16 @@
 import { json } from '@sveltejs/kit';
 import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, resolveSession } from './lib/server/auth/session';
+import { migrateWithRetry } from './lib/server/boot';
 import { runMigrations } from './lib/server/db';
 import { env } from './lib/server/env';
 import { startJobs } from './lib/server/jobs';
 import { rateLimitRetryMs } from './lib/server/rate-limit';
-import { setMigrated } from './lib/server/readiness';
-
-const MIGRATION_RETRY_MS = 10_000;
 
 /** Runs once at server start so misconfiguration fails at boot, not on the first request. */
 export const init: ServerInit = async () => {
 	void env.DATABASE_URL; // validate the whole environment eagerly
-	try {
-		await runMigrations();
-		setMigrated(true);
-	} catch (e) {
-		// Stay up (serving /readyz and the maintenance page) and keep retrying instead of crashing.
-		console.error(`migrations failed, retrying every ${MIGRATION_RETRY_MS / 1000} s`, e);
-		setMigrated(false);
-		let running = false;
-		const retry = setInterval(async () => {
-			if (running) return;
-			running = true;
-			try {
-				await runMigrations();
-				setMigrated(true);
-				clearInterval(retry);
-			} catch {
-				// already logged once; the next tick tries again
-			} finally {
-				running = false;
-			}
-		}, MIGRATION_RETRY_MS);
-		retry.unref();
-	}
+	await migrateWithRetry({ migrate: runMigrations });
 	startJobs();
 };
 

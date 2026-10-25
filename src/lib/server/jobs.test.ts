@@ -1,9 +1,10 @@
 import { eq } from 'drizzle-orm';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
 import { media } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
-import { recomputeHotScores } from './jobs';
+import { hotScoreJobShouldRun, recomputeHotScores } from './jobs';
+import { configureReadiness, resetReadiness, setMigrated } from './readiness';
 
 beforeAll(setupDb);
 beforeEach(resetDb);
@@ -35,5 +36,33 @@ describe('recomputeHotScores', () => {
 		const [n] = await db.select().from(media).where(eq(media.id, newer.id));
 		expect(n.hotScore).toBeGreaterThan(o.hotScore);
 		expect(n.hotScore).toBeCloseTo(10 / Math.pow(3, 1.5), 2);
+	});
+});
+
+describe('hotScoreJobShouldRun', () => {
+	afterEach(() => {
+		resetReadiness();
+		setMigrated(true);
+	});
+
+	const configure = (dbUp: boolean) =>
+		configureReadiness({ dbProbe: async () => dbUp, storageProbe: async () => false });
+
+	it('runs when the database is up and migrated, whatever the storage says', async () => {
+		setMigrated(true);
+		configure(true);
+		expect(await hotScoreJobShouldRun()).toBe(true);
+	});
+
+	it('skips while migrations have not succeeded', async () => {
+		setMigrated(false);
+		configure(true);
+		expect(await hotScoreJobShouldRun()).toBe(false);
+	});
+
+	it('skips while the database is down', async () => {
+		setMigrated(true);
+		configure(false);
+		expect(await hotScoreJobShouldRun()).toBe(false);
 	});
 });

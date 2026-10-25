@@ -69,7 +69,10 @@ let ttlMs = DEFAULT_TTL_MS;
 let migrated = false;
 let cache: { value?: Probed; promise?: Promise<void> } = {};
 
-/** Records whether the boot migrations have succeeded. Applied live, never cached. */
+/**
+ * Records whether the boot migrations have succeeded. Applied live, never cached. `init` owns it
+ * in production and `setupDb()` in tests.
+ */
 export function setMigrated(ok: boolean): void {
 	migrated = ok;
 }
