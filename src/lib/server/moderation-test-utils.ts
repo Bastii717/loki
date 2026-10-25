@@ -32,12 +32,16 @@ export async function addOpenReports(
 export const OVER_THRESHOLD = env.REPORT_REVIEW_THRESHOLD + 1;
 
 /** Gives a user an active timeout (setBy any user id). */
-export async function timeOut(userId: number, setBy: number): Promise<void> {
+export async function timeOut(
+	userId: number,
+	setBy: number,
+	until: Date = new Date(Date.now() + 86_400_000)
+): Promise<void> {
 	await db.insert(timeouts).values({
 		userId,
 		setBy,
 		reason: 'test',
-		until: new Date(Date.now() + 86_400_000)
+		until
 	});
 }
 

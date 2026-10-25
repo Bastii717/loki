@@ -35,13 +35,12 @@
 
 <!-- Reached from the profile, so the header matches the other profile sub pages. -->
 <header class="top">
-	<a href={resolve('/profil')} class="back" aria-label="Zurück zum Profil"
-		><ArrowLeft size={22} /></a
+	<a href={resolve('/profile')} class="back" aria-label="Back to profile"><ArrowLeft size={22} /></a
 	>
 	<h1>{title}</h1>
 	{#if data.canEdit && !editing}
 		<button type="button" class="edit" onclick={openEditor}>
-			<Pencil size={16} aria-hidden="true" /> Bearbeiten
+			<Pencil size={16} aria-hidden="true" /> Edit
 		</button>
 	{/if}
 </header>
@@ -64,10 +63,10 @@
 			{#if submitted && form?.error}<p class="error" role="alert">{form.error}</p>{/if}
 			<div class="actions">
 				<button type="submit" class="primary">
-					<Save size={16} aria-hidden="true" /> Speichern
+					<Save size={16} aria-hidden="true" /> Save
 				</button>
 				<button type="button" onclick={() => (editing = false)}>
-					<X size={16} aria-hidden="true" /> Abbrechen
+					<X size={16} aria-hidden="true" /> Cancel
 				</button>
 			</div>
 		</form>
@@ -76,7 +75,7 @@
 		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 		<article class="prose">{@html data.html}</article>
 	{:else}
-		<p class="empty">Noch keine Inhalte — ein Admin kann sie anlegen.</p>
+		<p class="empty">Nothing here yet — an admin can add content.</p>
 	{/if}
 </main>
 

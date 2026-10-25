@@ -16,17 +16,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
 		raw = await request.json();
 	} catch {
-		error(400, 'Ungültige Anfrage.');
+		error(400, 'Invalid request.');
 	}
 	const { userId, days, reason } = (raw ?? {}) as Record<string, unknown>;
 	if (typeof userId !== 'number' || !Number.isSafeInteger(userId) || userId <= 0) {
-		error(400, 'Bitte einen Nutzer auswählen.');
+		error(400, 'Please select a user.');
 	}
 	if (typeof days !== 'number' || !Number.isInteger(days) || days < 1 || days > MAX_TIMEOUT_DAYS) {
-		error(400, `Bitte 1 bis ${MAX_TIMEOUT_DAYS} Tage angeben.`);
+		error(400, `Please give 1 to ${MAX_TIMEOUT_DAYS} days.`);
 	}
 	if (typeof reason !== 'string' || reason.trim() === '' || reason.length > MAX_TIMEOUT_REASON) {
-		error(400, `Bitte einen Grund (höchstens ${MAX_TIMEOUT_REASON} Zeichen) angeben.`);
+		error(400, `Please give a reason (${MAX_TIMEOUT_REASON} characters max).`);
 	}
 
 	try {

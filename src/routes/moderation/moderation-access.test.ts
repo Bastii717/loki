@@ -31,10 +31,13 @@ import { DELETE as deleteQuote } from '../api/quotes/[id]/+server';
 import { load as rootLayout } from '../+layout.server';
 import { load as moderationLayout } from './+layout.server';
 import { load as queue } from './+page.server';
-import { load as done } from './erledigt/+page.server';
+import { load as done } from './resolved/+page.server';
 import { load as log } from './log/+page.server';
-import { load as nutzer } from './nutzer/+page.server';
+import { load as usersPage } from './users/+page.server';
 import { load as timeoutsPage } from './timeouts/+page.server';
+
+/** Fixed far-future mute end, so the formatted date never depends on the run date. */
+const MUTED_UNTIL = new Date('2099-12-24T12:00:00Z');
 
 beforeAll(async () => {
 	await setupDb();
@@ -61,8 +64,8 @@ async function world() {
 	]);
 	const memeId = await insertMeme(victim.user.id, 'Fall');
 	await addOpenReports('meme', memeId, victim.user.id, 2);
-	await timeOut(lockedMod.user.id, admin.user.id);
-	await timeOut(lockedAdmin.user.id, admin.user.id);
+	await timeOut(lockedMod.user.id, admin.user.id, MUTED_UNTIL);
+	await timeOut(lockedAdmin.user.id, admin.user.id, MUTED_UNTIL);
 	return { member, mod, admin, victim, lockedMod, lockedAdmin, memeId };
 }
 
@@ -86,9 +89,9 @@ const endpoints: Endpoint[] = [
 		call: (_w, session) => ({ handler: queue, path: '/moderation', session })
 	},
 	{
-		name: 'erledigt load',
+		name: 'resolved load',
 		page: true,
-		call: (_w, session) => ({ handler: done, path: '/moderation/erledigt', session })
+		call: (_w, session) => ({ handler: done, path: '/moderation/resolved', session })
 	},
 	{
 		name: 'timeouts load',
@@ -101,10 +104,10 @@ const endpoints: Endpoint[] = [
 		call: (_w, session) => ({ handler: log, path: '/moderation/log', session })
 	},
 	{
-		name: 'nutzer load',
+		name: 'users load',
 		page: true,
 		adminOnly: true,
-		call: (_w, session) => ({ handler: nutzer, path: '/moderation/nutzer', session })
+		call: (_w, session) => ({ handler: usersPage, path: '/moderation/users', session })
 	},
 	{
 		name: 'POST case',
@@ -162,7 +165,7 @@ describe('Review Focus 1: members never reach the moderation area', () => {
 		const { response } = await callRoute(ep.call(w, w.member.session));
 		expect(response.status).toBe(403);
 		const body = await response.text();
-		expect(body).toMatch(/nur für/);
+		expect(body).toMatch(/This area is for moderators and admins only/);
 		expect(body).not.toContain(w.victim.user.username);
 	});
 
@@ -230,21 +233,21 @@ describe('hooks-level prefix guard (defense in depth)', () => {
 });
 
 describe('timed-out moderators lose their moderation rights', () => {
-	it.each(endpoints)('$name: a timed-out moderator gets 403 with the German notice', async (ep) => {
+	it.each(endpoints)('$name: a timed-out moderator gets 403 with the mute notice', async (ep) => {
 		const w = await world();
 		const { response } = await callRoute(ep.call(w, w.lockedMod.session));
 		expect(response.status).toBe(403);
 		const body = await response.text();
-		if (ep.adminOnly) return expect(body).toContain('nur für Admins'); // the role check comes first
-		expect(body).toMatch(/Du bist bis zum \d{2}\.\d{2}\.\d{4} stummgeschaltet: test/);
-		expect(body).toContain('Moderationsrechte ruhen');
+		if (ep.adminOnly) return expect(body).toContain('This area is for admins only'); // the role check comes first
+		expect(body).toContain('You are muted until 24 Dec 2099: test');
+		expect(body).toContain('Your moderation rights are paused until then');
 	});
 
 	it.each(endpoints)('$name: a timed-out admin loses them as well', async (ep) => {
 		const w = await world();
 		const { response } = await callRoute(ep.call(w, w.lockedAdmin.session));
 		expect(response.status).toBe(403);
-		expect(await response.text()).toContain('stummgeschaltet');
+		expect(await response.text()).toContain('You are muted until');
 	});
 
 	it('the timed-out moderator gets access back once the timeout is lifted', async () => {
@@ -311,7 +314,7 @@ describe('timed-out moderators lose their moderation rights', () => {
 		];
 		for (const { response } of await Promise.all(calls)) {
 			expect(response.status).toBe(403);
-			expect(await response.text()).toContain('stummgeschaltet');
+			expect(await response.text()).toContain('You are muted until');
 		}
 		const [meme] = await db.select().from(media).where(eq(media.id, w.memeId));
 		expect(meme.nsfw).toBe(false);
@@ -327,9 +330,9 @@ describe('timed-out moderators lose their moderation rights', () => {
 	});
 });
 
-describe('admin-only Nutzer page', () => {
+describe('admin-only Users page', () => {
 	const call = (user: World['mod']['user']) =>
-		nutzer({ locals: { user } } as never) as Promise<{
+		usersPage({ locals: { user } } as never) as Promise<{
 			users: { id: number; username: string; role: string; confirmedReports: number }[];
 		}>;
 
@@ -356,7 +359,7 @@ describe('admin-only Nutzer page', () => {
 		await setTimeout_(w.admin.user, w.victim.user.id, 3, 'erst');
 		await setTimeout_(w.admin.user, w.victim.user.id, 4, 'dann');
 
-		const { users } = (await nutzer({ locals: { user: w.admin.user } } as never)) as {
+		const { users } = (await usersPage({ locals: { user: w.admin.user } } as never)) as {
 			users: Record<string, unknown>[];
 		};
 		const victim = users.find((u) => u.id === w.victim.user.id)!;

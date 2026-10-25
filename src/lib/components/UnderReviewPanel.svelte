@@ -7,8 +7,8 @@
 
 <div class="panel" class:compact role="status">
 	<EyeOff size={compact ? 22 : 32} aria-hidden="true" />
-	<b>Wird geprüft</b>
-	<span>Dieser Inhalt wurde gemeldet und wird gerade moderiert.</span>
+	<b>Under review</b>
+	<span>This content was reported and is being reviewed by moderators.</span>
 </div>
 
 <style>

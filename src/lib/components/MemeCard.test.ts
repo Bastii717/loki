@@ -52,4 +52,27 @@ describe('MemeCard', () => {
 		expect(body).not.toContain('class="reveal');
 		expect(body).toContain('class="fav');
 	});
+
+	it('words the reveal overlay in English', () => {
+		const nsfw = render(MemeCard, { props: { item: feedItem({ blurred: 'nsfw' }) } }).body;
+		expect(nsfw).toContain('Tap to reveal');
+		expect(nsfw).not.toContain('Spoiler');
+		const spoiler = render(MemeCard, { props: { item: feedItem({ blurred: 'spoiler' }) } }).body;
+		expect(spoiler).toContain('Spoiler — tap to reveal');
+	});
+
+	it('labels the favorite button for the current state', () => {
+		const off = render(MemeCard, { props: { item: feedItem() } }).body;
+		expect(off).toContain('aria-label="Save as favorite"');
+		const on = render(MemeCard, { props: { item: feedItem({ userFavorite: true }) } }).body;
+		expect(on).toContain('aria-label="Remove favorite"');
+	});
+
+	it('words the card chrome in English', () => {
+		const { body } = render(MemeCard, { props: { item: feedItem({ title: '' }) } });
+		expect(body).toContain('Untitled');
+		expect(body).toContain('by dev');
+		expect(body).toContain('aria-label="Upvote"');
+		expect(body).toContain('aria-label="Downvote"');
+	});
 });

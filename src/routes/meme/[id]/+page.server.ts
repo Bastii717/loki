@@ -9,14 +9,14 @@ import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
 	const id = Number(params.id);
-	if (!Number.isSafeInteger(id) || id <= 0) error(404, 'Meme nicht gefunden');
+	if (!Number.isSafeInteger(id) || id <= 0) error(404, 'Meme not found');
 	const user = locals.user!;
 	const canModerate = canSeeUnderReview(user);
 	const [item, comments] = await Promise.all([
 		getFeedItem(user.id, id, canModerate),
 		listComments(id, canModerate)
 	]);
-	if (!item) error(404, 'Meme nicht gefunden');
+	if (!item) error(404, 'Meme not found');
 	// Raw flags (the feed item only carries the merged blur state) and ownership for the manage menu.
 	const [row] = await db
 		.select({ uploaderId: media.uploaderId, nsfw: media.nsfw, spoiler: media.spoiler })

@@ -65,7 +65,7 @@
 		});
 		busy = false;
 		if (result.ok) {
-			success = `${selected.username} ist für ${days} ${days === 1 ? 'Tag' : 'Tage'} stummgeschaltet.`;
+			success = `${selected.username} is muted for ${days} ${days === 1 ? 'day' : 'days'}.`;
 			selected = null;
 			reason = '';
 			query = '';
@@ -90,10 +90,10 @@
 </svelte:head>
 
 <section class="card" aria-labelledby="set-title">
-	<h2 id="set-title">Timeout setzen</h2>
+	<h2 id="set-title">Set timeout</h2>
 	<p class="muted">
-		Stummgeschaltete können lesen, aber nicht posten, kommentieren, melden oder voten. Ein neuer
-		Timeout ersetzt einen laufenden.
+		Muted users can read but not post, comment, report or vote. A new timeout replaces a running
+		one.
 	</p>
 
 	<form onsubmit={submit}>
@@ -103,7 +103,7 @@
 				<button
 					type="button"
 					class="clear"
-					aria-label="Auswahl entfernen"
+					aria-label="Clear selection"
 					onclick={() => (selected = null)}
 				>
 					<X size={18} aria-hidden="true" />
@@ -111,14 +111,14 @@
 			</div>
 		{:else}
 			<label>
-				Nutzer suchen
+				Search user
 				<span class="search">
 					<Search size={16} aria-hidden="true" />
 					<input
 						class="field"
 						type="search"
 						autocomplete="off"
-						placeholder="Name eingeben"
+						placeholder="Enter a name"
 						bind:value={query}
 						oninput={onInput}
 						onfocus={() => !searched && search()}
@@ -127,9 +127,9 @@
 			</label>
 			{#if searched}
 				{#if candidates.length === 0}
-					<p class="muted">Niemand gefunden.</p>
+					<p class="muted">Nobody found.</p>
 				{:else}
-					<ul class="results" aria-label="Suchergebnisse">
+					<ul class="results" aria-label="Search results">
 						{#each candidates as c (c.id)}
 							<li>
 								<button type="button" disabled={!c.timeoutable} onclick={() => pick(c)}>
@@ -145,7 +145,7 @@
 
 		<div class="duration">
 			<label>
-				Tage (1 bis {data.limits.days})
+				Days (1 to {data.limits.days})
 				<input
 					class="field"
 					type="number"
@@ -156,18 +156,18 @@
 					bind:value={days}
 				/>
 			</label>
-			<div class="presets" role="group" aria-label="Schnellauswahl Dauer">
+			<div class="presets" role="group" aria-label="Quick duration">
 				{#each [1, 3, 7, 14, 30] as d (d)}
 					<button type="button" class="pill" class:accent={days === d} onclick={() => (days = d)}>
 						{d}
-						{d === 1 ? 'Tag' : 'Tage'}
+						{d === 1 ? 'day' : 'days'}
 					</button>
 				{/each}
 			</div>
 		</div>
 
 		<label>
-			Grund (sieht der Betroffene)
+			Reason (shown to the user)
 			<textarea class="field" rows="2" maxlength={data.limits.reason} required bind:value={reason}
 			></textarea>
 		</label>
@@ -176,15 +176,15 @@
 		{#if success}<p class="ok" role="status">{success}</p>{/if}
 
 		<button type="submit" class="btn danger" disabled={!selected || busy}>
-			<Timer size={16} aria-hidden="true" /> Timeout setzen
+			<Timer size={16} aria-hidden="true" /> Set timeout
 		</button>
 	</form>
 </section>
 
-<h2 class="list-title">Aktive Timeouts ({data.timeouts.length})</h2>
+<h2 class="list-title">Active timeouts ({data.timeouts.length})</h2>
 {#if liftFailure}<p class="error" role="alert">{liftFailure}</p>{/if}
 {#if data.timeouts.length === 0}
-	<p class="muted">Aktuell ist niemand stummgeschaltet.</p>
+	<p class="muted">Nobody is muted right now.</p>
 {:else}
 	<ul class="list">
 		{#each data.timeouts as t (t.id)}
@@ -195,10 +195,10 @@
 				</div>
 				<p class="reason">{t.reason}</p>
 				<p class="muted">
-					bis {formatDateTime(t.until)}, gesetzt von {t.setBy} am {formatDateTime(t.createdAt)}
+					until {formatDateTime(t.until)}, set by {t.setBy} on {formatDateTime(t.createdAt)}
 				</p>
 				{#if t.canLift}
-					<button type="button" class="btn" onclick={() => lift(t.userId)}>Aufheben</button>
+					<button type="button" class="btn" onclick={() => lift(t.userId)}>Lift</button>
 				{/if}
 			</li>
 		{/each}

@@ -26,7 +26,7 @@ export const actions: Actions = {
 
 		const file = form.get('file');
 		if (!(file instanceof File) || file.size === 0) {
-			return fail(400, { ...values, message: 'Bitte wähle eine Datei aus' });
+			return fail(400, { ...values, message: 'Pick a file first' });
 		}
 
 		try {
@@ -43,13 +43,13 @@ export const actions: Actions = {
 			if (e instanceof UploadError) {
 				const message =
 					e.code === 'size'
-						? `Datei zu groß (max. ${env.MAX_UPLOAD_MB} MB)`
-						: 'Dateityp wird nicht unterstützt';
+						? `File is too large (max ${env.MAX_UPLOAD_MB} MB)`
+						: 'Unsupported file type';
 				return fail(e.code === 'size' ? 413 : 415, { ...values, message });
 			}
 			// never surface internal error text (ffmpeg/sharp/S3 can leak paths)
 			console.error('upload failed', e);
-			return fail(500, { ...values, message: 'Upload fehlgeschlagen' });
+			return fail(500, { ...values, message: 'Upload failed' });
 		}
 		redirect(303, '/');
 	}

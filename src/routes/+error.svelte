@@ -2,16 +2,14 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 
-	const heading = $derived(
-		page.status === 404 ? 'Seite nicht gefunden' : 'Da ist was schiefgelaufen'
-	);
+	const heading = $derived(page.status === 404 ? 'Page not found' : 'Something went wrong');
 
-	// SvelteKit fills in English defaults when nothing threw a message of its own; everything the
-	// app throws itself (`error(404, 'Meme nicht gefunden')`) is already German and shown as is.
+	// SvelteKit fills in terse defaults when nothing threw a message of its own; those get a friendlier
+	// line here. Everything the app throws itself (`error(404, 'Meme not found')`) is shown as is.
 	const GENERIC: Record<string, string> = {
-		'Not Found': 'Diese Adresse gibt es nicht oder nicht mehr.',
-		'Internal Error': 'Bitte versuche es später noch einmal.',
-		'Unknown Error': 'Bitte versuche es später noch einmal.'
+		'Not Found': "That page doesn't exist or has moved.",
+		'Internal Error': 'Please try again later.',
+		'Unknown Error': 'Please try again later.'
 	};
 	const message = $derived.by(() => {
 		const raw = page.error?.message ?? '';
@@ -20,7 +18,7 @@
 </script>
 
 <svelte:head>
-	<title>Fehler {page.status} · Loki</title>
+	<title>Error {page.status} · Loki</title>
 </svelte:head>
 
 <main>
@@ -29,7 +27,7 @@
 	{#if message}
 		<p class="message">{message}</p>
 	{/if}
-	<a class="home" href={resolve('/')}>Zur Startseite</a>
+	<a class="home" href={resolve('/')}>Back to the feed</a>
 </main>
 
 <style>

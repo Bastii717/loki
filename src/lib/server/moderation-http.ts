@@ -1,21 +1,21 @@
 import { error, fail } from '@sveltejs/kit';
 import { ReportError, TimeoutActionError, TimeoutActiveError } from './moderation';
 
-const dateFormat = new Intl.DateTimeFormat('de-DE', {
-	day: '2-digit',
-	month: '2-digit',
+const dateFormat = new Intl.DateTimeFormat('en-GB', {
+	day: 'numeric',
+	month: 'short',
 	year: 'numeric',
 	timeZone: 'Europe/Berlin'
 });
 
-/** German user-facing text for a blocked write, e.g. "Du bist bis zum 24.10.2026 stummgeschaltet: Spam". */
+/** User-facing text for a blocked write, e.g. "You are muted until 24 Oct 2026: Spam". */
 export function timeoutMessage(e: TimeoutActiveError): string {
-	return `Du bist bis zum ${dateFormat.format(e.until)} stummgeschaltet: ${e.reason}`;
+	return `You are muted until ${dateFormat.format(e.until)}: ${e.reason}`;
 }
 
 /**
  * Shared error mapper for API routes (call it last in a `catch`): TimeoutActiveError becomes a 403
- * `{message}` (German text), ReportError 400 / 409 / 404. Anything else is rethrown untouched.
+ * `{message}` (English text), ReportError 400 / 409 / 404. Anything else is rethrown untouched.
  */
 export function mapModerationError(e: unknown): never {
 	if (e instanceof TimeoutActiveError) error(403, timeoutMessage(e));
@@ -36,20 +36,17 @@ export function timeoutFail<T extends Record<string, unknown>>(e: TimeoutActiveE
 	return fail(403, { ...values, message, error: message });
 }
 
-/** Maps a rejected setTimeout_/liftTimeout to an HTTP error with a German message; rethrows anything else. */
+/** Maps a rejected setTimeout_/liftTimeout to an HTTP error with an English message; rethrows anything else. */
 export function mapTimeoutActionError(e: unknown): never {
 	if (e instanceof TimeoutActionError) {
-		if (e.code === 'self') error(400, 'Du kannst dich nicht selbst stummschalten.');
+		if (e.code === 'self') error(400, 'You cannot mute yourself.');
 		if (e.code === 'forbidden') {
-			error(
-				403,
-				'Dazu fehlt dir die Berechtigung: Moderatoren können nur Mitglieder stummschalten.'
-			);
+			error(403, 'You lack permission for that: moderators can only mute members.');
 		}
 		if (e.code === 'invalid') {
-			error(400, 'Bitte 1 bis 30 Tage und einen Grund (höchstens 500 Zeichen) angeben.');
+			error(400, 'Please give 1 to 30 days and a reason (500 characters max).');
 		}
-		error(404, 'Nutzer oder aktiver Timeout nicht gefunden.');
+		error(404, 'User or active timeout not found.');
 	}
 	return mapModerationError(e);
 }

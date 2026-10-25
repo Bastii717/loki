@@ -72,7 +72,7 @@
 			const res = await fetch('/share/file');
 			if (!res.ok) return;
 			const blob = await res.blob();
-			const name = decodeURIComponent(res.headers.get('x-shared-name') ?? 'geteilt');
+			const name = decodeURIComponent(res.headers.get('x-shared-name') ?? 'shared');
 			takeFile(new File([blob], name, { type: blob.type }));
 		} catch {
 			// the user can still pick the file manually
@@ -145,12 +145,12 @@
 <svelte:window onpaste={onPaste} />
 
 <svelte:head>
-	<title>Meme posten · Loki</title>
+	<title>Post a meme · Loki</title>
 </svelte:head>
 
 <header class="top">
-	<a href={resolve('/')} class="close" aria-label="Schließen" onclick={close}><X size={22} /></a>
-	<h1>Meme posten</h1>
+	<a href={resolve('/')} class="close" aria-label="Close" onclick={close}><X size={22} /></a>
+	<h1>Post a meme</h1>
 </header>
 
 <main>
@@ -185,9 +185,9 @@
 			{#if previewUrl && previewKind === 'video'}
 				<video src={previewUrl} controls muted playsinline></video>
 			{:else if previewUrl}
-				<img src={previewUrl} alt="Vorschau" />
+				<img src={previewUrl} alt="Preview" />
 			{:else}
-				<span>Bild oder Video wählen, hierher ziehen oder einfügen</span>
+				<span>Pick an image or video, drop it here or paste it</span>
 			{/if}
 			<input
 				bind:this={fileInput}
@@ -201,7 +201,7 @@
 		{#if fileName}<p class="hint">{fileName}</p>{/if}
 
 		<label class="field">
-			<span>Titel</span>
+			<span>Title</span>
 			<input type="text" name="title" maxlength="150" bind:value={title} placeholder="Optional" />
 		</label>
 
@@ -214,7 +214,7 @@
 						<input type="hidden" name="tag" value={tag} />
 						<button
 							type="button"
-							aria-label="Tag {tag} entfernen"
+							aria-label="Remove tag {tag}"
 							onclick={() => (tags = tags.filter((t) => t !== tag))}
 							><X size={14} aria-hidden="true" /></button
 						>
@@ -226,7 +226,7 @@
 					autocomplete="off"
 					autocapitalize="none"
 					enterkeyhint="done"
-					placeholder={tags.length ? '' : 'z. B. montag'}
+					placeholder={tags.length ? '' : 'e.g. monday'}
 					bind:value={tagInput}
 					oninput={onTagInput}
 					onkeydown={onTagKey}
@@ -251,7 +251,7 @@
 		</label>
 
 		<button class="submit" type="submit" disabled={submitting}>
-			{submitting ? 'Wird gepostet …' : 'Posten'}
+			{submitting ? 'Posting…' : 'Post a meme'}
 		</button>
 	</form>
 </main>

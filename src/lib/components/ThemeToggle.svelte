@@ -20,7 +20,7 @@
 <button
 	type="button"
 	class="theme"
-	aria-label={theme === 'light' ? 'Dunkles Design aktivieren' : 'Helles Design aktivieren'}
+	aria-label={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
 	onclick={toggle}
 >
 	{#if theme === 'light'}

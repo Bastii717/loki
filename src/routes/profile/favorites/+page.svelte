@@ -8,14 +8,13 @@
 </script>
 
 <svelte:head>
-	<title>Favoriten · Loki</title>
+	<title>Favorites · Loki</title>
 </svelte:head>
 
 <header class="top">
-	<a href={resolve('/profil')} class="back" aria-label="Zurück zum Profil"
-		><ArrowLeft size={22} /></a
+	<a href={resolve('/profile')} class="back" aria-label="Back to profile"><ArrowLeft size={22} /></a
 	>
-	<h1>Favoriten</h1>
+	<h1>Favorites</h1>
 </header>
 
 <main>
@@ -23,7 +22,7 @@
 		items={data.items}
 		nextCursor={data.nextCursor}
 		list="favorites"
-		empty="Noch keine Favoriten — tippe bei einem Meme auf den Stern."
+		empty="No favorites yet — tap the star on a meme."
 	/>
 </main>
 

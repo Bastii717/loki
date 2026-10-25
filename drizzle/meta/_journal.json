@@ -36,6 +36,13 @@
       "when": 1792573064091,
       "tag": "0004_reports_open_partial_index",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792947627519,
+      "tag": "0005_report_categories_english",
+      "breakpoints": true
     }
   ]
 }

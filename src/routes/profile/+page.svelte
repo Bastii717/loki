@@ -13,23 +13,23 @@
 	let { data }: PageProps = $props();
 
 	const roleLabel: Record<string, string> = {
-		member: 'Mitglied',
+		member: 'Member',
 		moderator: 'Moderator',
 		admin: 'Admin'
 	};
 
-	// Statistiken, Regeln and FAQ arrive in later tasks; their links 404 until then.
+	// Personal lists first, then the reference pages; Moderation is appended below for moderators.
 	const links = [
-		{ href: '/profil/memes', label: 'Meine Memes', icon: Images },
-		{ href: '/profil/favoriten', label: 'Favoriten', icon: Star },
-		{ href: '/profil/statistiken', label: 'Statistiken', icon: ChartColumn },
-		{ href: '/regeln', label: 'Regeln', icon: BookOpen },
+		{ href: '/profile/memes', label: 'My memes', icon: Images },
+		{ href: '/profile/favorites', label: 'Favorites', icon: Star },
+		{ href: '/profile/stats', label: 'Stats', icon: ChartColumn },
+		{ href: '/rules', label: 'Rules', icon: BookOpen },
 		{ href: '/faq', label: 'FAQ', icon: CircleQuestionMark }
 	] as const;
 </script>
 
 <svelte:head>
-	<title>Profil · Loki</title>
+	<title>Profile · Loki</title>
 </svelte:head>
 
 <main>
@@ -44,16 +44,16 @@
 			<dd>{data.counts.memes}</dd>
 		</div>
 		<div>
-			<dt>Favoriten</dt>
+			<dt>Favorites</dt>
 			<dd>{data.counts.favorites}</dd>
 		</div>
 		<div>
-			<dt>Kommentare</dt>
+			<dt>Comments</dt>
 			<dd>{data.counts.comments}</dd>
 		</div>
 	</dl>
 
-	<nav aria-label="Profil">
+	<nav aria-label="Profile">
 		<ul>
 			{#each links as link (link.href)}
 				<li>
@@ -70,7 +70,7 @@
 						<Shield size={20} aria-hidden="true" />
 						<span>Moderation</span>
 						{#if data.openCases > 0}
-							<span class="cases" aria-label="{data.openCases} offene Fälle">{data.openCases}</span>
+							<span class="cases" aria-label="{data.openCases} open cases">{data.openCases}</span>
 						{/if}
 						<ChevronRight size={18} aria-hidden="true" />
 					</a>
@@ -80,7 +80,7 @@
 	</nav>
 
 	<form method="POST" action="/logout">
-		<button type="submit"><LogOut size={18} aria-hidden="true" /> Abmelden</button>
+		<button type="submit"><LogOut size={18} aria-hidden="true" /> Sign out</button>
 	</form>
 </main>
 

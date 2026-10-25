@@ -8,14 +8,13 @@
 </script>
 
 <svelte:head>
-	<title>Meine Memes · Loki</title>
+	<title>My memes · Loki</title>
 </svelte:head>
 
 <header class="top">
-	<a href={resolve('/profil')} class="back" aria-label="Zurück zum Profil"
-		><ArrowLeft size={22} /></a
+	<a href={resolve('/profile')} class="back" aria-label="Back to profile"><ArrowLeft size={22} /></a
 	>
-	<h1>Meine Memes</h1>
+	<h1>My memes</h1>
 </header>
 
 <main>
@@ -23,7 +22,7 @@
 		items={data.items}
 		nextCursor={data.nextCursor}
 		list="mine"
-		empty="Du hast noch nichts gepostet."
+		empty="You haven't posted anything yet."
 	/>
 </main>
 

@@ -114,7 +114,7 @@ export async function deleteComment(user: SessionUser, commentId: number): Promi
 
 /**
  * Records that the user has seen a meme. The single seen-write (detail view and
- * Entdecken): inserts the mediaViews row and bumps media.viewCount only when the
+ * Discover): inserts the mediaViews row and bumps media.viewCount only when the
  * row was new, in one transaction, so repeats and races never double-count.
  * Returns whether this call counted a new view.
  */

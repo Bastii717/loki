@@ -7,7 +7,7 @@ import type { LayoutServerLoad } from './$types';
  * renders it as a banner on every page, so a blocked write (e.g. a silently rolled-back vote)
  * is explained. One cheap indexed query, only for signed-in users.
  *
- * `openCases` is the badge for the Profil tab and the profile link: the number of open report
+ * `openCases` is the badge for the Profile tab and the profile link: the number of open report
  * cases, for moderators and admins only (one cheap grouped count; null for everyone else, so
  * members never trigger the query). A timed-out moderator has lost the moderation rights, so
  * they get null too (no badge, no Moderation link). It refreshes on reload and after

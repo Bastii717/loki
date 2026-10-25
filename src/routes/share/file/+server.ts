@@ -5,7 +5,7 @@ import type { RequestHandler } from './$types';
 /** Hands the stashed shared file to the upload page, once. */
 export const GET: RequestHandler = ({ locals }) => {
 	const file = takeShared(locals.user!.id);
-	if (!file) error(404, 'Nichts geteilt');
+	if (!file) error(404, 'Nothing shared');
 	return new Response(new Uint8Array(file.data), {
 		headers: {
 			'content-type': file.type, // sniffed at stash time, never client-declared

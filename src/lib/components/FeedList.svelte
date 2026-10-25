@@ -70,11 +70,9 @@
 {#if nextCursor}
 	<div class="more" bind:this={sentinel}>
 		{#if failed}
-			<button type="button" class="retry" onclick={loadMore}>
-				Laden fehlgeschlagen — Erneut versuchen
-			</button>
+			<button type="button" class="retry" onclick={loadMore}> Loading failed — try again </button>
 		{:else}
-			<span class="muted">Lade mehr …</span>
+			<span class="muted">Loading more…</span>
 		{/if}
 	</div>
 {/if}

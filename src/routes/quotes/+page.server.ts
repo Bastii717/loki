@@ -29,7 +29,7 @@ export const actions: Actions = {
 			await addQuote(locals.user!.id, text, author);
 		} catch (e) {
 			if (e instanceof QuoteTextError) {
-				return fail(400, { error: 'Bitte Zitat und Urheber ausfüllen.', text, author });
+				return fail(400, { error: 'Fill in both the quote and who said it.', text, author });
 			}
 			if (e instanceof TimeoutActiveError) return timeoutFail(e, { text, author });
 			throw e;

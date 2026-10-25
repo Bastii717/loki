@@ -63,7 +63,7 @@ describe('listOpenCases', () => {
 		const memeId = await meme(author.id, 'Mein Meme');
 		await createReport(asSession(r1), 'meme', memeId, 'spam', 'schon wieder');
 		await createReport(asSession(r2), 'meme', memeId, 'spam');
-		await createReport(asSession(r3), 'meme', memeId, 'verletzend', 'gemein');
+		await createReport(asSession(r3), 'meme', memeId, 'hurtful', 'gemein');
 
 		const { cases, nextCursor } = await listOpenCases();
 		expect(nextCursor).toBeNull();
@@ -81,12 +81,12 @@ describe('listOpenCases', () => {
 		});
 		expect(c.categories).toEqual([
 			{ category: 'spam', count: 2 },
-			{ category: 'verletzend', count: 1 }
+			{ category: 'hurtful', count: 1 }
 		]);
 		expect(c.reports.map((r) => [r.reporter, r.category, r.text])).toEqual([
 			[r1.username, 'spam', 'schon wieder'],
 			[r2.username, 'spam', ''],
-			[r3.username, 'verletzend', 'gemein']
+			[r3.username, 'hurtful', 'gemein']
 		]);
 		expect(new Date(c.oldest).getTime()).toBeLessThanOrEqual(Date.now());
 	});

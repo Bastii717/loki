@@ -27,8 +27,8 @@
 	<button
 		type="button"
 		class="report {variant}"
-		aria-label="Melden"
-		title="Melden"
+		aria-label="Report"
+		title="Report"
 		onclick={() => (open = true)}
 		><Flag size={variant === 'overlay' ? 18 : 16} aria-hidden="true" /></button
 	>

@@ -5,8 +5,8 @@
 	let { overlay = false }: { overlay?: boolean } = $props();
 </script>
 
-<span class="badge" class:overlay title="Für Mitglieder ausgeblendet">
-	<EyeOff size={12} aria-hidden="true" /> Wird geprüft
+<span class="badge" class:overlay title="Hidden from members">
+	<EyeOff size={12} aria-hidden="true" /> Under review
 </span>
 
 <style>

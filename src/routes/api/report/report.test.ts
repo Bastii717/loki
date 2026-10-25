@@ -10,6 +10,9 @@ import { resetRateLimits } from '../../../lib/server/rate-limit';
 import { callRoute } from '../../../lib/server/test-request';
 import { POST } from './+server';
 
+/** Fixed far-future mute end, so the formatted date never depends on the run date. */
+const MUTED_UNTIL = new Date('2099-12-24T12:00:00Z');
+
 beforeAll(setupDb);
 beforeEach(async () => {
 	resetRateLimits();
@@ -65,14 +68,14 @@ describe('POST /api/report', () => {
 			['quote', w.quoteId]
 		] as const) {
 			const { response } = await post(
-				{ contentType, contentId, category: 'falschinfo', text: ' Quatsch ' },
+				{ contentType, contentId, category: 'misinformation', text: ' Quatsch ' },
 				w.reporterSession
 			);
 			expect(response.status, contentType).toBe(204);
 		}
 		const rows = await db.select().from(reports).where(eq(reports.reporterId, w.reporter.id));
 		expect(rows.map((r) => r.contentType).sort()).toEqual(['comment', 'meme', 'quote']);
-		expect(rows.every((r) => r.category === 'falschinfo' && r.text === 'Quatsch')).toBe(true);
+		expect(rows.every((r) => r.category === 'misinformation' && r.text === 'Quatsch')).toBe(true);
 	});
 
 	it('text is optional', async () => {
@@ -90,6 +93,7 @@ describe('POST /api/report', () => {
 		['non-string contentType', { contentType: 5, category: 'spam' }],
 		['missing contentType', { category: 'spam' }],
 		['unknown category', { contentType: 'meme', category: 'hass' }],
+		['old category name', { contentType: 'meme', category: 'verletzend' }],
 		['missing category', { contentType: 'meme' }],
 		['non-string text', { contentType: 'meme', category: 'spam', text: 7 }],
 		['over-long text', { contentType: 'meme', category: 'spam', text: 'x'.repeat(501) }]
@@ -158,17 +162,15 @@ describe('POST /api/report', () => {
 		expect(response.status).toBe(404);
 	});
 
-	it('rejects a timed-out reporter with the German 403', async () => {
+	it('rejects a timed-out reporter with the 403', async () => {
 		const w = await world();
-		await timeOut(w.reporter.id, w.author.id);
+		await timeOut(w.reporter.id, w.author.id, MUTED_UNTIL);
 		const { response } = await post(
 			{ contentType: 'meme', contentId: w.memeId, category: 'spam' },
 			w.reporterSession
 		);
 		expect(response.status).toBe(403);
-		expect(await response.text()).toMatch(
-			/^Du bist bis zum \d{2}\.\d{2}\.\d{4} stummgeschaltet: test$/
-		);
+		expect(await response.text()).toBe('You are muted until 24 Dec 2099: test');
 	});
 
 	it('requires a session', async () => {

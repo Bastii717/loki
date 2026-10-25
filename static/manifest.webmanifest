@@ -1,8 +1,8 @@
 {
 	"name": "Loki",
 	"short_name": "Loki",
-	"description": "Das Meme-Board",
-	"lang": "de",
+	"description": "The meme board",
+	"lang": "en",
 	"start_url": "/",
 	"scope": "/",
 	"display": "standalone",

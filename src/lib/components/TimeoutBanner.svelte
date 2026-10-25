@@ -7,7 +7,7 @@
 
 <div class="banner" role="alert">
 	<Clock size={18} aria-hidden="true" />
-	<p>Du bist bis zum {formatDate(until)} stummgeschaltet: {reason}</p>
+	<p>You are muted until {formatDate(until)}: {reason}</p>
 </div>
 
 <style>

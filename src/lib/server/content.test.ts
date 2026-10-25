@@ -67,7 +67,7 @@ describe('content', () => {
 				'- Punkt eins',
 				'- Punkt zwei',
 				'',
-				'[Link](https://example.com/regeln)',
+				'[Link](https://example.com/rules)',
 				'',
 				'<style>body{display:none}</style>',
 				'',
@@ -81,7 +81,7 @@ describe('content', () => {
 		expect(html).not.toContain('display:none');
 		expect(html).toContain('<h1>Titel</h1>');
 		expect(html).toContain('<li>Punkt eins</li>');
-		expect(html).toContain('<a href="https://example.com/regeln">Link</a>');
+		expect(html).toContain('<a href="https://example.com/rules">Link</a>');
 	});
 
 	it.each(['member', 'moderator'] as const)('rejects saving as %s', async (role) => {

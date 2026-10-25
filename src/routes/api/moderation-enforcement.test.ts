@@ -22,7 +22,7 @@ import { ensureBucket } from '../../lib/server/storage-test-utils';
 import { callRoute, type RouteResult } from '../../lib/server/test-request';
 import { actions as faqActions } from '../faq/+page.server';
 import { actions as quoteActions } from '../quotes/+page.server';
-import { actions as rulesActions } from '../regeln/+page.server';
+import { actions as rulesActions } from '../rules/+page.server';
 import { actions as uploadActions } from '../upload/+page.server';
 import { GET as feed } from './feed/+server';
 import { GET as discover } from './discover/+server';
@@ -45,10 +45,10 @@ beforeEach(async () => {
 	await resetDb();
 });
 
-// far in the future so the fixture never expires, and a fixed date to assert the German format
+// far in the future so the fixture never expires, and a fixed date to assert the English format
 const UNTIL = new Date('2099-12-24T12:00:00Z');
 const REASON = 'Beleidigungen im Chat';
-const BLOCK_MESSAGE = `Du bist bis zum 24.12.2099 stummgeschaltet: ${REASON}`;
+const BLOCK_MESSAGE = `You are muted until 24 Dec 2099: ${REASON}`;
 
 async function timedOutWorld() {
 	const [victim, author, mod] = await Promise.all([
@@ -212,7 +212,7 @@ const allowed: [string, (w: World) => Call, number][] = [
 const run = (call: Call, session: string): Promise<RouteResult> => callRoute({ ...call, session });
 
 describe('timeout enforcement on every blocked endpoint', () => {
-	it.each(blocked)('%s: 403 with the German message', async (_name, build) => {
+	it.each(blocked)('%s: 403 with the English message', async (_name, build) => {
 		const w = await timedOutWorld();
 		const { response } = await run(build(w), w.session);
 		expect(response.status).toBe(403);
@@ -273,7 +273,7 @@ describe('form actions', () => {
 		role: 'member'
 	});
 
-	it('upload action returns the German message under message and error (403)', async () => {
+	it('upload action returns the English message under message and error (403)', async () => {
 		const w = await timedOutWorld();
 		const form = new FormData();
 		form.set('title', 'mein Meme');
@@ -305,7 +305,7 @@ describe('form actions', () => {
 		).rejects.toBeInstanceOf(TimeoutActiveError);
 	});
 
-	it('quotes add action returns the German message and keeps the typed values (403)', async () => {
+	it('quotes add action returns the English message and keeps the typed values (403)', async () => {
 		const w = await timedOutWorld();
 		const form = new FormData();
 		form.set('text', 'Ein Zitat');
@@ -325,10 +325,10 @@ describe('form actions', () => {
 	});
 
 	it.each([
-		['regeln', rulesActions],
+		['rules', rulesActions],
 		['faq', faqActions]
 	] as const)(
-		'%s save action returns the German message and keeps the draft for a timed-out admin (403)',
+		'%s save action returns the English message and keeps the draft for a timed-out admin (403)',
 		async (_name, pageActions) => {
 			const w = await timedOutWorld();
 			const admin = await testUser({ role: 'admin' });
@@ -341,7 +341,7 @@ describe('form actions', () => {
 			const form = new FormData();
 			form.set('markdown', '# Neu');
 			const result = (await pageActions.save!({
-				request: new Request('https://loki.test/regeln?/save', { method: 'POST', body: form }),
+				request: new Request('https://loki.test/rules?/save', { method: 'POST', body: form }),
 				locals: { user: { id: admin.id, username: admin.username, role: 'admin' } }
 			} as never)) as { status: number; data: Record<string, unknown> };
 			expect(result.status).toBe(403);

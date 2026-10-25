@@ -1,1 +1,1 @@
-export const NO_ACCESS_MESSAGE = 'Kein Zugang: Dein Account ist nicht für Loki freigeschaltet.';
+export const NO_ACCESS_MESSAGE = 'No access: your account is not enabled for Loki.';

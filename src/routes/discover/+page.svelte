@@ -103,7 +103,7 @@
 </script>
 
 <svelte:head>
-	<title>Entdecken · Loki</title>
+	<title>Discover · Loki</title>
 </svelte:head>
 
 <main class="pager">
@@ -118,16 +118,16 @@
 				<DiscoverSlide item={entry.item} active={activeId === entry.item.id} />
 			{:else}
 				<div class="interstitial">
-					<h1>Du bist auf dem Laufenden!</h1>
-					<p>Ab hier: alte Perlen im Zufallsmix</p>
+					<h1>You're all caught up</h1>
+					<p>From here on: dusty old gems on shuffle</p>
 				</div>
 			{/if}
 		</section>
 	{:else}
 		<section class="slide">
 			<div class="interstitial">
-				<h1>Noch keine Memes</h1>
-				<p>Lade das erste hoch!</p>
+				<h1>No memes yet</h1>
+				<p>Upload the first one!</p>
 			</div>
 		</section>
 	{/each}

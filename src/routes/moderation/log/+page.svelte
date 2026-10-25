@@ -13,9 +13,9 @@
 
 	const target = (e: PageProps['data']['entries'][number]) =>
 		e.targetType === 'user'
-			? `Nutzer ${e.targetName ?? `#${e.targetId}`}`
+			? `User ${e.targetName ?? `#${e.targetId}`}`
 			: e.targetType === 'site_content'
-				? 'Seiteninhalt'
+				? 'Site content'
 				: `${CONTENT_LABELS[e.targetType as keyof typeof CONTENT_LABELS] ?? e.targetType} #${e.targetId}`;
 </script>
 
@@ -25,21 +25,21 @@
 
 <form method="GET" class="filter">
 	<label>
-		Aktion
+		Action
 		<select name="action" class="field" value={data.action}>
-			<option value="">Alle Aktionen</option>
+			<option value="">All actions</option>
 			{#each data.actions as a (a)}
 				<option value={a}>{AUDIT_LABELS[a] ?? a}</option>
 			{/each}
 		</select>
 	</label>
-	<button type="submit" class="btn">Filtern</button>
+	<button type="submit" class="btn">Filter</button>
 </form>
 
 {#if data.entries.length === 0}
 	<div class="empty">
 		<ScrollText size={36} aria-hidden="true" />
-		<p>Keine Einträge.</p>
+		<p>No entries.</p>
 	</div>
 {:else}
 	<ul class="list">
@@ -57,14 +57,12 @@
 {/if}
 
 {#if data.nextCursor !== null || onLaterPage}
-	<nav class="pager" aria-label="Seiten">
+	<nav class="pager" aria-label="Pages">
 		{#if onLaterPage}
-			<a href="{resolve('/moderation/log')}{firstQuery}">Zum Anfang</a>
+			<a href="{resolve('/moderation/log')}{firstQuery}">Back to start</a>
 		{/if}
 		{#if data.nextCursor !== null}
-			<a href="{resolve('/moderation/log')}?cursor={data.nextCursor}{filterQuery}"
-				>Ältere Einträge</a
-			>
+			<a href="{resolve('/moderation/log')}?cursor={data.nextCursor}{filterQuery}">Older entries</a>
 		{/if}
 	</nav>
 {/if}
