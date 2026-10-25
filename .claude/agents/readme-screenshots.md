@@ -44,7 +44,7 @@ You refresh the Loki README screenshots (`docs/screenshots/*.png`) from a seeded
    npx tsx --env-file=.env scripts/readme-screenshots.ts
    ```
 
-   It signs in through the mock OIDC provider (a throwaway member, an admin for the moderation shots, the seeded `lena` for the profile pages) and writes 14 shots. Mobile is 390x844 @2x and dark unless the name says light, desktop is 1440x900 @2x:
+   It signs in through the mock OIDC provider (a throwaway member, an admin for the moderation shots, the seeded `lena` for the profile pages) and writes 15 shots. Mobile is 390x844 @2x and dark unless the name says light, desktop is 1440x900 @2x:
 
    | Mobile                       | Desktop                    |
    | ---------------------------- | -------------------------- |
@@ -58,9 +58,10 @@ You refresh the Loki README screenshots (`docs/screenshots/*.png`) from a seeded
    | `report-dialog-mobile`       |                            |
    | `moderation-queue-mobile`    |                            |
    | `moderation-timeouts-mobile` |                            |
+   | `maintenance-mobile`         |                            |
    | `feed-light-mobile`          |                            |
 
-   `detail-*` is the meme with the most comments; `discover-mobile` shows whichever slide the shuffle serves first. Pass `--only=feed-desktop,quotes-mobile` (comma-separated names, without `.png`) to retake just some shots. Set `SCREENSHOT_DEBUG=1` to log failed requests and redirects.
+   `detail-*` is the meme with the most comments; `discover-mobile` shows whichever slide the shuffle serves first. `maintenance-mobile` switches maintenance on as an admin (message `Deploy in progress, back around 18:30`), shoots the feed as a different plain member so the banner shows without the admin addendum, and always switches it off again; if a run dies hard, turn it off on `/moderation/maintenance`. Pass `--only=feed-desktop,quotes-mobile` (comma-separated names, without `.png`) to retake just some shots. Set `SCREENSHOT_DEBUG=1` to log failed requests and redirects.
 
 4. Stop the dev server again.
 
@@ -68,8 +69,8 @@ You refresh the Loki README screenshots (`docs/screenshots/*.png`) from a seeded
 
 ## Where things land and how the README uses them
 
-- Output: `docs/screenshots/<name>.png` for each name above (14 files, about 3.5 MB together).
-- `README.md` has a `## Screenshots` section: one caption line per row, then a `<p align="center">` with up to three `<img ... width="30%">` of mobile shots (Feed and Discover; Detail, Quotes and Profile; Stats, Upload and Report; Moderation and Light theme), then the three desktop shots each full width in their own `<p>`. Relative paths, English alt texts. Keep file names stable so the README needs no change on a refresh.
+- Output: `docs/screenshots/<name>.png` for each name above (15 files, about 3.8 MB together).
+- `README.md` has a `## Screenshots` section: one caption line per row, then a `<p align="center">` with up to three `<img ... width="30%">` of mobile shots (Feed and Discover; Detail, Quotes and Profile; Stats, Upload and Report; Moderation with the maintenance banner; Light theme), then the three desktop shots each full width in their own `<p>`. Relative paths, English alt texts. Keep file names stable so the README needs no change on a refresh.
 
 ## House rules
 

@@ -63,6 +63,9 @@ const MEMBERS = ['loki-members'];
 const THROWAWAY: Account = { sub: DEMO_USERNAME, username: DEMO_USERNAME, groups: MEMBERS };
 // The moderation area needs a moderator or admin; every other shot is taken as a plain member.
 const ADMIN: Account = { ...THROWAWAY, groups: [...MEMBERS, 'loki-admins'] };
+// The maintenance shot needs an admin and a plain member at the same time. The role is rewritten
+// from the groups on every login, so the viewer must be a different user than ADMIN.
+const MEMBER_VIEWER: Account = { sub: 'noah', username: 'noah', groups: MEMBERS };
 // Profile pages need a user with memes, favorites and comments: the seeded `lena`.
 const OWNER: Account = { sub: 'demo-lena', username: 'lena', groups: MEMBERS };
 
@@ -236,6 +239,53 @@ async function shootQueue(page: Page, name: string): Promise<void> {
 	await save(name, await page.screenshot());
 }
 
+const MAINTENANCE_MESSAGE = 'Deploy in progress, back around 18:30';
+
+/** Posts a maintenance form action as the signed-in admin and fails loudly if it is not accepted. */
+async function maintenanceAction(
+	page: Page,
+	action: 'save' | 'off',
+	form: Record<string, string> = {}
+): Promise<void> {
+	const response = await page.request.post(`${BASE_URL}/moderation/maintenance?/${action}`, {
+		form,
+		headers: { 'x-sveltekit-action': 'true' }
+	});
+	const body = await response.json().catch(() => null);
+	if (!response.ok() || body?.type !== 'success')
+		throw new Error(`maintenance ?/${action} failed: ${response.status()} ${JSON.stringify(body)}`);
+}
+
+/**
+ * The feed with the maintenance banner: an admin switches maintenance on, a plain member takes
+ * the shot (no admin addendum), and the switch is always turned off again.
+ */
+async function shootMaintenance(browser: Browser): Promise<void> {
+	await withContext(
+		browser,
+		MOBILE,
+		async (admin) => {
+			await maintenanceAction(admin, 'save', { enabled: 'on', message: MAINTENANCE_MESSAGE });
+			try {
+				await withContext(
+					browser,
+					MOBILE,
+					async (page) => {
+						await page.goto(`${BASE_URL}/`);
+						await page.getByText(MAINTENANCE_MESSAGE).first().waitFor();
+						await waitForImages(page);
+						await save('maintenance-mobile.png', await page.screenshot());
+					},
+					{ mobile: true, account: MEMBER_VIEWER }
+				);
+			} finally {
+				await maintenanceAction(admin, 'off');
+			}
+		},
+		{ mobile: true, account: ADMIN }
+	);
+}
+
 async function main(): Promise<void> {
 	await mkdir(OUT_DIR, { recursive: true });
 	const browser = await chromium.launch();
@@ -289,6 +339,7 @@ async function main(): Promise<void> {
 				},
 				{ mobile: true, account: ADMIN }
 			);
+		if (wants('maintenance-mobile')) await shootMaintenance(browser);
 		if (wantsAny('profile-mobile', 'stats-mobile'))
 			await withContext(
 				browser,

@@ -118,6 +118,14 @@ server {
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_request_buffering off;
         proxy_read_timeout 120s;
+
+        # outage page when the app container is down or restarting (see "Maintenance and readiness")
+        error_page 502 504 /maintenance.html;
+    }
+
+    location = /maintenance.html {
+        root /srv/loki;
+        internal;
     }
 }
 
@@ -129,6 +137,23 @@ server {
 ```
 
 Set `ADDRESS_HEADER=x-forwarded-for`. nginx overwrites the header with `$remote_addr` as above, so clients cannot spoof it.
+
+Copy `static/maintenance.html` from the repository to `/srv/loki/maintenance.html` on the host so nginx can serve it when the container does not answer. Keep `proxy_intercept_errors` off (its default): the app's own 503 responses, with their messages, must reach the browser instead of being replaced by this file.
+
+## Maintenance and readiness
+
+The app is always in one of five states: **ok**, **announced** (maintenance is scheduled and reading keeps working), **maintenance** (admins write, everyone else reads), **not ready** (the storage probe fails, so writes are refused) and **down** (the database is unreachable or migrations are pending, so the app answers every page with a 503 outage page). The first three follow the switch and the schedule; the last two follow the readiness checks.
+
+Admins control the switch on the page **Moderation > Maintenance** (`/moderation/maintenance`): an on/off toggle, a message, and an optional start and end time in Berlin time. While maintenance is on, the app shows a status banner to everyone, disables the write controls and refuses writes server-side, except for admins, who see a short addendum and can keep working. A switch with an end time in the past counts as off. "Turn off" clears it at once.
+
+Two probes are available without logging in:
+
+- `/healthz` is liveness: it answers `ok` as long as the Node process runs. The image's `HEALTHCHECK` uses it.
+- `/readyz` is readiness: it answers 200 with `{ "ready": true, ... }` only when the database answers, the migrations have been applied and the storage bucket is reachable, otherwise 503. The body holds booleans only. `docker-compose.yml` uses it for the `app` health check (every 30 s, 60 s start period, 3 retries), so `docker compose ps` shows `unhealthy` while a dependency is missing. Results are cached for about 10 seconds.
+
+The storage probe is a `HeadObject` request for the key `.loki-readiness-probe` in the bucket. A 2xx or a 404 (the object does not exist, which is the normal case) means the bucket is reachable and counts as ready; any other answer, including 403, or no answer within 3 seconds counts as not ready. Nothing is written. The R2 token needs object read permission for this; the documented Object Read & Write token is enough.
+
+When the container itself does not answer, nginx can still show the outage page: see the `error_page 502 504` lines in [Option B](#option-b-external-nginx) above. Cloudflare Tunnel on the free plan cannot serve a custom page when the origin is down; visitors get the tunnel's default error page. The page the app serves covers every case where the container answers, such as a database outage or pending migrations.
 
 ## Operations
 
