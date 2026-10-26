@@ -238,3 +238,14 @@ export const auditLog = pgTable(
 	},
 	(t) => [index('audit_log_created_at_idx').on(t.createdAt)]
 );
+
+/** Admin maintenance switch. A single row with id 1; no row means "off". */
+export const maintenance = pgTable('maintenance', {
+	id: integer('id').primaryKey(),
+	enabled: boolean('enabled').notNull().default(false),
+	message: text('message').notNull().default(''),
+	startsAt: timestamp('starts_at', { withTimezone: true }),
+	until: timestamp('until', { withTimezone: true }),
+	updatedBy: integer('updated_by').references(() => users.id),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+});

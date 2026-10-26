@@ -1,6 +1,7 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import type { FeedItem } from '../server/feed';
+import { STATUS_KEY } from '../status-context';
 import MemeCard from './MemeCard.svelte';
 
 function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
@@ -26,6 +27,28 @@ function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
 		underReview: false,
 		...overrides
 	};
+}
+
+const MAINTENANCE = 'Loki is under maintenance. Reading works, posting is paused.';
+
+function withStatus(writable: boolean) {
+	return new Map([
+		[
+			STATUS_KEY,
+			{
+				value: writable
+					? { state: 'ok', message: null, writable: true, nextChangeAt: null }
+					: { state: 'maintenance', message: MAINTENANCE, writable: false, nextChangeAt: null }
+			}
+		]
+	]);
+}
+
+/** The opening tag of the button carrying `aria-label="label"`. */
+function buttonTag(html: string, label: string): string {
+	const tag = html.match(new RegExp(`<button[^>]*aria-label="${label}"[^>]*>`));
+	expect(tag, `${label} button rendered`).not.toBeNull();
+	return tag![0];
 }
 
 function order(html: string, marker: string): number {
@@ -74,5 +97,33 @@ describe('MemeCard', () => {
 		expect(body).toContain('by dev');
 		expect(body).toContain('aria-label="Upvote"');
 		expect(body).toContain('aria-label="Downvote"');
+	});
+
+	describe('while writes are locked', () => {
+		it.each(['Upvote', 'Downvote', 'Save as favorite'])(
+			'marks the %s button aria-disabled with the reason as title',
+			(label) => {
+				const { body } = render(MemeCard, {
+					props: { item: feedItem() },
+					context: withStatus(false)
+				});
+				const tag = buttonTag(body, label);
+				expect(tag).toContain('aria-disabled="true"');
+				expect(tag).toContain(`title="${MAINTENANCE}"`);
+				expect(tag).not.toMatch(/\sdisabled[\s=>]/);
+			}
+		);
+
+		it.each([
+			['a writable status', withStatus(true)],
+			['no status context', undefined]
+		])('leaves the controls alone with %s', (_name, context) => {
+			const { body } = render(MemeCard, { props: { item: feedItem() }, context });
+			for (const label of ['Upvote', 'Downvote', 'Save as favorite']) {
+				const tag = buttonTag(body, label);
+				expect(tag).not.toContain('aria-disabled');
+				expect(tag).not.toContain('title=');
+			}
+		});
 	});
 });

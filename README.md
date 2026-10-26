@@ -16,6 +16,7 @@ Planned and being built. The whole app is English: UI, code and docs.
 - **Statistics**: uploads over time, top uploaders and voters, tag distribution.
 - **Reports and moderation**: members report memes, comments and quotes. Content with too many open reports is hidden until a moderator decides in the moderation area (queue, timeouts, audit log).
 - **Rules and FAQ**, editable by admins in the app.
+- **Maintenance mode**: admins pause posting with a message; the app reports its own readiness and shows a designed page during outages.
 - **PWA** with a share target, so memes can be sent straight from the share sheet.
 
 ## Screenshots
@@ -43,11 +44,17 @@ Stats, Upload and Report: what the board is up to, how a meme gets onto it, and 
   <img src="docs/screenshots/report-dialog-mobile.png" alt="Report dialog on a phone with a reason selected and a note typed" width="30%">
 </p>
 
-Moderation and Light theme: the open-case queue, the timeout tools and a daytime feed.
+Moderation: the open-case queue, the timeout tools and the maintenance banner.
 
 <p align="center">
   <img src="docs/screenshots/moderation-queue-mobile.png" alt="Moderation queue on a phone with one reported meme and its reporter note" width="30%">
   <img src="docs/screenshots/moderation-timeouts-mobile.png" alt="Moderation timeouts page on a phone with the set-timeout form" width="30%">
+  <img src="docs/screenshots/maintenance-mobile.png" alt="Feed on a phone with a maintenance banner announcing a deploy in progress" width="30%">
+</p>
+
+Light theme: a daytime feed.
+
+<p align="center">
   <img src="docs/screenshots/feed-light-mobile.png" alt="Feed on a phone in the light theme" width="30%">
 </p>
 

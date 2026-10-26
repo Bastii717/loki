@@ -135,7 +135,7 @@
 
 <style>
 	.pager {
-		height: 100dvh;
+		height: calc(100dvh - var(--banners-height, 0px));
 		overflow-y: scroll;
 		scroll-snap-type: y mandatory;
 		overscroll-behavior-y: contain;
@@ -143,7 +143,7 @@
 
 	.slide {
 		position: relative;
-		height: 100dvh;
+		height: calc(100dvh - var(--banners-height, 0px));
 		scroll-snap-align: start;
 		scroll-snap-stop: always;
 	}

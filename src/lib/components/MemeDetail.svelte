@@ -16,6 +16,7 @@
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import { apiErrorMessage } from '../api-error';
+	import { lockMessage, refreshStatus, useStatus } from '../status-context';
 	import { relativeTime } from '../time';
 	import { createVoter } from '../vote';
 	import type { CommentItem } from '../server/comments';
@@ -53,6 +54,8 @@
 	let text = $state('');
 	let sending = $state(false);
 	let commentError = $state('');
+	// vote and favorite errors show next to those controls, not under the comment form
+	let reactionError = $state('');
 	// svelte-ignore state_referenced_locally
 	let favorited = $state(item.userFavorite);
 	// svelte-ignore state_referenced_locally
@@ -63,6 +66,19 @@
 	const scoreLabel = $derived(score > 0 ? `+${score}` : String(score));
 	// Under review and withheld by the server (members): panel only, no reveal. Mods keep the content.
 	const withheld = $derived(item.mediaUrl === null);
+
+	// While writes are locked the controls stay in the DOM (focusable, with the reason as title);
+	// activating one shows the reason in its usual error line instead of calling the API.
+	const status = useStatus();
+	const locked = $derived(!status.value.writable);
+	const lockTitle = $derived(locked ? lockMessage(status.value) : undefined);
+	/** Explains the lock via `show` and returns true while writes are locked. */
+	function blocked(show: (message: string) => void): boolean {
+		if (!locked) return false;
+		refreshStatus();
+		show(lockMessage(status.value));
+		return true;
+	}
 
 	// ---- swipe / arrow navigation between feed neighbours
 	const feedIds = $derived(page.state.feedIds);
@@ -144,19 +160,31 @@
 		(s) => {
 			score = s.score;
 			userVote = s.userVote;
-		}
+		},
+		(message) => (reactionError = message)
 	);
+	function castVote(dir: 1 | -1) {
+		if (blocked((m) => (reactionError = m))) return;
+		reactionError = '';
+		void vote(dir);
+	}
 
 	// ---- favorite
 	async function toggleFavorite() {
-		if (favPending) return;
+		if (favPending || blocked((m) => (reactionError = m))) return;
+		reactionError = '';
 		favPending = true;
 		const prev = { favorited, favCount };
 		favorited = !prev.favorited;
 		favCount += favorited ? 1 : -1;
 		try {
 			const res = await fetch(`/api/memes/${item.id}/favorite`, { method: 'POST' });
-			if (!res.ok) throw new Error(String(res.status));
+			if (!res.ok) {
+				favorited = prev.favorited;
+				favCount = prev.favCount;
+				reactionError = await apiErrorMessage(res, '');
+				return;
+			}
 			const data = (await res.json()) as { favorited: boolean; count: number };
 			favorited = data.favorited;
 			favCount = data.count;
@@ -170,11 +198,15 @@
 
 	// ---- delete / flags (uploader or moderator)
 	async function deleteMeme() {
+		if (blocked((m) => (menuError = m))) return;
 		if (!confirm('Delete this meme for good?')) return;
 		menuError = '';
 		try {
 			const res = await fetch(`/api/memes/${item.id}`, { method: 'DELETE' });
-			if (!res.ok && res.status !== 404) throw new Error(String(res.status));
+			if (!res.ok && res.status !== 404) {
+				menuError = await apiErrorMessage(res, 'Could not delete the meme.');
+				return;
+			}
 			await goto(resolve('/'), { invalidateAll: true });
 		} catch {
 			menuError = 'Could not delete the meme.';
@@ -182,6 +214,7 @@
 	}
 
 	async function setFlag(flag: 'nsfw' | 'spoiler', value: boolean) {
+		if (blocked((m) => (menuError = m))) return;
 		menuError = '';
 		try {
 			const res = await fetch(`/api/memes/${item.id}`, {
@@ -203,7 +236,7 @@
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
 		const value = text.trim();
-		if (!value || sending) return;
+		if (!value || sending || blocked((m) => (commentError = m))) return;
 		sending = true;
 		commentError = '';
 		try {
@@ -227,10 +260,14 @@
 	}
 
 	async function remove(c: CommentItem) {
+		if (blocked((m) => (commentError = m))) return;
 		commentError = '';
 		try {
 			const res = await fetch(`/api/comments/${c.id}`, { method: 'DELETE' });
-			if (!res.ok && res.status !== 404) throw new Error(String(res.status));
+			if (!res.ok && res.status !== 404) {
+				commentError = await apiErrorMessage(res, 'Could not delete the comment.');
+				return;
+			}
 			if (comments.some((x) => x.id === c.id)) commentCount = Math.max(0, commentCount - 1);
 			comments = comments.filter((x) => x.id !== c.id);
 		} catch {
@@ -281,6 +318,8 @@
 						type="button"
 						role="menuitemcheckbox"
 						aria-checked={flags.nsfw}
+						aria-disabled={locked ? 'true' : undefined}
+						title={lockTitle}
 						onclick={() => setFlag('nsfw', !flags.nsfw)}
 					>
 						<EyeOff size={18} aria-hidden="true" />
@@ -290,12 +329,21 @@
 						type="button"
 						role="menuitemcheckbox"
 						aria-checked={flags.spoiler}
+						aria-disabled={locked ? 'true' : undefined}
+						title={lockTitle}
 						onclick={() => setFlag('spoiler', !flags.spoiler)}
 					>
 						<TriangleAlert size={18} aria-hidden="true" />
 						{flags.spoiler ? 'Remove spoiler mark' : 'Mark as spoiler'}
 					</button>
-					<button type="button" role="menuitem" class="danger" onclick={deleteMeme}>
+					<button
+						type="button"
+						role="menuitem"
+						class="danger"
+						aria-disabled={locked ? 'true' : undefined}
+						title={lockTitle}
+						onclick={deleteMeme}
+					>
 						<Trash2 size={18} aria-hidden="true" /> Delete meme
 					</button>
 					{#if menuError}<p class="error" role="alert">{menuError}</p>{/if}
@@ -352,6 +400,8 @@
 				class:on={favorited}
 				aria-pressed={favorited}
 				aria-label={favorited ? 'Remove favorite' : 'Save as favorite'}
+				aria-disabled={locked ? 'true' : undefined}
+				title={lockTitle}
 				onclick={toggleFavorite}
 				><Star size={22} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true" />
 				<span>{favCount}</span></button
@@ -363,7 +413,9 @@
 					class:active={userVote === 1}
 					aria-label="Upvote"
 					aria-pressed={userVote === 1}
-					onclick={() => vote(1)}
+					aria-disabled={locked ? 'true' : undefined}
+					title={lockTitle}
+					onclick={() => castVote(1)}
 					><ArrowBigUp
 						size={26}
 						fill={userVote === 1 ? 'currentColor' : 'none'}
@@ -377,7 +429,9 @@
 					class:active={userVote === -1}
 					aria-label="Downvote"
 					aria-pressed={userVote === -1}
-					onclick={() => vote(-1)}
+					aria-disabled={locked ? 'true' : undefined}
+					title={lockTitle}
+					onclick={() => castVote(-1)}
 					><ArrowBigDown
 						size={26}
 						fill={userVote === -1 ? 'currentColor' : 'none'}
@@ -386,6 +440,7 @@
 				>
 			</div>
 		</div>
+		{#if reactionError}<p class="error" role="alert">{reactionError}</p>{/if}
 		{#if item.tags.length > 0}
 			<ul class="tags">
 				{#each item.tags as tag (tag)}
@@ -404,7 +459,12 @@
 				aria-label="Write a comment"
 				maxlength="2000"
 				rows="2"></textarea>
-			<button type="submit" disabled={sending || text.trim() === ''}>Send</button>
+			<button
+				type="submit"
+				disabled={sending || text.trim() === ''}
+				aria-disabled={locked ? 'true' : undefined}
+				title={lockTitle}>Send</button
+			>
 		</form>
 		{#if commentError}
 			<p class="error" role="alert">{commentError}</p>
@@ -424,6 +484,8 @@
 										type="button"
 										class="del"
 										onclick={() => remove(c)}
+										aria-disabled={locked ? 'true' : undefined}
+										title={lockTitle}
 										aria-label="Delete comment by {c.author}">Delete</button
 									>
 								{/if}
@@ -450,7 +512,8 @@
 <style>
 	.bar {
 		position: sticky;
-		top: 0;
+		/* below the status banner strip, when there is one */
+		top: var(--banners-height, 0px);
 		z-index: 5;
 		display: flex;
 		align-items: center;
@@ -625,6 +688,10 @@
 
 	.star.on {
 		color: var(--accent);
+	}
+
+	[aria-disabled='true'] {
+		opacity: 0.5;
 	}
 
 	.votes {

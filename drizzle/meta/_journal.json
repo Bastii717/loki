@@ -43,6 +43,13 @@
       "when": 1792947627519,
       "tag": "0005_report_categories_english",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792961063089,
+      "tag": "0006_maintenance_switch",
+      "breakpoints": true
     }
   ]
 }

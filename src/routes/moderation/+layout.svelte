@@ -11,7 +11,12 @@
 		{ href: '/moderation', label: 'Queue', count: data.openCases },
 		{ href: '/moderation/resolved', label: 'Resolved', count: 0 },
 		{ href: '/moderation/timeouts', label: 'Timeouts', count: 0 },
-		...(data.isAdmin ? [{ href: '/moderation/users', label: 'Users', count: 0 }] : []),
+		...(data.isAdmin
+			? [
+					{ href: '/moderation/users', label: 'Users', count: 0 },
+					{ href: '/moderation/maintenance', label: 'Maintenance', count: 0 }
+				]
+			: []),
 		{ href: '/moderation/log', label: 'Log', count: 0 }
 	]);
 
@@ -71,7 +76,8 @@
 
 	.tabs {
 		position: sticky;
-		top: 0;
+		/* below the status banner strip, when there is one */
+		top: var(--banners-height, 0px);
 		z-index: 5;
 		display: flex;
 		gap: 4px;

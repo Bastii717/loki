@@ -1,5 +1,6 @@
 import { getTableName, is, sql } from 'drizzle-orm';
 import { PgTable } from 'drizzle-orm/pg-core';
+import { setMigrated } from '../readiness';
 import { db, runMigrations } from './index';
 import * as schema from './schema';
 import { users } from './schema';
@@ -9,6 +10,7 @@ let counter = 0;
 /** Brings the test database schema up to date. Call in beforeAll. */
 export async function setupDb(): Promise<void> {
 	await runMigrations();
+	setMigrated(true);
 }
 
 /**

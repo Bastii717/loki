@@ -30,7 +30,8 @@ export const AUDIT_LABELS: Record<string, string> = {
 	flags_changed: 'Flags changed',
 	site_content_changed: 'Rules/FAQ changed',
 	timeout_set: 'Timeout set',
-	timeout_lifted: 'Timeout lifted'
+	timeout_lifted: 'Timeout lifted',
+	maintenance_changed: 'Maintenance changed'
 };
 
 export const ROLE_LABELS: Record<string, string> = {
@@ -45,7 +46,7 @@ const dateTime = new Intl.DateTimeFormat('en-GB', {
 	year: 'numeric',
 	hour: '2-digit',
 	minute: '2-digit',
-	hour12: false,
+	hourCycle: 'h23',
 	timeZone: 'Europe/Berlin'
 });
 const dateOnly = new Intl.DateTimeFormat('en-GB', {
@@ -55,8 +56,16 @@ const dateOnly = new Intl.DateTimeFormat('en-GB', {
 	timeZone: 'Europe/Berlin'
 });
 
+const timeOnly = new Intl.DateTimeFormat('en-GB', {
+	hour: '2-digit',
+	minute: '2-digit',
+	hourCycle: 'h23',
+	timeZone: 'Europe/Berlin'
+});
+
 export const formatDateTime = (iso: string) => dateTime.format(new Date(iso));
 export const formatDate = (iso: string) => dateOnly.format(new Date(iso));
+export const formatTime = (iso: string) => timeOnly.format(new Date(iso));
 
 /** "1 report" / "3 reports" */
 export const pluralize = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;

@@ -1,15 +1,19 @@
 import { json } from '@sveltejs/kit';
 import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, resolveSession } from './lib/server/auth/session';
+import { migrateWithRetry } from './lib/server/boot';
 import { runMigrations } from './lib/server/db';
 import { env } from './lib/server/env';
 import { startJobs } from './lib/server/jobs';
+import { currentStatus } from './lib/server/maintenance';
+import { outagePage } from './lib/server/outage-page';
 import { rateLimitRetryMs } from './lib/server/rate-limit';
+import { isWriteLockExempt, writeLockResponse } from './lib/server/write-lock';
 
 /** Runs once at server start so misconfiguration fails at boot, not on the first request. */
 export const init: ServerInit = async () => {
 	void env.DATABASE_URL; // validate the whole environment eagerly
-	await runMigrations();
+	await migrateWithRetry({ migrate: runMigrations });
 	startJobs();
 };
 
@@ -17,6 +21,8 @@ const PUBLIC_PATHS = new Set([
 	'/login',
 	'/auth/callback',
 	'/healthz',
+	'/readyz',
+	'/maintenance.html',
 	'/favicon.ico',
 	'/favicon.svg',
 	'/manifest.webmanifest',
@@ -41,6 +47,22 @@ const isPublic = (path: string) =>
 	path.startsWith('/icons/') || // PWA install fetches icons without credentials
 	path.startsWith('/_app/immutable/') ||
 	path === '/_app/version.json';
+
+/** Answered even while the app is down: health probes and everything the outage page itself needs. */
+const OUTAGE_EXEMPT_PATHS = new Set([
+	'/healthz',
+	'/readyz',
+	'/maintenance.html',
+	'/favicon.ico',
+	'/favicon.svg',
+	'/manifest.webmanifest',
+	'/robots.txt'
+]);
+const isOutageExempt = (path: string) =>
+	OUTAGE_EXEMPT_PATHS.has(path) || path.startsWith('/icons/') || path.startsWith('/_app/');
+
+/** Liveness and readiness never need a user, and must keep answering when the session lookup cannot (database down). */
+const HEALTH_PATHS = new Set(['/healthz', '/readyz']);
 
 const MODERATION_ROOTS = ['/moderation', '/api/moderation'];
 const isModerationPath = (path: string) =>
@@ -130,13 +152,18 @@ function secure(response: Response): Response {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-	const token = event.cookies.get(SESSION_COOKIE);
+	const path = routedPath(event.url.pathname);
+	// Before the session lookup, which needs the database. /login and /auth/callback need it too.
+	if (!isOutageExempt(path) && (await currentStatus(null)).state === 'down') {
+		return secure(outagePage());
+	}
+
+	const token = HEALTH_PATHS.has(path) ? undefined : event.cookies.get(SESSION_COOKIE);
 	const session = token ? await resolveSession(token) : null;
 	event.locals.user = session?.user ?? null;
 	if (token && session?.renewed) event.cookies.set(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
 	if (token && !event.locals.user) event.cookies.delete(SESSION_COOKIE, { path: '/' });
 
-	const path = routedPath(event.url.pathname);
 	if (!event.locals.user && !isPublic(path)) {
 		if (path === '/api' || path.startsWith('/api/')) {
 			return secure(json({ error: 'Unauthorized' }, { status: 401 }));
@@ -155,6 +182,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 				headers: { 'content-type': 'text/plain; charset=utf-8' }
 			})
 		);
+	}
+	if (event.locals.user && WRITE_METHODS.has(event.request.method) && !isWriteLockExempt(path)) {
+		const status = await currentStatus(event.locals.user);
+		if (!status.writable) {
+			return secure(
+				status.state === 'down' ? outagePage() : writeLockResponse(event, status.message!, path)
+			);
+		}
 	}
 	const retryAfter = event.locals.user
 		? retryAfterSeconds(event.request.method, path, event.locals.user.id)

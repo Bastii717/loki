@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { db } from './db';
+import { getReadiness } from './readiness';
 
 const INTERVAL_MS = 5 * 60 * 1000;
 
@@ -10,13 +11,21 @@ export async function recomputeHotScores(): Promise<void> {
 	);
 }
 
+/** The hot-score job only runs while the database is reachable and migrated. */
+export async function hotScoreJobShouldRun(): Promise<boolean> {
+	const readiness = await getReadiness();
+	return readiness.db && readiness.migrated;
+}
+
 let timer: ReturnType<typeof setInterval> | undefined;
 
 /** Starts the periodic jobs; calling it again is a no-op. */
 export function startJobs(): void {
 	if (timer) return;
-	const run = () =>
-		recomputeHotScores().catch((e) => console.error('hot score recompute failed', e));
+	const run = async () => {
+		if (!(await hotScoreJobShouldRun())) return;
+		await recomputeHotScores().catch((e) => console.error('hot score recompute failed', e));
+	};
 	void run();
 	timer = setInterval(run, INTERVAL_MS);
 	timer.unref();

@@ -1,3 +1,5 @@
+import { BREAK_MESSAGE } from './api-error';
+
 export type ModResult = { ok: true } | { ok: false; message: string };
 
 /**
@@ -17,13 +19,14 @@ export async function modRequest(
 			body: body === undefined ? undefined : JSON.stringify(body)
 		});
 		if (res.ok) return { ok: true };
-		let message = fallback;
+		// a 503 that is not a JSON `{message}` is the outage page: never leave it silent
+		let message = res.status === 503 ? BREAK_MESSAGE : fallback;
 		try {
 			const parsed = (await res.json()) as { message?: unknown; error?: unknown };
 			const text = parsed.message ?? parsed.error;
 			if (typeof text === 'string' && text !== '') message = text;
 		} catch {
-			// not JSON: keep the fallback
+			// not JSON: keep the default
 		}
 		return { ok: false, message };
 	} catch {

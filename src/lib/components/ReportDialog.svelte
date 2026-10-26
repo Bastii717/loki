@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import type { ContentType, ReportCategory } from '../server/moderation';
 	import { apiErrorMessage } from '../api-error';
+	import { lockMessage, useStatus } from '../status-context';
 
 	let {
 		contentType,
@@ -30,11 +31,16 @@
 	let done = $state(false);
 	let failure = $state('');
 
+	// While writes are locked the reason is shown as soon as the dialog opens, and sending is off.
+	const status = useStatus();
+	const locked = $derived(!status.value.writable);
+	const shownError = $derived(failure || (locked ? lockMessage(status.value) : ''));
+
 	onMount(() => dialog?.showModal());
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
-		if (!category || sending) return;
+		if (!category || sending || locked) return;
 		sending = true;
 		failure = '';
 		try {
@@ -84,10 +90,16 @@
 				<textarea bind:value={text} maxlength={MAX_TEXT} rows="3"></textarea>
 				<small aria-live="polite">{text.length} / {MAX_TEXT}</small>
 			</label>
-			{#if failure}<p class="error" role="alert">{failure}</p>{/if}
+			{#if shownError}<p class="error" role="alert">{shownError}</p>{/if}
 			<div class="actions">
 				<button type="button" onclick={() => dialog?.close()}>Cancel</button>
-				<button type="submit" class="primary" disabled={!category || sending}>Report</button>
+				<button
+					type="submit"
+					class="primary"
+					disabled={!category || sending}
+					aria-disabled={locked ? 'true' : undefined}
+					title={locked ? lockMessage(status.value) : undefined}>Report</button
+				>
 			</div>
 		</form>
 	{/if}
@@ -189,6 +201,7 @@
 		color: var(--accent-text);
 	}
 
+	.actions button[aria-disabled='true'],
 	.actions button:disabled {
 		opacity: 0.5;
 		cursor: default;

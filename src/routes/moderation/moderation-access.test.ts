@@ -35,6 +35,7 @@ import { load as done } from './resolved/+page.server';
 import { load as log } from './log/+page.server';
 import { load as usersPage } from './users/+page.server';
 import { load as timeoutsPage } from './timeouts/+page.server';
+import { actions as maintenanceActions, load as maintenancePage } from './maintenance/+page.server';
 
 /** Fixed far-future mute end, so the formatted date never depends on the run date. */
 const MUTED_UNTIL = new Date('2099-12-24T12:00:00Z');
@@ -108,6 +109,40 @@ const endpoints: Endpoint[] = [
 		page: true,
 		adminOnly: true,
 		call: (_w, session) => ({ handler: usersPage, path: '/moderation/users', session })
+	},
+	{
+		name: 'maintenance load',
+		page: true,
+		adminOnly: true,
+		call: (_w, session) => ({
+			handler: maintenancePage,
+			path: '/moderation/maintenance',
+			session
+		})
+	},
+	{
+		name: 'maintenance save action',
+		page: true, // a page form action: anonymous requests are redirected to /login
+		adminOnly: true,
+		call: (_w, session) => ({
+			handler: maintenanceActions.save,
+			path: '/moderation/maintenance?/save',
+			method: 'POST',
+			session,
+			form: { message: '', startsAt: '', until: '' }
+		})
+	},
+	{
+		name: 'maintenance off action',
+		page: true, // a page form action: anonymous requests are redirected to /login
+		adminOnly: true,
+		call: (_w, session) => ({
+			handler: maintenanceActions.off,
+			path: '/moderation/maintenance?/off',
+			method: 'POST',
+			session,
+			form: {}
+		})
 	},
 	{
 		name: 'POST case',
@@ -426,7 +461,9 @@ describe('open-case badge in the root layout', () => {
 	it('is null for members and anonymous, the count for moderators and admins', async () => {
 		const w = await world();
 		const load = (user: World['mod']['user'] | null) =>
-			rootLayout({ locals: { user } } as never) as Promise<{ openCases: number | null }>;
+			rootLayout({ locals: { user }, depends: () => {} } as never) as Promise<{
+				openCases: number | null;
+			}>;
 		expect((await load(w.member.user)).openCases).toBeNull();
 		expect((await load(null)).openCases).toBeNull();
 		expect((await load(w.mod.user)).openCases).toBe(1);
@@ -436,16 +473,26 @@ describe('open-case badge in the root layout', () => {
 	it('is null for a timed-out moderator or admin (their moderation rights rest)', async () => {
 		const w = await world();
 		const load = (user: World['mod']['user']) =>
-			rootLayout({ locals: { user } } as never) as Promise<{ openCases: number | null }>;
+			rootLayout({ locals: { user }, depends: () => {} } as never) as Promise<{
+				openCases: number | null;
+			}>;
 		expect((await load(w.lockedMod.user)).openCases).toBeNull();
 		expect((await load(w.lockedAdmin.user)).openCases).toBeNull();
+	});
+});
+
+describe('status data in the root layout', () => {
+	it("depends on 'loki:status' so the client can refresh it", async () => {
+		const depends = vi.fn();
+		await rootLayout({ locals: { user: null }, depends } as never);
+		expect(depends).toHaveBeenCalledWith('loki:status');
 	});
 });
 
 describe('timeout banner data in the root layout', () => {
 	type Layout = { activeTimeout: { until: string; reason: string } | null };
 	const load = (user: World['mod']['user'] | null) =>
-		rootLayout({ locals: { user } } as never) as Promise<Layout>;
+		rootLayout({ locals: { user }, depends: () => {} } as never) as Promise<Layout>;
 
 	it('exposes the active timeout of a timed-out viewer', async () => {
 		const w = await world();

@@ -6,6 +6,7 @@
 	import MessageCircle from 'lucide-svelte/icons/message-circle';
 	import Star from 'lucide-svelte/icons/star';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
+	import { lockMessage, useStatus } from '../status-context';
 	import { createVoter } from '../vote';
 	import type { FeedItem } from '../server/feed';
 	import ReportButton from './ReportButton.svelte';
@@ -33,14 +34,25 @@
 	let userVote = $state<-1 | 0 | 1>(item.userVote);
 	const scoreLabel = $derived(score > 0 ? `+${score}` : String(score));
 
+	// While writes are locked the vote arrows stay in the DOM (focusable, with the reason as title);
+	// activating one shows the reason instead of calling the API.
+	const status = useStatus();
+	const locked = $derived(!status.value.writable);
+	let note = $state('');
+
 	const vote = createVoter(
 		() => item.id,
 		() => ({ score, userVote }),
 		(s) => {
 			score = s.score;
 			userVote = s.userVote;
-		}
+		},
+		(message) => (note = message)
 	);
+	function castVote(dir: 1 | -1) {
+		note = locked ? lockMessage(status.value) : '';
+		if (!locked) void vote(dir);
+	}
 </script>
 
 <div class="media">
@@ -77,6 +89,7 @@
 </div>
 
 <div class="caption">
+	{#if note}<p class="note" role="alert">{note}</p>{/if}
 	<b>{withheld ? 'Under review' : item.title || 'Untitled'}</b>
 	{#if item.uploader}<span>by {item.uploader}</span>{/if}
 	{#if item.underReview && !withheld}<UnderReviewBadge />{/if}
@@ -89,7 +102,9 @@
 		class:active={userVote === 1}
 		aria-label="Upvote"
 		aria-pressed={userVote === 1}
-		onclick={() => vote(1)}
+		aria-disabled={locked ? 'true' : undefined}
+		title={locked ? lockMessage(status.value) : undefined}
+		onclick={() => castVote(1)}
 		><ArrowBigUp size={26} fill={userVote === 1 ? 'currentColor' : 'none'} /></button
 	>
 	<b class="score" class:pos={score > 0} class:neg={score < 0}>{scoreLabel}</b>
@@ -99,7 +114,9 @@
 		class:active={userVote === -1}
 		aria-label="Downvote"
 		aria-pressed={userVote === -1}
-		onclick={() => vote(-1)}
+		aria-disabled={locked ? 'true' : undefined}
+		title={locked ? lockMessage(status.value) : undefined}
+		onclick={() => castVote(-1)}
 		><ArrowBigDown size={26} fill={userVote === -1 ? 'currentColor' : 'none'} /></button
 	>
 	<span
@@ -174,6 +191,15 @@
 		overflow-wrap: anywhere;
 	}
 
+	.note {
+		margin: 0 0 6px;
+		padding: 6px 10px;
+		border-radius: var(--radius);
+		background: rgb(0 0 0 / 0.65);
+		font-size: 13px;
+		text-shadow: none;
+	}
+
 	.caption span {
 		font-size: 13px;
 		opacity: 0.85;
@@ -202,6 +228,10 @@
 		color: inherit;
 		font-size: 18px;
 		cursor: pointer;
+	}
+
+	.arrow[aria-disabled='true'] {
+		opacity: 0.5;
 	}
 
 	.arrow.up.active {
