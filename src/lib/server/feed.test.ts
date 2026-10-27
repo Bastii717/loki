@@ -253,8 +253,11 @@ describe('getFeedItem', () => {
 describe('under review', () => {
 	const T = env.REPORT_REVIEW_THRESHOLD;
 
-	async function reportedMeme(reports: number) {
-		const author = await testUser();
+	async function reportedMeme(
+		reports: number,
+		authorOverrides: Parameters<typeof testUser>[0] = {}
+	) {
+		const author = await testUser(authorOverrides);
 		const id = await addMedia(author.id, { title: 'secret title' });
 		await addOpenReports('meme', id, author.id, reports);
 		return { author, id };
@@ -270,7 +273,10 @@ describe('under review', () => {
 	});
 
 	it('above the threshold a member gets no urls, title or tags - in feed, detail and discover', async () => {
-		const { id, author } = await reportedMeme(OVER_THRESHOLD);
+		const { id, author } = await reportedMeme(OVER_THRESHOLD, {
+			role: 'moderator',
+			avatarThumbKey: 'avatars/u9/x-64.webp'
+		});
 		const [{ id: tagId }] = await db.insert(tags).values({ name: 'geheim' }).returning();
 		await db.insert(mediaTags).values({ mediaId: id, tagId });
 		const viewer = await testUser();
@@ -286,9 +292,12 @@ describe('under review', () => {
 				mediaUrl: null,
 				title: '',
 				tags: [],
-				uploader: ''
+				uploader: '',
+				uploaderRole: 'member',
+				uploaderAvatar: null
 			});
 			expect(JSON.stringify(item)).not.toContain('secret title');
+			expect(JSON.stringify(item)).not.toContain('avatars/');
 			expect(JSON.stringify(item)).not.toContain('memes/');
 		}
 		// the author is no special case
@@ -297,16 +306,33 @@ describe('under review', () => {
 	});
 
 	it('a moderator (revealAll) gets the full item, flagged', async () => {
-		const { id } = await reportedMeme(OVER_THRESHOLD);
+		const { id, author } = await reportedMeme(OVER_THRESHOLD, {
+			role: 'moderator',
+			avatarThumbKey: 'avatars/u9/x-64.webp'
+		});
 		const mod = await testUser({ role: 'moderator' });
 		const detail = (await getFeedItem(mod.id, id, true))!;
-		expect(detail).toMatchObject({ underReview: true, title: 'secret title' });
+		expect(detail).toMatchObject({
+			underReview: true,
+			title: 'secret title',
+			uploader: author.username,
+			uploaderRole: 'moderator',
+			uploaderAvatar: 'avatars/u9/x-64.webp'
+		});
 		expect(detail.thumbUrl).toMatch(/^\/media\/memes\/t/);
 		expect(detail.mediaUrl).toMatch(/^\/media\/memes\/o/);
 		const page = await getFeedPage({ viewerId: mod.id, revealAll: true, sort: 'new' });
 		expect(page.items[0].mediaUrl).not.toBeNull();
+		expect(page.items[0]).toMatchObject({
+			uploaderRole: 'moderator',
+			uploaderAvatar: 'avatars/u9/x-64.webp'
+		});
 		const discover = await getDiscoverBatch(mod.id, undefined, [], true);
 		expect(discover.items[0].mediaUrl).not.toBeNull();
+		expect(discover.items[0]).toMatchObject({
+			uploaderRole: 'moderator',
+			uploaderAvatar: 'avatars/u9/x-64.webp'
+		});
 	});
 
 	it('counts distinct reporters, not reports', async () => {

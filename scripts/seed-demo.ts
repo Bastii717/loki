@@ -340,8 +340,15 @@ async function ensureUser(u: DemoUser) {
 	// users seeded before display names existed get theirs on the next run (never overwrites a chosen one)
 	await db
 		.update(users)
-		.set({ displayName, displayNameKey: nameKey(displayName), motto: motto ?? '' })
+		.set({ displayName, displayNameKey: nameKey(displayName) })
 		.where(and(eq(users.sub, u.sub), isNull(users.displayName)));
+	if (motto) {
+		// only fills an empty motto, never overwrites one the user wrote
+		await db
+			.update(users)
+			.set({ motto })
+			.where(and(eq(users.sub, u.sub), eq(users.motto, '')));
+	}
 	const [row] = await db
 		.select({ id: users.id, username: users.username, role: users.role })
 		.from(users)
@@ -435,7 +442,7 @@ async function seedExtras(byName: UserMap) {
 		const mira = byName.get('mira')!;
 		if (target) {
 			await createReport(
-				{ id: mira.id, username: mira.username, role: 'member' },
+				{ id: mira.id, username: mira.username, displayName: null, role: 'member' },
 				'meme',
 				target.id,
 				'misinformation',
