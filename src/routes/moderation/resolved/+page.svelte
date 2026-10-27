@@ -38,8 +38,11 @@
 				</div>
 				<p class="excerpt">{c.excerpt}</p>
 				<p class="muted">
-					by {modName(c.authorDisplay, c.author)}
-					<RoleBadge role={c.authorRole} />, {pluralize(c.reports.length, 'report', 'reports')}:
+					by {modName(c.authorDisplay, c.author)}<RoleBadge role={c.authorRole} />, {pluralize(
+						c.reports.length,
+						'report',
+						'reports'
+					)}:
 					{c.categories.map((k) => `${CATEGORY_LABELS[k.category]} × ${k.count}`).join(', ')}
 				</p>
 				<details>
