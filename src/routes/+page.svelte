@@ -7,6 +7,7 @@
 	import { untrack } from 'svelte';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import MemeCard from '#lib/components/MemeCard.svelte';
+	import SeasonIcon from '#lib/components/SeasonIcon.svelte';
 	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
 	import type { FeedItem } from '../lib/server/feed';
 	import type { PageProps } from './$types';
@@ -81,7 +82,12 @@
 </svelte:head>
 
 <header class="top">
-	<span class="brand">Loki</span>
+	<span class="brand-group">
+		<span class="brand">Loki</span>
+		{#if data.season}
+			<SeasonIcon icon={data.season.icon} label={data.season.label} />
+		{/if}
+	</span>
 	<div class="actions">
 		<ThemeToggle />
 		<form method="POST" action="/logout">
@@ -157,6 +163,12 @@
 		display: flex;
 		align-items: center;
 		gap: 4px;
+	}
+
+	.brand-group {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
 	}
 
 	.brand {

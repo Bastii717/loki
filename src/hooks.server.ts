@@ -7,6 +7,7 @@ import { env } from './lib/server/env';
 import { startJobs } from './lib/server/jobs';
 import { currentStatus } from './lib/server/maintenance';
 import { outagePage } from './lib/server/outage-page';
+import { seasonForRequest } from './lib/server/season-request';
 import { rateLimitRetryMs } from './lib/server/rate-limit';
 import { isWriteLockExempt, writeLockResponse } from './lib/server/write-lock';
 
@@ -163,6 +164,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.user = session?.user ?? null;
 	if (token && session?.renewed) event.cookies.set(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
 	if (token && !event.locals.user) event.cookies.delete(SESSION_COOKIE, { path: '/' });
+	// Before the guards so the public /login page gets it too; the guards' own responses do not use it.
+	const season = await seasonForRequest(event);
+	event.locals.season = season;
 
 	if (!event.locals.user && !isPublic(path)) {
 		if (path === '/api' || path.startsWith('/api/')) {
@@ -210,5 +214,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 			})
 		);
 	}
-	return secure(await resolve(event));
+	return secure(
+		await resolve(event, {
+			// the theme tokens key off this attribute, so it must be on the server-rendered tag (no flash)
+			transformPageChunk: ({ html }) =>
+				season
+					? html.replace('<html lang="en"', `<html lang="en" data-season="${season.id}"`)
+					: html
+		})
+	);
 };

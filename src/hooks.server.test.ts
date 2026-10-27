@@ -14,6 +14,7 @@ import { init_transport } from '../node_modules/@sveltejs/kit/src/runtime/app/in
 import { resetRateLimits } from './lib/server/rate-limit';
 import { configureMaintenance, resetMaintenance } from './lib/server/maintenance';
 import { userWithSession } from './lib/server/moderation-test-utils';
+import { configureSeasons, resetSeasons } from './lib/server/seasons';
 import { configureReadiness, resetReadiness, setMigrated } from './lib/server/readiness';
 import { handle, mediaOrigin } from './hooks.server';
 
@@ -25,6 +26,7 @@ beforeEach(async () => {
 	resetRateLimits();
 	resetReadiness();
 	resetMaintenance();
+	resetSeasons();
 	setMigrated(true);
 	// the readiness probes would hit the real database and bucket; these tests steer them by hand
 	configureReadiness({ dbProbe: async () => true, storageProbe: async () => true });
@@ -518,5 +520,89 @@ describe('maintenance write guard', () => {
 		const r = run('/api/memes/1/vote', session, new Response('ok'), 'POST');
 		expect((await r.response).status).toBe(200);
 		expect(r.calls()).toBe(1);
+	});
+});
+
+describe('season attribute', () => {
+	const HTML = '<html lang="en"><body></body></html>';
+
+	/** Runs the hook with a resolve stub that applies `transformPageChunk` to a minimal document. */
+	async function render(
+		path: string,
+		cookie?: string
+	): Promise<{ html: string; locals: App.Locals }> {
+		const r = run(path, cookie);
+		const resolve = (async (
+			_event: RequestEvent,
+			opts?: Parameters<Parameters<Handle>[0]['resolve']>[1]
+		) =>
+			new Response(
+				opts?.transformPageChunk ? await opts.transformPageChunk({ html: HTML, done: true }) : HTML
+			)) as Parameters<Handle>[0]['resolve'];
+		const res = await handle({ event: r.event, resolve });
+		return { html: await res.text(), locals: r.event.locals };
+	}
+
+	const forceHalloween = () =>
+		configureSeasons({ load: async () => ({ mode: 'forced', theme: 'halloween', until: null }) });
+
+	it('adds data-season to the html tag and sets locals.season', async () => {
+		forceHalloween();
+		const { session } = await userWithSession('member');
+		const { html, locals } = await render('/', session);
+		expect(html).toBe('<html lang="en" data-season="halloween"><body></body></html>');
+		expect(locals.season).toEqual({ id: 'halloween', source: 'forced' });
+	});
+
+	it('leaves the tag untouched when no season is active', async () => {
+		configureSeasons({ load: async () => ({ mode: 'off', theme: null, until: null }) });
+		const { session } = await userWithSession('member');
+		const { html, locals } = await render('/', session);
+		expect(html).toBe(HTML);
+		expect(locals.season).toBeNull();
+	});
+
+	it('is present on the login page without a session', async () => {
+		forceHalloween();
+		const { html, locals } = await render('/login');
+		expect(html).toContain('data-season="halloween"');
+		expect(locals.season?.id).toBe('halloween');
+	});
+
+	it('lets an admin preview a season with ?season=', async () => {
+		forceHalloween();
+		const { session } = await userWithSession('admin');
+		const { html, locals } = await render('/?season=advent', session);
+		expect(html).toContain('data-season="advent"');
+		expect(locals.season).toEqual({ id: 'advent', source: 'preview' });
+	});
+
+	it('ignores ?season= for members and anonymous visitors', async () => {
+		forceHalloween();
+		const { session } = await userWithSession('member');
+		expect((await render('/?season=advent', session)).html).toContain('data-season="halloween"');
+		expect((await render('/login?season=advent')).html).toContain('data-season="halloween"');
+	});
+
+	it('ignores an unknown ?season= id, also for admins', async () => {
+		forceHalloween();
+		const { session } = await userWithSession('admin');
+		const { html, locals } = await render('/?season=nope', session);
+		expect(html).toContain('data-season="halloween"');
+		expect(locals.season?.source).toBe('forced');
+	});
+
+	it('does not touch the outage page', async () => {
+		forceHalloween();
+		configureMaintenance({
+			load: () => {
+				throw new Error('relation missing');
+			}
+		});
+		const r = run('/');
+		const res = await r.response;
+		expect(res.status).toBe(503);
+		expect(r.event.locals.season).toBeUndefined();
+		expect(await res.text()).not.toContain('data-season');
 	});
 });

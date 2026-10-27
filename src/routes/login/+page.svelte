@@ -1,7 +1,13 @@
 <script lang="ts">
 	import { NO_ACCESS_MESSAGE } from '../../lib/auth-messages';
 
+	import SeasonIcon from '#lib/components/SeasonIcon.svelte';
+	import { seasonById } from '../../lib/seasons';
+
 	let { data } = $props();
+
+	const season = $derived(data.season);
+	const tagline = $derived((season && seasonById(season.id)?.tagline) || "The team's meme board");
 
 	const messages: Record<string, string> = {
 		no_access: NO_ACCESS_MESSAGE,
@@ -28,8 +34,13 @@
 				stroke-linejoin="round"
 			/>
 		</svg>
-		<h1>Loki</h1>
-		<p class="tagline">The team's meme board</p>
+		<h1>
+			Loki
+			{#if season}
+				<SeasonIcon icon={season.icon} label={season.label} size={22} />
+			{/if}
+		</h1>
+		<p class="tagline">{tagline}</p>
 		{#if message}
 			<p class="error" role="alert">{message}</p>
 		{/if}
@@ -67,6 +78,9 @@
 	}
 
 	h1 {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
 		margin: 0;
 		font-size: 28px;
 		font-weight: 800;

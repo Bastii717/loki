@@ -1,3 +1,4 @@
+import { seasonById } from '../lib/seasons';
 import { currentStatus } from '../lib/server/maintenance';
 import { activeTimeout, canSeeUnderReview } from '../lib/server/moderation';
 import { countOpenCases } from '../lib/server/moderation-queries';
@@ -13,6 +14,9 @@ import type { LayoutServerLoad } from './$types';
  * components, which lock their write controls. It refreshes on reload, `invalidateAll()` and `invalidate('loki:status')`, which the layout
  * calls on a timer while a lock is shown so it lifts without a reload.
  *
+ * `season` is the active seasonal theme ({id, label, icon}) or null; the layout mirrors its id onto
+ * the `<html>` element, and the feed header and login page show its icon.
+ *
  * `openCases` is the badge for the Profile tab and the profile link: the number of open report
  * cases, for moderators and admins only (one cheap grouped count; null for everyone else, so
  * members never trigger the query). A timed-out moderator has lost the moderation rights, so
@@ -22,8 +26,10 @@ import type { LayoutServerLoad } from './$types';
 export const load: LayoutServerLoad = async ({ locals, depends }) => {
 	depends('loki:status');
 	const timeout = locals.user ? await activeTimeout(locals.user.id) : null;
+	const season = locals.season ? seasonById(locals.season.id) : undefined;
 	return {
 		user: locals.user,
+		season: season ? { id: season.id, label: season.label, icon: season.icon } : null,
 		status: await currentStatus(locals.user),
 		activeTimeout: timeout ? { until: timeout.until.toISOString(), reason: timeout.reason } : null,
 		openCases:

@@ -58,6 +58,13 @@
 		};
 	});
 
+	// The server renders data-season on <html>; client navigations and invalidations keep it in sync.
+	$effect(() => {
+		const root = document.documentElement;
+		if (data.season) root.dataset.season = data.season.id;
+		else delete root.dataset.season;
+	});
+
 	// the toggle only lives on the feed page, the meta must follow the theme on every page
 	onMount(watchThemeColor);
 
