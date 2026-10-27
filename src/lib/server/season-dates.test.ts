@@ -43,6 +43,13 @@ describe('seasonForDate', () => {
 		expect(seasonForDate(at('2026-02-19T12:00:00Z'))).toBeNull();
 	});
 
+	it('starts and ends Carnival 2026 at Berlin midnight (CET)', () => {
+		expect(seasonForDate(at('2026-02-11T22:59:59Z'))).toBeNull();
+		expect(seasonForDate(at('2026-02-11T23:00:00Z'))).toBe('carnival');
+		expect(seasonForDate(at('2026-02-18T22:59:59Z'))).toBe('carnival');
+		expect(seasonForDate(at('2026-02-18T23:00:00Z'))).toBeNull();
+	});
+
 	it('runs Carnival 2027 from Feb 4 to Feb 10', () => {
 		expect(seasonForDate(at('2027-02-03T12:00:00Z'))).toBeNull();
 		expect(seasonForDate(at('2027-02-04T12:00:00Z'))).toBe('carnival');

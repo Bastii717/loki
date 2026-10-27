@@ -43,7 +43,7 @@ const PAIRS: Pair[] = [
 	{ label: 'text on surface', fg: '--text', bg: '--surface', min: 4.5 },
 	{ label: 'text on bg', fg: '--text', bg: '--bg', min: 4.5 },
 	{ label: 'text-muted on surface', fg: '--text-muted', bg: '--surface', min: 4.5 },
-	{ label: 'accent-text on accent', fg: '--accent-text', bg: '--accent', min: 3 },
+	{ label: 'accent-text on accent', fg: '--accent-text', bg: '--accent', min: 4.5 },
 	{ label: 'accent-soft-text on surface', fg: '--accent-soft-text', bg: '--surface', min: 4.5 },
 	// Chips use --accent-soft as their background, so check the text on the tinted surface as well.
 	{

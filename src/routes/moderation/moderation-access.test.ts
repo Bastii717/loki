@@ -492,7 +492,11 @@ describe('open-case badge in the root layout', () => {
 	it('is null for members and anonymous, the count for moderators and admins', async () => {
 		const w = await world();
 		const load = (user: World['mod']['user'] | null) =>
-			rootLayout({ locals: { user }, depends: () => {} } as never) as Promise<{
+			rootLayout({
+				locals: { user },
+				url: new URL('http://localhost/'),
+				depends: () => {}
+			} as never) as Promise<{
 				openCases: number | null;
 			}>;
 		expect((await load(w.member.user)).openCases).toBeNull();
@@ -504,7 +508,11 @@ describe('open-case badge in the root layout', () => {
 	it('is null for a timed-out moderator or admin (their moderation rights rest)', async () => {
 		const w = await world();
 		const load = (user: World['mod']['user']) =>
-			rootLayout({ locals: { user }, depends: () => {} } as never) as Promise<{
+			rootLayout({
+				locals: { user },
+				url: new URL('http://localhost/'),
+				depends: () => {}
+			} as never) as Promise<{
 				openCases: number | null;
 			}>;
 		expect((await load(w.lockedMod.user)).openCases).toBeNull();
@@ -515,15 +523,45 @@ describe('open-case badge in the root layout', () => {
 describe('status data in the root layout', () => {
 	it("depends on 'loki:status' so the client can refresh it", async () => {
 		const depends = vi.fn();
-		await rootLayout({ locals: { user: null }, depends } as never);
+		await rootLayout({
+			locals: { user: null },
+			url: new URL('http://localhost/'),
+			depends
+		} as never);
 		expect(depends).toHaveBeenCalledWith('loki:status');
+	});
+});
+
+describe('season data in the root layout', () => {
+	type Layout = { season: { id: string } | null };
+
+	it('returns the season resolved for the request, the preview for an admin', async () => {
+		const w = await world();
+		const url = new URL('http://localhost/?season=advent');
+		const layout = (await rootLayout({
+			locals: { user: w.admin.user, season: { id: 'advent', source: 'preview' } },
+			url,
+			depends: () => {}
+		} as never)) as Layout;
+		expect(layout.season?.id).toBe('advent');
+	});
+
+	it('reads the pathname and the season parameter, so kit re-runs it on every navigation', async () => {
+		const url = new URL('http://localhost/?season=advent');
+		const get = vi.spyOn(url.searchParams, 'get');
+		await rootLayout({ locals: { user: null, season: null }, url, depends: () => {} } as never);
+		expect(get).toHaveBeenCalledWith('season');
 	});
 });
 
 describe('timeout banner data in the root layout', () => {
 	type Layout = { activeTimeout: { until: string; reason: string } | null };
 	const load = (user: World['mod']['user'] | null) =>
-		rootLayout({ locals: { user }, depends: () => {} } as never) as Promise<Layout>;
+		rootLayout({
+			locals: { user },
+			url: new URL('http://localhost/'),
+			depends: () => {}
+		} as never) as Promise<Layout>;
 
 	it('exposes the active timeout of a timed-out viewer', async () => {
 		const w = await world();

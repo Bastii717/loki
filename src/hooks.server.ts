@@ -156,7 +156,7 @@ function secure(response: Response): Response {
  * The season for HTML responses only: health probes, static assets and the API never need it (and
  * must not touch the database for it). A failing lookup degrades to "no theme", not an error page.
  */
-async function resolveSeason(event: RequestEvent, path: string) {
+async function seasonForHtml(event: RequestEvent, path: string) {
 	if (
 		HEALTH_PATHS.has(path) ||
 		isOutageExempt(path) ||
@@ -176,6 +176,7 @@ async function resolveSeason(event: RequestEvent, path: string) {
 export const handle: Handle = async ({ event, resolve }) => {
 	const path = routedPath(event.url.pathname);
 	// Before the session lookup, which needs the database. /login and /auth/callback need it too.
+	event.locals.season = null; // set before the outage return, so the type holds on every path
 	if (!isOutageExempt(path) && (await currentStatus(null)).state === 'down') {
 		return secure(outagePage());
 	}
@@ -186,7 +187,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (token && session?.renewed) event.cookies.set(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
 	if (token && !event.locals.user) event.cookies.delete(SESSION_COOKIE, { path: '/' });
 	// Before the guards so the public /login page gets it too; the guards' own responses do not use it.
-	const season = await resolveSeason(event, path);
+	const season = await seasonForHtml(event, path);
 	event.locals.season = season;
 
 	if (!event.locals.user && !isPublic(path)) {

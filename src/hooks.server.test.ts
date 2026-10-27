@@ -1,4 +1,5 @@
 import { deserialize } from '$app/forms';
+import { readFileSync } from 'node:fs';
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Handle } from '@sveltejs/kit/hooks';
 import { eq } from 'drizzle-orm';
@@ -636,7 +637,15 @@ describe('season attribute', () => {
 		const r = run('/');
 		const res = await r.response;
 		expect(res.status).toBe(503);
-		expect(r.event.locals.season).toBeUndefined();
+		expect(r.event.locals.season).toBeNull();
 		expect(await res.text()).not.toContain('data-season');
+	});
+});
+
+describe('app.html', () => {
+	it('keeps the html tag the season attribute injection replaces', () => {
+		// the hook's transformPageChunk replaces this exact tag to add data-season, so changing it silently drops the theme
+		const html = readFileSync(new URL('./app.html', import.meta.url), 'utf8');
+		expect(html).toContain('<html lang="en"');
 	});
 });

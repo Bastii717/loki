@@ -86,7 +86,7 @@
 		--surface-raised: #f0e7dd;
 		--border: #ddd0c0;
 		--accent: #d9731a;
-		--accent-text: #ffffff;
+		--accent-text: #1b1b1f;
 		--accent-soft: rgba(217, 115, 26, 0.12);
 		--accent-soft-text: #8f4a0c;
 		--overlay: rgba(246, 241, 234, 0.6);
@@ -99,7 +99,7 @@
 	--surface-raised: #f0e7dd;
 	--border: #ddd0c0;
 	--accent: #d9731a;
-	--accent-text: #ffffff;
+	--accent-text: #1b1b1f;
 	--accent-soft: rgba(217, 115, 26, 0.12);
 	--accent-soft-text: #8f4a0c;
 	--overlay: rgba(246, 241, 234, 0.6);
@@ -149,7 +149,7 @@
 	--surface-raised: #3a2a36;
 	--border: #4a3a45;
 	--accent: #e0448a;
-	--accent-text: #ffffff;
+	--accent-text: #111214;
 	--accent-soft: rgba(224, 68, 138, 0.18);
 	--accent-soft-text: #f19cc3;
 	--overlay: rgba(17, 18, 20, 0.55);
@@ -200,7 +200,7 @@
 		--surface-raised: #e3f3f1;
 		--border: #c6e0dc;
 		--accent: #0e9488;
-		--accent-text: #ffffff;
+		--accent-text: #0b1a18;
 		--accent-soft: rgba(14, 148, 136, 0.12);
 		--accent-soft-text: #0a6b61;
 		--overlay: rgba(242, 243, 245, 0.6);
@@ -213,7 +213,7 @@
 	--surface-raised: #e3f3f1;
 	--border: #c6e0dc;
 	--accent: #0e9488;
-	--accent-text: #ffffff;
+	--accent-text: #0b1a18;
 	--accent-soft: rgba(14, 148, 136, 0.12);
 	--accent-soft-text: #0a6b61;
 	--overlay: rgba(242, 243, 245, 0.6);
