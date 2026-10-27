@@ -1,14 +1,23 @@
+import { HeadObjectCommand } from '@aws-sdk/client-s3';
 import { eq } from 'drizzle-orm';
+import sharp from 'sharp';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../../../../../../lib/server/db';
 import { auditLog, users } from '../../../../../../lib/server/db/schema';
 import { resetDb, setupDb, testUser } from '../../../../../../lib/server/db/test-utils';
+import { setAvatar } from '../../../../../../lib/server/avatar';
+import { env } from '../../../../../../lib/server/env';
 import { userWithSession } from '../../../../../../lib/server/moderation-test-utils';
 import { resetRateLimits } from '../../../../../../lib/server/rate-limit';
+import { s3Client } from '../../../../../../lib/server/storage';
+import { ensureBucket } from '../../../../../../lib/server/storage-test-utils';
 import { callRoute } from '../../../../../../lib/server/test-request';
 import { POST } from './+server';
 
-beforeAll(setupDb);
+beforeAll(async () => {
+	await setupDb();
+	await ensureBucket(); // removing an avatar deletes its bucket objects
+});
 beforeEach(async () => {
 	resetRateLimits();
 	await resetDb();
@@ -25,6 +34,13 @@ const post = (session: string, id: number | string, body: unknown) =>
 	});
 
 const userRow = async (id: number) => (await db.select().from(users).where(eq(users.id, id)))[0];
+const exists = (Key: string) =>
+	s3Client()
+		.send(new HeadObjectCommand({ Bucket: env.S3_BUCKET, Key }))
+		.then(
+			() => true,
+			() => false
+		);
 const audits = () => db.select().from(auditLog).orderBy(auditLog.id);
 
 describe('POST /api/moderation/users/[id]/profile', () => {
@@ -37,7 +53,10 @@ describe('POST /api/moderation/users/[id]/profile', () => {
 		});
 		expect(response.status).toBe(200);
 		expect(await response.json()).toEqual({ ok: true, displayName: 'Neo Name' });
-		expect((await userRow(member.id)).displayName).toBe('Neo Name');
+		const row = await userRow(member.id);
+		expect(row.displayName).toBe('Neo Name');
+		expect(row.displayNameSetBy).toBe(admin.user.id);
+		expect(row.displayNameChangedAt).toBeInstanceOf(Date);
 		const rows = await audits();
 		expect(rows).toHaveLength(1);
 		expect(rows[0]).toMatchObject({
@@ -83,20 +102,31 @@ describe('POST /api/moderation/users/[id]/profile', () => {
 		expect((await audits()).map((a) => a.action)).toEqual(['display_name_reset']);
 	});
 
-	it('removes an avatar: row cleared and audited by=admin', async () => {
+	it('removes an avatar: row cleared, both objects deleted, audited by=admin', async () => {
 		const admin = await userWithSession('admin');
-		const member = await testUser({
-			avatarKey: 'avatars/u/a.webp',
-			avatarThumbKey: 'avatars/u/a-thumb.webp'
-		});
-		const { response } = await post(admin.session, member.id, { action: 'removeAvatar' });
+		const member = await userWithSession('member');
+		const png = await sharp({
+			create: { width: 300, height: 500, channels: 3, background: '#f00' }
+		})
+			.png()
+			.toBuffer();
+		const keys = await setAvatar(member.user, png);
+		expect(await exists(keys.avatarKey)).toBe(true);
+		expect(await exists(keys.avatarThumbKey)).toBe(true);
+		const { response } = await post(admin.session, member.user.id, { action: 'removeAvatar' });
 		expect(response.status).toBe(200);
-		const row = await userRow(member.id);
+		const row = await userRow(member.user.id);
 		expect(row.avatarKey).toBeNull();
 		expect(row.avatarThumbKey).toBeNull();
-		const rows = await audits();
-		expect(rows.map((a) => a.action)).toEqual(['avatar_removed']);
-		expect(rows[0].detail).toBe('by=admin');
+		expect(await exists(keys.avatarKey)).toBe(false);
+		expect(await exists(keys.avatarThumbKey)).toBe(false);
+		const removed = (await audits()).filter((a) => a.action === 'avatar_removed');
+		expect(removed).toHaveLength(1);
+		expect(removed[0]).toMatchObject({
+			actorId: admin.user.id,
+			targetId: member.user.id,
+			detail: 'by=admin'
+		});
 	});
 
 	it('clears a motto: row emptied and audited by=admin', async () => {
@@ -121,11 +151,17 @@ describe('POST /api/moderation/users/[id]/profile', () => {
 		expect(await audits()).toHaveLength(0);
 	});
 
-	it('answers a missing member with 400 and a bad id with 404', async () => {
+	it('answers a well-formed unknown id with 400 Member not found', async () => {
 		const admin = await userWithSession('admin');
-		const missing = await post(admin.session, 999999, { action: 'clearMotto' });
-		expect(missing.response.status).toBe(400);
-		expect(await missing.response.text()).toContain('Member not found.');
+		for (const action of ['rename', 'reset', 'removeAvatar', 'clearMotto']) {
+			const { response } = await post(admin.session, 999999, { action, displayName: 'Nobody' });
+			expect(response.status).toBe(400);
+			expect(await response.text()).toContain('Member not found.');
+		}
+	});
+
+	it('answers a malformed id with 404', async () => {
+		const admin = await userWithSession('admin');
 		for (const id of ['abc', '0', '-3', '1.5']) {
 			expect((await post(admin.session, id, { action: 'reset' })).response.status).toBe(404);
 		}

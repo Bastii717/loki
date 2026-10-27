@@ -23,6 +23,11 @@
 		failure = null;
 	}
 
+	/** Svelte action: puts the cursor in the rename field as soon as it appears. */
+	function focusOnMount(node: HTMLInputElement) {
+		node.focus();
+	}
+
 	async function run(id: number, action: ProfileAction) {
 		if (busy) return;
 		busy = true;
@@ -103,10 +108,13 @@
 								maxlength={DISPLAY_NAME_MAX}
 								autocomplete="off"
 								bind:value={draft}
+								use:focusOnMount
 							/>
 						</label>
 						<button type="submit" class="btn primary" disabled={busy}>Save</button>
-						<button type="button" class="btn" onclick={() => (renaming = null)}>Cancel</button>
+						<button type="button" class="btn" disabled={busy} onclick={() => (renaming = null)}>
+							Cancel
+						</button>
 					</form>
 				{:else}
 					<button type="button" class="btn" onclick={() => startRename(u.id, u.displayName)}>
