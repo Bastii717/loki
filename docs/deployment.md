@@ -32,6 +32,7 @@ Build the image yourself with `docker build -t ghcr.io/bastii717/loki:latest .`.
 | `OIDC_GROUPS_CLAIM` | no | Default `groups` |
 | `OIDC_GROUP_MEMBERS` / `OIDC_GROUP_MODS` / `OIDC_GROUP_ADMINS` | no | Defaults `loki-members`, `loki-mods`, `loki-admins` |
 | `MAX_UPLOAD_MB` | no | Default 50 |
+| `AVATAR_MAX_MB` | no | Default 8. Largest accepted profile picture before it is resized. |
 | `AUTO_BLUR_SCORE` | no | Default -3 |
 | `SESSION_ABSOLUTE_MAX_DAYS` | no | Default 90 |
 | `REPORT_REVIEW_THRESHOLD` | no | Default 3 (integer >= 1). Content is hidden from members pending moderator review once MORE than this many distinct members (reporters with an active timeout do not count) have an open report on it; moderators and admins always see it. A moderator releasing a case makes the item permanently immune to auto-hiding. |
@@ -164,6 +165,10 @@ When the container itself does not answer, nginx can still show the outage page:
 ### Seasonal themes
 
 Three event themes switch on by date in Berlin time, without any environment variable or deployment step: Halloween (October 25 to November 1), Advent (December 1 to December 26) and Carnival (Weiberfastnacht to Ash Wednesday). Admins can force any theme, including the `party` theme, or switch seasons off on the page **Moderation > Theme** (`/moderation/theme`). To preview a theme without changing it for anyone else, an admin adds `?season=<id>` to any URL (for example `/?season=halloween`); the preview applies to pages loaded with that parameter, is not stored, and ends with the next navigation without it.
+
+### Profiles
+
+Members edit their profile at `/profile/edit`: a display name of 2 to 24 characters (changeable once every 30 days), an avatar (JPEG, PNG or WebP, up to `AVATAR_MAX_MB` MB, default 8; it is resized to 256 and 64 pixel WebP files) and a motto of up to 80 characters. Moderators and admins show a shield or shield-check badge next to their name on cards, the detail view, comments and Discover. Admins are not bound by the 30-day rule and manage profiles on **Moderation > Users** (`/moderation/users`): they can rename a member, reset a name to the username, remove an avatar and clear a motto. Every one of these changes, by members and admins alike, is written to the audit log.
 
 ## Releases
 

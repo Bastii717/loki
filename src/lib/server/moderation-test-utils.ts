@@ -48,7 +48,7 @@ export async function timeOut(
 /** A fresh user with the given role and a live session cookie value. */
 export async function userWithSession(role: SessionUser['role'] = 'member') {
 	const u = await testUser({ role });
-	const user: SessionUser = { id: u.id, username: u.username, role };
+	const user: SessionUser = { id: u.id, username: u.username, displayName: u.displayName, role };
 	return { user, session: await createSession(u.id) };
 }
 

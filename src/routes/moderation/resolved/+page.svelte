@@ -2,10 +2,12 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import Inbox from 'lucide-svelte/icons/inbox';
+	import RoleBadge from '#lib/components/RoleBadge.svelte';
 	import {
 		CATEGORY_LABELS,
 		CONTENT_LABELS,
 		formatDateTime,
+		modName,
 		OUTCOME_LABELS,
 		pluralize
 	} from '../../../lib/moderation-labels';
@@ -36,7 +38,11 @@
 				</div>
 				<p class="excerpt">{c.excerpt}</p>
 				<p class="muted">
-					by {c.author}, {pluralize(c.reports.length, 'report', 'reports')}:
+					by {modName(c.authorDisplay, c.author)}<RoleBadge role={c.authorRole} />, {pluralize(
+						c.reports.length,
+						'report',
+						'reports'
+					)}:
 					{c.categories.map((k) => `${CATEGORY_LABELS[k.category]} × ${k.count}`).join(', ')}
 				</p>
 				<details>
@@ -44,7 +50,7 @@
 					<ul class="reporters">
 						{#each c.reports as r, i (i)}
 							<li>
-								<strong>{r.reporter}</strong>
+								<strong>{modName(r.reporterDisplay, r.reporter)}</strong>
 								<span class="muted">{CATEGORY_LABELS[r.category]}</span>
 								{#if r.text}<p class="reporter-text">{r.text}</p>{/if}
 							</li>

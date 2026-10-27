@@ -5,6 +5,7 @@ import { underReviewSql } from './moderation';
 
 export type Stats = {
 	uploadsPerWeek: { week: string; count: number }[];
+	/** `username` holds the display form (display name when set, else the username). */
 	topUploaders: { username: string; count: number }[];
 	topVoted: { id: number; title: string; score: number }[];
 	topTags: { name: string; count: number }[];
@@ -36,10 +37,13 @@ export async function getStats(): Promise<Stats> {
 	const [weekly, topUploaders, topVoted, topTags] = await Promise.all([
 		uploadsPerWeek(),
 		db
-			.select({ username: users.username, count: uploaderCount })
+			.select({
+				username: sql<string>`coalesce(${users.displayName}, ${users.username})`,
+				count: uploaderCount
+			})
 			.from(media)
 			.innerJoin(users, eq(users.id, media.uploaderId))
-			.groupBy(users.id, users.username)
+			.groupBy(users.id, users.displayName, users.username)
 			.orderBy(desc(uploaderCount), users.id)
 			.limit(TOP),
 		db

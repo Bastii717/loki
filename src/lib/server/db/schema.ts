@@ -9,18 +9,36 @@ import {
 	serial,
 	smallint,
 	text,
-	timestamp
+	timestamp,
+	uniqueIndex,
+	type AnyPgColumn
 } from 'drizzle-orm/pg-core';
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 
-export const users = pgTable('users', {
-	id: serial('id').primaryKey(),
-	sub: text('sub').notNull().unique(),
-	username: text('username').notNull(),
-	role: text('role', { enum: ['member', 'moderator', 'admin'] }).notNull(),
-	createdAt: createdAt()
-});
+export const users = pgTable(
+	'users',
+	{
+		id: serial('id').primaryKey(),
+		sub: text('sub').notNull().unique(),
+		username: text('username').notNull(),
+		role: text('role', { enum: ['member', 'moderator', 'admin'] }).notNull(),
+		displayName: text('display_name'),
+		displayNameKey: text('display_name_key'),
+		displayNameChangedAt: timestamp('display_name_changed_at', { withTimezone: true }),
+		// null = the member chose the name themselves
+		displayNameSetBy: integer('display_name_set_by').references((): AnyPgColumn => users.id),
+		avatarKey: text('avatar_key'),
+		avatarThumbKey: text('avatar_thumb_key'),
+		motto: text('motto').notNull().default(''),
+		createdAt: createdAt()
+	},
+	(t) => [
+		uniqueIndex('users_display_name_key_idx')
+			.on(t.displayNameKey)
+			.where(sql`${t.displayNameKey} IS NOT NULL`)
+	]
+);
 
 export const sessions = pgTable('sessions', {
 	tokenHash: text('token_hash').primaryKey(),

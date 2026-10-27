@@ -32,7 +32,13 @@ export const AUDIT_LABELS: Record<string, string> = {
 	timeout_set: 'Timeout set',
 	timeout_lifted: 'Timeout lifted',
 	maintenance_changed: 'Maintenance changed',
-	season_changed: 'Theme changed'
+	season_changed: 'Theme changed',
+	display_name_changed: 'Display name changed',
+	display_name_reset: 'Display name reset',
+	avatar_changed: 'Avatar changed',
+	avatar_removed: 'Avatar removed',
+	motto_changed: 'Motto changed',
+	motto_cleared: 'Motto cleared'
 };
 
 export const ROLE_LABELS: Record<string, string> = {
@@ -70,3 +76,7 @@ export const formatTime = (iso: string) => timeOnly.format(new Date(iso));
 
 /** "1 report" / "3 reports" */
 export const pluralize = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** "Display (username)" when a display name exists and differs from the username, else the username. */
+export const modName = (display: string | null | undefined, username: string) =>
+	display && display !== username ? `${display} (${username})` : username;

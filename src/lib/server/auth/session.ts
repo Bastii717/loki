@@ -7,6 +7,8 @@ import { sessions, users } from '../db/schema';
 export type SessionUser = {
 	id: number;
 	username: string;
+	/** Self-chosen name shown instead of the username; null until the member picks one. */
+	displayName: string | null;
 	role: 'member' | 'moderator' | 'admin';
 };
 
@@ -53,6 +55,7 @@ export async function resolveSession(
 			createdAt: sessions.createdAt,
 			id: users.id,
 			username: users.username,
+			displayName: users.displayName,
 			role: users.role
 		})
 		.from(sessions)
@@ -76,7 +79,12 @@ export async function resolveSession(
 			.where(eq(sessions.tokenHash, tokenHash));
 	}
 	return {
-		user: { id: row.id, username: row.username, role: row.role as SessionUser['role'] },
+		user: {
+			id: row.id,
+			username: row.username,
+			displayName: row.displayName,
+			role: row.role as SessionUser['role']
+		},
 		renewed
 	};
 }

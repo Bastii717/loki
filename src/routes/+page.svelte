@@ -91,7 +91,11 @@
 	<div class="actions">
 		<ThemeToggle />
 		<form method="POST" action="/logout">
-			<button type="submit" class="logout" title="Signed in as {data.user?.username}">
+			<button
+				type="submit"
+				class="logout"
+				title="Signed in as {data.user?.displayName ?? data.user?.username}"
+			>
 				Sign out
 			</button>
 		</form>

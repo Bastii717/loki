@@ -2,7 +2,13 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import ScrollText from 'lucide-svelte/icons/scroll-text';
-	import { AUDIT_LABELS, CONTENT_LABELS, formatDateTime } from '../../../lib/moderation-labels';
+	import RoleBadge from '#lib/components/RoleBadge.svelte';
+	import {
+		AUDIT_LABELS,
+		CONTENT_LABELS,
+		formatDateTime,
+		modName
+	} from '../../../lib/moderation-labels';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -13,7 +19,7 @@
 
 	const target = (e: PageProps['data']['entries'][number]) =>
 		e.targetType === 'user'
-			? `User ${e.targetName ?? `#${e.targetId}`}`
+			? `User ${e.targetName ? modName(e.targetDisplay, e.targetName) : `#${e.targetId}`}`
 			: e.targetType === 'site_content'
 				? 'Site content'
 				: `${CONTENT_LABELS[e.targetType as keyof typeof CONTENT_LABELS] ?? e.targetType} #${e.targetId}`;
@@ -49,7 +55,10 @@
 					<span class="pill accent">{AUDIT_LABELS[e.action] ?? e.action}</span>
 					<span class="muted">{formatDateTime(e.createdAt)}</span>
 				</div>
-				<p class="line"><strong>{e.actor}</strong>: {target(e)}</p>
+				<p class="line">
+					<strong>{e.actor}</strong>: {target(e)}
+					{#if e.targetRole}<RoleBadge role={e.targetRole} />{/if}
+				</p>
 				{#if e.detail}<p class="detail">{e.detail}</p>{/if}
 			</li>
 		{/each}

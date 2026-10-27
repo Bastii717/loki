@@ -27,7 +27,7 @@ afterAll(resetDb);
 
 async function userWithRole(role: SessionUser['role'] = 'member'): Promise<SessionUser> {
 	const u = await testUser({ role });
-	return { id: u.id, username: u.username, role };
+	return { id: u.id, username: u.username, displayName: u.displayName, role };
 }
 
 async function addMeme(uploaderId: number, title = 'm'): Promise<number> {

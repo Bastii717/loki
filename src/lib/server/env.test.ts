@@ -35,6 +35,7 @@ describe('loadEnv', () => {
 		expect(env.OIDC_GROUP_MODS).toBe('loki-mods');
 		expect(env.OIDC_GROUP_ADMINS).toBe('loki-admins');
 		expect(env.MAX_UPLOAD_MB).toBe(50);
+		expect(env.AVATAR_MAX_MB).toBe(8);
 		expect(env.AUTO_BLUR_SCORE).toBe(-3);
 		expect(env.SESSION_ABSOLUTE_MAX_DAYS).toBe(90);
 		expect(env.REPORT_REVIEW_THRESHOLD).toBe(3);
@@ -75,6 +76,11 @@ describe('loadEnv', () => {
 	it('throws on non-numeric numeric values', () => {
 		process.env.MAX_UPLOAD_MB = 'lots';
 		expect(() => loadEnv()).toThrow(/MAX_UPLOAD_MB/);
+	});
+
+	it.each(['0', '-1', '1.5'])('rejects AVATAR_MAX_MB=%s (positive integer required)', (value) => {
+		process.env.AVATAR_MAX_MB = value;
+		expect(() => loadEnv()).toThrow(/AVATAR_MAX_MB/);
 	});
 
 	it.each(['0', '-1', '1.5'])('rejects MAX_UPLOAD_MB=%s (positive integer required)', (value) => {

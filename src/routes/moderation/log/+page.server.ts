@@ -1,6 +1,6 @@
 import { AUDIT_ACTIONS, listAudit } from '../../../lib/server/moderation';
 import { requireModerator } from '../../../lib/server/moderation-guard';
-import { usernamesById } from '../../../lib/server/moderation-queries';
+import { namesById } from '../../../lib/server/moderation-queries';
 import type { PageServerLoad } from './$types';
 
 const KNOWN_ACTIONS: string[] = Object.values(AUDIT_ACTIONS);
@@ -14,7 +14,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const cursor = Number.isSafeInteger(rawCursor) && rawCursor > 0 ? rawCursor : undefined;
 
 	const { entries, nextCursor } = await listAudit({ action }, cursor);
-	const names = await usernamesById(
+	const names = await namesById(
 		entries.filter((e) => e.targetType === 'user').map((e) => e.targetId)
 	);
 	return {
@@ -28,7 +28,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			action: e.action,
 			targetType: e.targetType,
 			targetId: e.targetId,
-			targetName: e.targetType === 'user' ? (names.get(e.targetId) ?? null) : null,
+			targetName: e.targetType === 'user' ? (names.get(e.targetId)?.username ?? null) : null,
+			targetRole: e.targetType === 'user' ? (names.get(e.targetId)?.role ?? null) : null,
+			targetDisplay: e.targetType === 'user' ? (names.get(e.targetId)?.display ?? null) : null,
 			detail: e.detail,
 			createdAt: e.createdAt.toISOString()
 		}))

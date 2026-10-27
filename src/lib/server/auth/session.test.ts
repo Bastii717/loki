@@ -21,11 +21,18 @@ describe('sessions', () => {
 		expect(await validateSession(token)).toEqual({
 			id: user.id,
 			username: user.username,
+			displayName: null,
 			role: 'moderator'
 		});
 		const [row] = await db.select().from(sessions);
 		expect(row.tokenHash).toBe(hash(token));
 		expect(row.tokenHash).not.toBe(token);
+	});
+
+	it('returns the display name when the user has set one', async () => {
+		const user = await testUser({ displayName: 'Ronja', displayNameKey: 'ronja' });
+		const token = await createSession(user.id);
+		expect(await validateSession(token)).toMatchObject({ id: user.id, displayName: 'Ronja' });
 	});
 
 	it('rejects a tampered token', async () => {

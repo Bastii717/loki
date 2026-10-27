@@ -9,7 +9,9 @@
 	import { lockMessage, useStatus } from '../status-context';
 	import { createVoter } from '../vote';
 	import type { FeedItem } from '../server/feed';
+	import Avatar from './Avatar.svelte';
 	import ReportButton from './ReportButton.svelte';
+	import RoleBadge from './RoleBadge.svelte';
 	import UnderReviewBadge from './UnderReviewBadge.svelte';
 	import UnderReviewPanel from './UnderReviewPanel.svelte';
 
@@ -91,7 +93,12 @@
 <div class="caption">
 	{#if note}<p class="note" role="alert">{note}</p>{/if}
 	<b>{withheld ? 'Under review' : item.title || 'Untitled'}</b>
-	{#if item.uploader}<span>by {item.uploader}</span>{/if}
+	{#if item.uploader}
+		<span class="by"
+			>by <Avatar thumbKey={item.uploaderAvatar} name={item.uploader} size={20} />
+			<span class="name">{item.uploader}</span><RoleBadge role={item.uploaderRole} /></span
+		>
+	{/if}
 	{#if item.underReview && !withheld}<UnderReviewBadge />{/if}
 </div>
 
@@ -203,6 +210,27 @@
 	.caption span {
 		font-size: 13px;
 		opacity: 0.85;
+	}
+
+	/* The text is dimmed by colour, not opacity, so the badge keeps full strength. The overlay is
+	   dark in every theme: the badge goes white with a halo (text-shadow does not reach SVG). */
+	.caption .by {
+		--role-badge-color: #fff;
+		--role-badge-shadow: drop-shadow(0 1px 2px rgb(0 0 0 / 0.8));
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		max-width: 100%;
+		opacity: 1;
+		color: rgb(255 255 255 / 0.85);
+		white-space: nowrap;
+	}
+
+	.caption .by .name {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		opacity: 1;
 	}
 
 	.rail {

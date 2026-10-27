@@ -197,6 +197,30 @@ describe('getFeedPage', () => {
 		expect(theirs.find((i) => i.id === id)).toMatchObject({ userVote: 1, userFavorite: true });
 	});
 
+	it('shows the display name when set, else the username, with role and avatar thumb', async () => {
+		const named = await testUser({
+			displayName: 'Ronja',
+			displayNameKey: 'ronja',
+			role: 'moderator',
+			avatarThumbKey: 'avatars/ronja-thumb.webp'
+		});
+		const plain = await testUser();
+		const a = await addMedia(named.id);
+		const b = await addMedia(plain.id);
+		const items = (await getFeedPage({ viewerId: plain.id, sort: 'new' })).items;
+		expect(items.find((i) => i.id === a)).toMatchObject({
+			uploader: 'Ronja',
+			uploaderRole: 'moderator',
+			uploaderAvatar: 'avatars/ronja-thumb.webp'
+		});
+		expect(items.find((i) => i.id === b)).toMatchObject({
+			uploader: plain.username,
+			uploaderRole: 'member',
+			uploaderAvatar: null
+		});
+		expect(await getFeedItem(plain.id, a)).toMatchObject({ uploader: 'Ronja' });
+	});
+
 	it('rejects a malformed cursor', async () => {
 		const u = await testUser();
 		await expect(
@@ -229,8 +253,11 @@ describe('getFeedItem', () => {
 describe('under review', () => {
 	const T = env.REPORT_REVIEW_THRESHOLD;
 
-	async function reportedMeme(reports: number) {
-		const author = await testUser();
+	async function reportedMeme(
+		reports: number,
+		authorOverrides: Parameters<typeof testUser>[0] = {}
+	) {
+		const author = await testUser(authorOverrides);
 		const id = await addMedia(author.id, { title: 'secret title' });
 		await addOpenReports('meme', id, author.id, reports);
 		return { author, id };
@@ -246,7 +273,10 @@ describe('under review', () => {
 	});
 
 	it('above the threshold a member gets no urls, title or tags - in feed, detail and discover', async () => {
-		const { id, author } = await reportedMeme(OVER_THRESHOLD);
+		const { id, author } = await reportedMeme(OVER_THRESHOLD, {
+			role: 'moderator',
+			avatarThumbKey: 'avatars/u9/x-64.webp'
+		});
 		const [{ id: tagId }] = await db.insert(tags).values({ name: 'geheim' }).returning();
 		await db.insert(mediaTags).values({ mediaId: id, tagId });
 		const viewer = await testUser();
@@ -262,9 +292,12 @@ describe('under review', () => {
 				mediaUrl: null,
 				title: '',
 				tags: [],
-				uploader: ''
+				uploader: '',
+				uploaderRole: 'member',
+				uploaderAvatar: null
 			});
 			expect(JSON.stringify(item)).not.toContain('secret title');
+			expect(JSON.stringify(item)).not.toContain('avatars/');
 			expect(JSON.stringify(item)).not.toContain('memes/');
 		}
 		// the author is no special case
@@ -273,16 +306,33 @@ describe('under review', () => {
 	});
 
 	it('a moderator (revealAll) gets the full item, flagged', async () => {
-		const { id } = await reportedMeme(OVER_THRESHOLD);
+		const { id, author } = await reportedMeme(OVER_THRESHOLD, {
+			role: 'moderator',
+			avatarThumbKey: 'avatars/u9/x-64.webp'
+		});
 		const mod = await testUser({ role: 'moderator' });
 		const detail = (await getFeedItem(mod.id, id, true))!;
-		expect(detail).toMatchObject({ underReview: true, title: 'secret title' });
+		expect(detail).toMatchObject({
+			underReview: true,
+			title: 'secret title',
+			uploader: author.username,
+			uploaderRole: 'moderator',
+			uploaderAvatar: 'avatars/u9/x-64.webp'
+		});
 		expect(detail.thumbUrl).toMatch(/^\/media\/memes\/t/);
 		expect(detail.mediaUrl).toMatch(/^\/media\/memes\/o/);
 		const page = await getFeedPage({ viewerId: mod.id, revealAll: true, sort: 'new' });
 		expect(page.items[0].mediaUrl).not.toBeNull();
+		expect(page.items[0]).toMatchObject({
+			uploaderRole: 'moderator',
+			uploaderAvatar: 'avatars/u9/x-64.webp'
+		});
 		const discover = await getDiscoverBatch(mod.id, undefined, [], true);
 		expect(discover.items[0].mediaUrl).not.toBeNull();
+		expect(discover.items[0]).toMatchObject({
+			uploaderRole: 'moderator',
+			uploaderAvatar: 'avatars/u9/x-64.webp'
+		});
 	});
 
 	it('counts distinct reporters, not reports', async () => {
@@ -317,6 +367,7 @@ describe('under review', () => {
 		const mod = {
 			id: (await testUser({ role: 'moderator' })).id,
 			username: 'm',
+			displayName: null,
 			role: 'moderator' as const
 		};
 		await resolveReports(mod, 'meme', id, 'actioned');
@@ -328,6 +379,7 @@ describe('under review', () => {
 		const mod = {
 			id: (await testUser({ role: 'moderator' })).id,
 			username: 'm',
+			displayName: null,
 			role: 'moderator' as const
 		};
 		await resolveReports(mod, 'meme', id, 'dismissed');
@@ -382,7 +434,7 @@ describe('under review', () => {
 		await db.insert(mediaTags).values({ mediaId: id, tagId });
 		const mod = await testUser({ role: 'moderator' });
 		await resolveReports(
-			{ id: mod.id, username: mod.username, role: 'moderator' },
+			{ id: mod.id, username: mod.username, displayName: null, role: 'moderator' },
 			'meme',
 			id,
 			'dismissed'

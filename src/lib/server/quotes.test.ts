@@ -18,7 +18,9 @@ beforeEach(resetDb);
 afterAll(resetDb);
 
 const asSession = (u: { id: number; username: string; role: string }) =>
-	({ id: u.id, username: u.username, role: u.role }) as Parameters<typeof deleteQuote>[0];
+	({ id: u.id, username: u.username, displayName: null, role: u.role }) as Parameters<
+		typeof deleteQuote
+	>[0];
 
 describe('addQuote / listQuotes', () => {
 	it('adds trimmed quotes and lists newest first with score and own vote', async () => {
@@ -144,7 +146,7 @@ describe('listQuotes under review', () => {
 
 		const mod = await testUser({ role: 'moderator' });
 		await resolveReports(
-			{ id: mod.id, username: mod.username, role: 'moderator' },
+			{ id: mod.id, username: mod.username, displayName: null, role: 'moderator' },
 			'quote',
 			q.id,
 			'dismissed'

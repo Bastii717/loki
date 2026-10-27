@@ -42,6 +42,7 @@ async function world() {
 	const asUser = (u: { id: number; username: string }): SessionUser => ({
 		id: u.id,
 		username: u.username,
+		displayName: null,
 		role: 'member'
 	});
 	return {

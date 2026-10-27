@@ -6,7 +6,8 @@
  * Needs the dev server on http://localhost:5173 (see .claude/agents/readme-screenshots.md),
  * the demo data from scripts/seed-demo.ts, and a local Chromium (`npx playwright install chromium`).
  * Signs in through the mock OIDC provider: as a throwaway account for most shots, as the seeded
- * demo user `lena` for the profile pages (the throwaway account has no memes to show).
+ * demo user `lena` for the profile pages (the throwaway account has no memes to show). The admin
+ * account also supplies the moderator badge: it comments once on the detail meme.
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -181,6 +182,33 @@ async function shootDetail(page: Page, name: string): Promise<void> {
 	await save(name, await page.screenshot());
 }
 
+const MOD_COMMENT = 'Approved by the mods.';
+
+/**
+ * The detail view with a role badge on a comment: the signed-in admin comments once on the same
+ * meme the detail shots use (skipped when the comment is already there), then the page is scrolled
+ * to the comment list.
+ */
+async function shootDetailBadges(page: Page, name: string): Promise<void> {
+	const items = await feedItems(page);
+	const best = [...items].sort((a, b) => b.commentCount - a.commentCount)[0];
+	await page.goto(`${BASE_URL}/meme/${best.id}`);
+	await page.getByText('Comments').first().waitFor();
+	await page.waitForLoadState('networkidle');
+	if ((await page.getByText(MOD_COMMENT).count()) === 0) {
+		await page.getByLabel('Write a comment').fill(MOD_COMMENT);
+		await page.getByRole('button', { name: 'Send' }).click();
+		await page.getByText(MOD_COMMENT).first().waitFor();
+	}
+	await waitForImages(page);
+	// bring the comment list up under the header so every comment and its badge is on screen
+	await page.getByRole('heading', { name: /^Comments/ }).evaluate((el) => {
+		el.scrollIntoView({ block: 'start' });
+	});
+	await page.waitForTimeout(400);
+	await save(name, await page.screenshot());
+}
+
 /** The upload form with a picture, a title and two tags filled in (nothing is submitted). */
 async function shootUpload(page: Page): Promise<void> {
 	const [first] = await feedItems(page);
@@ -225,7 +253,46 @@ async function shootPage(page: Page, path: string, name: string, ready: string):
 	await page.goto(`${BASE_URL}${path}`);
 	await page.getByText(ready).first().waitFor();
 	await page.waitForLoadState('networkidle');
+	// avatars and other on-screen images must be decoded (a page without images passes at once)
+	await page.waitForFunction(() =>
+		[...document.images]
+			.filter((i) => {
+				const r = i.getBoundingClientRect();
+				return r.width > 0 && r.top < innerHeight && r.bottom > 0;
+			})
+			.every((i) => i.complete && i.naturalWidth > 0)
+	);
 	await page.evaluate(() => document.fonts.ready);
+	await page.waitForTimeout(400);
+	await save(name, await page.screenshot());
+}
+
+/**
+ * The admin user list, scrolled to the seeded `lena` (the one demo account with a real avatar),
+ * so the cards below her show a letter avatar, the admin's own badge and the rename tools.
+ */
+async function shootUsers(page: Page, name: string): Promise<void> {
+	await page.goto(`${BASE_URL}/moderation/users`);
+	await page.getByText('All users').first().waitFor();
+	await page.waitForLoadState('networkidle');
+	await page.waitForFunction(() =>
+		[...document.images].every((i) => i.complete && i.naturalWidth > 0)
+	);
+	await page.evaluate(() => document.fonts.ready);
+	await page
+		.getByText(`(${OWNER.username})`)
+		.first()
+		.evaluate((el) => {
+			el.scrollIntoView({ block: 'start' });
+			// leave room for the sticky header above her card
+			for (let p: Element | null = el.parentElement; p; p = p.parentElement) {
+				if (p.scrollHeight > p.clientHeight && getComputedStyle(p).overflowY !== 'visible') {
+					p.scrollTop -= 90;
+					return;
+				}
+			}
+			window.scrollBy(0, -90);
+		});
 	await page.waitForTimeout(400);
 	await save(name, await page.screenshot());
 }
@@ -286,10 +353,67 @@ async function shootMaintenance(browser: Browser): Promise<void> {
 	);
 }
 
+/** The season form fields of `/moderation/theme` (the `until` value is a Berlin `datetime-local`). */
+interface SeasonForm {
+	mode: 'off' | 'auto' | 'forced';
+	theme: string;
+	until: string;
+}
+
+/** What the admin page currently shows, so the run can put exactly that back afterwards. */
+async function readSeasons(browser: Browser): Promise<SeasonForm> {
+	let current: SeasonForm | undefined;
+	await withContext(
+		browser,
+		MOBILE,
+		async (admin) => {
+			await admin.goto(`${BASE_URL}/moderation/theme`);
+			const mode = await admin.locator('input[name="mode"]:checked').inputValue();
+			if (mode !== 'off' && mode !== 'auto' && mode !== 'forced')
+				throw new Error(`unknown season mode ${mode}`);
+			current = {
+				mode,
+				theme: await admin.locator('select[name="theme"]').inputValue(),
+				until: await admin.locator('input[name="until"]').inputValue()
+			};
+		},
+		{ mobile: true, account: ADMIN }
+	);
+	return current!;
+}
+
+/**
+ * Sets the seasonal themes as an admin. Event themes follow the calendar (Halloween, Advent,
+ * Carnival), so the run switches them off first (otherwise the shots would change colour around
+ * those dates) and restores the mode it found. The Halloween shot uses the request-scoped
+ * `?season=` preview, which still works.
+ */
+async function setSeasons(browser: Browser, form: SeasonForm): Promise<void> {
+	await withContext(
+		browser,
+		MOBILE,
+		async (admin) => {
+			const response = await admin.request.post(`${BASE_URL}/moderation/theme?/save`, {
+				form: { ...form },
+				headers: { 'x-sveltekit-action': 'true' }
+			});
+			const body = await response.json().catch(() => null);
+			if (!response.ok() || body?.type !== 'success')
+				throw new Error(
+					`season mode ${form.mode} failed: ${response.status()} ${JSON.stringify(body)}`
+				);
+		},
+		{ mobile: true, account: ADMIN }
+	);
+}
+
 async function main(): Promise<void> {
 	await mkdir(OUT_DIR, { recursive: true });
 	const browser = await chromium.launch();
+	let previous: SeasonForm | undefined;
 	try {
+		previous = await readSeasons(browser);
+		await setSeasons(browser, { mode: 'off', theme: '', until: '' });
 		if (
 			wantsAny(
 				'feed-mobile',
@@ -340,13 +464,27 @@ async function main(): Promise<void> {
 				{ mobile: true, account: ADMIN }
 			);
 		if (wants('maintenance-mobile')) await shootMaintenance(browser);
-		if (wantsAny('profile-mobile', 'stats-mobile'))
+		if (wantsAny('detail-badges-mobile', 'moderation-users-mobile'))
+			await withContext(
+				browser,
+				MOBILE,
+				async (page) => {
+					if (wants('detail-badges-mobile'))
+						await shootDetailBadges(page, 'detail-badges-mobile.png');
+					if (wants('moderation-users-mobile'))
+						await shootUsers(page, 'moderation-users-mobile.png');
+				},
+				{ mobile: true, account: ADMIN }
+			);
+		if (wantsAny('profile-mobile', 'profile-edit-mobile', 'stats-mobile'))
 			await withContext(
 				browser,
 				MOBILE,
 				async (page) => {
 					if (wants('profile-mobile'))
 						await shootPage(page, '/profile', 'profile-mobile.png', OWNER.username);
+					if (wants('profile-edit-mobile'))
+						await shootPage(page, '/profile/edit', 'profile-edit-mobile.png', 'Save');
 					if (wants('stats-mobile'))
 						await shootPage(page, '/profile/stats', 'stats-mobile.png', 'Stats');
 				},
@@ -397,7 +535,11 @@ async function main(): Promise<void> {
 				{ mobile: false, account: ADMIN }
 			);
 	} finally {
-		await browser.close();
+		try {
+			if (previous) await setSeasons(browser, previous);
+		} finally {
+			await browser.close();
+		}
 	}
 }
 

@@ -3,8 +3,9 @@
 	import Search from 'lucide-svelte/icons/search';
 	import Timer from 'lucide-svelte/icons/timer';
 	import X from 'lucide-svelte/icons/x';
+	import RoleBadge from '#lib/components/RoleBadge.svelte';
 	import { modRequest } from '../../../lib/moderation-client';
-	import { formatDateTime, ROLE_LABELS } from '../../../lib/moderation-labels';
+	import { formatDateTime, modName, ROLE_LABELS } from '../../../lib/moderation-labels';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -12,7 +13,8 @@
 	interface Candidate {
 		id: number;
 		username: string;
-		role: string;
+		displayName: string | null;
+		role: 'member' | 'moderator' | 'admin';
 		timeoutable: boolean;
 	}
 
@@ -65,7 +67,7 @@
 		});
 		busy = false;
 		if (result.ok) {
-			success = `${selected.username} is muted for ${days} ${days === 1 ? 'day' : 'days'}.`;
+			success = `${modName(selected.displayName, selected.username)} is muted for ${days} ${days === 1 ? 'day' : 'days'}.`;
 			selected = null;
 			reason = '';
 			query = '';
@@ -99,7 +101,10 @@
 	<form onsubmit={submit}>
 		{#if selected}
 			<div class="chosen">
-				<span><strong>{selected.username}</strong> ({ROLE_LABELS[selected.role]})</span>
+				<span
+					><strong>{modName(selected.displayName, selected.username)}</strong>
+					<RoleBadge role={selected.role} /> ({ROLE_LABELS[selected.role]})</span
+				>
 				<button
 					type="button"
 					class="clear"
@@ -133,7 +138,7 @@
 						{#each candidates as c (c.id)}
 							<li>
 								<button type="button" disabled={!c.timeoutable} onclick={() => pick(c)}>
-									<span>{c.username}</span>
+									<span>{modName(c.displayName, c.username)} <RoleBadge role={c.role} /></span>
 									<span class="pill">{ROLE_LABELS[c.role]}</span>
 								</button>
 							</li>
@@ -190,7 +195,8 @@
 		{#each data.timeouts as t (t.id)}
 			<li class="card">
 				<div class="head">
-					<strong>{t.username}</strong>
+					<strong>{modName(t.displayName, t.username)}</strong>
+					<RoleBadge role={t.role} />
 					<span class="pill">{ROLE_LABELS[t.role]}</span>
 				</div>
 				<p class="reason">{t.reason}</p>

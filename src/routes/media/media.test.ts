@@ -1,12 +1,13 @@
 import { isHttpError, type RequestEvent } from '@sveltejs/kit';
 import type { Handle } from '@sveltejs/kit/hooks';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handle } from '../../hooks.server';
 import { createSession } from '../../lib/server/auth/session';
 import { resetDb, setupDb, testUser } from '../../lib/server/db/test-utils';
 import { env } from '../../lib/server/env';
 import { deleteObjects, putObject } from '../../lib/server/storage';
 import { ensureBucket } from '../../lib/server/storage-test-utils';
+import * as moderation from '../../lib/server/moderation';
 import { addOpenReports, OVER_THRESHOLD } from '../../lib/server/moderation-test-utils';
 import { db } from '../../lib/server/db';
 import { media } from '../../lib/server/db/schema';
@@ -98,6 +99,48 @@ describe('GET /media/[...key]', () => {
 		const res = await request(path, await createSession(user.id));
 		expect(res.status).toBe(404);
 		expect(res.headers.get('location')).toBeNull();
+	});
+
+	describe('avatars', () => {
+		const AVATAR = 'avatars/u1/abc-64.webp';
+
+		it('redirects to a presigned S3 URL with a session, without the under-review lookup', async () => {
+			const user = await testUser();
+			const cookie = await createSession(user.id);
+			const lookup = vi.spyOn(moderation, 'isMediaKeyUnderReview');
+			let res: Response;
+			try {
+				res = await request(`/media/${AVATAR}`, cookie);
+			} finally {
+				const calls = lookup.mock.calls.length;
+				lookup.mockRestore();
+				expect(calls).toBe(0);
+			}
+			expect(res.status).toBe(302);
+			const location = new URL(res.headers.get('location')!);
+			expect(location.host).toBe(s3Host);
+			expect(location.pathname).toContain(AVATAR);
+		});
+
+		it('requires a session', async () => {
+			const res = await request(`/media/${AVATAR}`);
+			expect(res.status).toBe(303);
+			expect(res.headers.get('location')).toBe('/login');
+		});
+
+		it('rejects traversal out of avatars/', async () => {
+			const user = await testUser();
+			// the URL parser resolves literal and %2e ".." segments; an encoded slash reaches the route decoded
+			const res = await request('/media/avatars%2F..%2Fmemes/x', await createSession(user.id));
+			expect(res.status).toBe(404);
+			expect(res.headers.get('location')).toBeNull();
+		});
+
+		it('rejects other prefixes', async () => {
+			const user = await testUser();
+			const res = await request('/media/other/x', await createSession(user.id));
+			expect(res.status).toBe(404);
+		});
 	});
 
 	describe('under review', () => {

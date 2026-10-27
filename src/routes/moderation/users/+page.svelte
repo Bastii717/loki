@@ -1,8 +1,50 @@
 <script lang="ts">
+	import { invalidateAll } from '$app/navigation';
+	import Avatar from '#lib/components/Avatar.svelte';
+	import RoleBadge from '#lib/components/RoleBadge.svelte';
+	import { modRequest } from '../../../lib/moderation-client';
 	import { formatDate, formatDateTime, ROLE_LABELS } from '../../../lib/moderation-labels';
+	import { DISPLAY_NAME_MAX } from '../../../lib/profile-limits';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
+
+	type ProfileAction = 'rename' | 'reset' | 'removeAvatar' | 'clearMotto';
+
+	/** The card whose rename field is open, its draft, a running request and the last error. */
+	let renaming = $state<number | null>(null);
+	let draft = $state('');
+	let busy = $state(false);
+	let failure = $state<{ id: number; message: string } | null>(null);
+
+	function startRename(id: number, current: string | null) {
+		renaming = id;
+		draft = current ?? '';
+		failure = null;
+	}
+
+	/** Svelte action: puts the cursor in the rename field as soon as it appears. */
+	function focusOnMount(node: HTMLInputElement) {
+		node.focus();
+	}
+
+	async function run(id: number, action: ProfileAction) {
+		if (busy) return;
+		busy = true;
+		failure = null;
+		const result = await modRequest(`/api/moderation/users/${id}/profile`, 'POST', {
+			action,
+			displayName: action === 'rename' ? draft : undefined
+		});
+		busy = false;
+		if (result.ok) {
+			if (action === 'rename') renaming = null;
+			// reload the list data: the server normalises the name, so show what it stored
+			await invalidateAll();
+		} else {
+			failure = { id, message: result.message };
+		}
+	}
 </script>
 
 <svelte:head>
@@ -23,10 +65,15 @@
 	{#each data.users as u (u.id)}
 		<li class="card">
 			<div class="head">
-				<strong>{u.username}</strong>
+				<Avatar thumbKey={u.avatarThumbKey} name={u.displayName ?? u.username} size={32} />
+				<strong>{u.displayName ?? u.username}</strong>
+				{#if u.displayName && u.displayName !== u.username}<span class="muted">({u.username})</span
+					>{/if}
+				<RoleBadge role={u.role} />
 				<span class="pill" class:accent={u.role !== 'member'}>{ROLE_LABELS[u.role]}</span>
 				{#if u.activeTimeout}<span class="pill timeout">muted</span>{/if}
 			</div>
+			{#if u.motto}<p class="muted motto">{u.motto}</p>{/if}
 			<dl>
 				<div>
 					<dt>Memes</dt>
@@ -45,6 +92,58 @@
 					<dd>{u.confirmedReports}</dd>
 				</div>
 			</dl>
+			<div class="actions">
+				{#if renaming === u.id}
+					<form
+						class="rename"
+						onsubmit={(e) => {
+							e.preventDefault();
+							void run(u.id, 'rename');
+						}}
+					>
+						<label>
+							<span class="sr-only">New display name for {u.username}</span>
+							<input
+								class="field"
+								type="text"
+								maxlength={DISPLAY_NAME_MAX}
+								autocomplete="off"
+								bind:value={draft}
+								use:focusOnMount
+							/>
+						</label>
+						<button type="submit" class="btn primary" disabled={busy}>Save</button>
+						<button type="button" class="btn" disabled={busy} onclick={() => (renaming = null)}>
+							Cancel
+						</button>
+					</form>
+				{:else}
+					<button type="button" class="btn" onclick={() => startRename(u.id, u.displayName)}>
+						Rename
+					</button>
+				{/if}
+				{#if u.displayName}
+					<button type="button" class="btn" disabled={busy} onclick={() => run(u.id, 'reset')}>
+						Reset name
+					</button>
+				{/if}
+				{#if u.avatarThumbKey}
+					<button
+						type="button"
+						class="btn"
+						disabled={busy}
+						onclick={() => run(u.id, 'removeAvatar')}
+					>
+						Remove avatar
+					</button>
+				{/if}
+				{#if u.motto}
+					<button type="button" class="btn" disabled={busy} onclick={() => run(u.id, 'clearMotto')}>
+						Clear motto
+					</button>
+				{/if}
+			</div>
+			{#if failure?.id === u.id}<p class="error" role="alert">{failure.message}</p>{/if}
 			{#if u.confirmedReports > 0}
 				<p class="muted">
 					in {u.confirmedCases}
@@ -100,6 +199,37 @@
 
 	.head strong {
 		overflow-wrap: anywhere;
+	}
+
+	.motto {
+		margin: 0;
+		font-size: 14px;
+		overflow-wrap: anywhere;
+	}
+
+	.actions,
+	.rename {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.rename label {
+		flex: 1 1 160px;
+	}
+
+	.rename .field {
+		min-height: 44px;
+	}
+
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
 	}
 
 	.pill.timeout {

@@ -22,6 +22,8 @@ function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
 		viewCount: 0,
 		blurred: null,
 		uploader: 'dev',
+		uploaderRole: 'member',
+		uploaderAvatar: null,
 		mine: false,
 		createdAt: new Date().toISOString(),
 		underReview: false,
@@ -94,9 +96,62 @@ describe('MemeCard', () => {
 	it('words the card chrome in English', () => {
 		const { body } = render(MemeCard, { props: { item: feedItem({ title: '' }) } });
 		expect(body).toContain('Untitled');
-		expect(body).toContain('by dev');
+		expect(body).toMatch(/class="by[^"]*">by /);
+		expect(body).toMatch(/class="name[^"]*">dev<\/span>/);
 		expect(body).toContain('aria-label="Upvote"');
 		expect(body).toContain('aria-label="Downvote"');
+	});
+
+	describe('uploader', () => {
+		it('shows the display name', () => {
+			const { body } = render(MemeCard, { props: { item: feedItem({ uploader: 'Hanna Lee' }) } });
+			expect(body).toMatch(/class="name[^"]*">Hanna Lee<\/span>/);
+		});
+
+		it.each([
+			['moderator', 'Moderator'],
+			['admin', 'Admin']
+		] as const)('badges a %s uploader', (uploaderRole, label) => {
+			const { body } = render(MemeCard, { props: { item: feedItem({ uploaderRole }) } });
+			expect(body).toContain('role="img"');
+			expect(body).toContain(`aria-label="${label}"`);
+		});
+
+		it('shows no badge for a member uploader', () => {
+			const { body } = render(MemeCard, { props: { item: feedItem() } });
+			expect(body).not.toContain('role="img"');
+			expect(body).not.toContain('aria-label="Moderator"');
+			expect(body).not.toContain('aria-label="Admin"');
+		});
+
+		it('shows the avatar image when the uploader has one', () => {
+			const { body } = render(MemeCard, {
+				props: { item: feedItem({ uploaderAvatar: 'avatars/7/thumb.webp' }) }
+			});
+			expect(body).toMatch(/<img class="avatar[^"]*" src="\/media\/avatars\/7\/thumb.webp"/);
+			expect(body).not.toContain('avatar letter');
+		});
+
+		it('falls back to a letter circle without an avatar', () => {
+			const { body } = render(MemeCard, { props: { item: feedItem({ uploader: 'dev' }) } });
+			expect(body).toContain('avatar letter');
+			expect(body).not.toContain('src="/media/avatars');
+		});
+
+		it('renders no uploader for hidden items', () => {
+			const { body } = render(MemeCard, {
+				props: {
+					item: feedItem({
+						uploader: '',
+						uploaderRole: 'member',
+						uploaderAvatar: null,
+						underReview: true
+					})
+				}
+			});
+			expect(body).not.toContain('class="by');
+			expect(body).not.toContain('avatar letter');
+		});
 	});
 
 	describe('while writes are locked', () => {

@@ -59,6 +59,7 @@ const asUploader = (u: {
 }) => ({
 	id: u.id,
 	username: u.username,
+	displayName: null,
 	role: u.role
 });
 
@@ -146,7 +147,7 @@ describe('createMedia', () => {
 		const before = await listKeys();
 		await expect(
 			createMedia({
-				uploader: { id: 999999, username: 'ghost', role: 'member' }, // FK violation
+				uploader: { id: 999999, username: 'ghost', displayName: null, role: 'member' }, // FK violation
 				file: png,
 				title: '',
 				tagNames: [],

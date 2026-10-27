@@ -15,6 +15,7 @@ export interface Env {
 	OIDC_GROUP_MODS: string;
 	OIDC_GROUP_ADMINS: string;
 	MAX_UPLOAD_MB: number;
+	AVATAR_MAX_MB: number;
 	AUTO_BLUR_SCORE: number;
 	SESSION_ABSOLUTE_MAX_DAYS: number;
 	REPORT_REVIEW_THRESHOLD: number;
@@ -89,6 +90,7 @@ export function loadEnv(): Env {
 		OIDC_GROUP_MODS: optional('OIDC_GROUP_MODS', 'loki-mods'),
 		OIDC_GROUP_ADMINS: optional('OIDC_GROUP_ADMINS', 'loki-admins'),
 		MAX_UPLOAD_MB: number('MAX_UPLOAD_MB', 50, { min: 1 }),
+		AVATAR_MAX_MB: number('AVATAR_MAX_MB', 8, { min: 1 }),
 		AUTO_BLUR_SCORE: number('AUTO_BLUR_SCORE', -3),
 		SESSION_ABSOLUTE_MAX_DAYS: number('SESSION_ABSOLUTE_MAX_DAYS', 90, { min: 1 }),
 		REPORT_REVIEW_THRESHOLD: number('REPORT_REVIEW_THRESHOLD', 3, { min: 1 })

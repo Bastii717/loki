@@ -14,6 +14,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		users: found.map((u) => ({
 			id: u.id,
 			username: u.username,
+			displayName: u.displayName,
 			role: u.role,
 			timeoutable: u.id !== actor.id && (actor.role === 'admin' || u.role === 'member')
 		}))
