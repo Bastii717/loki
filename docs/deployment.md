@@ -161,6 +161,10 @@ When the container itself does not answer, nginx can still show the outage page:
 - Update: `docker compose pull && docker compose up -d` (migrations run on start).
 - Postgres data lives in the `db-data` volume.
 
+### Seasonal themes
+
+Three event themes switch on by date in Berlin time, without any environment variable or deployment step: Halloween (October 25 to November 1), Advent (December 1 to December 26) and Carnival (Weiberfastnacht to Ash Wednesday). Admins can force any theme, including the `party` theme, or switch seasons off on the page **Moderation > Theme** (`/moderation/theme`). To preview a theme without changing it for anyone else, an admin adds `?season=<id>` to any URL (for example `/?season=halloween`); the preview applies to that request only and is not stored. Client-side navigation drops the preview because the parameter is not on the next URL, so use a full page load with the parameter.
+
 ## Releases
 
 The `Docker` workflow builds the image for every pull request (without pushing) and publishes it on pushes to `main` and on release tags:

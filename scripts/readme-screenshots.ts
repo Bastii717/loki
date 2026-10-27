@@ -363,6 +363,18 @@ async function main(): Promise<void> {
 				},
 				{ mobile: true, colorScheme: 'light' }
 			);
+		if (wants('feed-halloween-mobile'))
+			await withContext(
+				browser,
+				MOBILE,
+				async (page) => {
+					// the admin preview is request-scoped: nothing is persisted, nothing to reset
+					await page.goto(`${BASE_URL}/?season=halloween`);
+					await waitForImages(page);
+					await save('feed-halloween-mobile.png', await page.screenshot());
+				},
+				{ mobile: true, account: ADMIN }
+			);
 		if (wantsAny('feed-desktop', 'detail-desktop'))
 			await withContext(
 				browser,
