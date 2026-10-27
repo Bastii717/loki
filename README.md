@@ -18,6 +18,7 @@ Planned and being built. The whole app is English: UI, code and docs.
 - **Rules and FAQ**, editable by admins in the app.
 - **Maintenance mode**: admins pause posting with a message; the app reports its own readiness and shows a designed page during outages.
 - **Seasonal themes**: Halloween, Advent and Carnival switch on by date; admins can force an event theme or turn seasons off.
+- **Profiles**: pick a display name (once every 30 days), an avatar and a motto; moderators and admins carry a badge.
 - **PWA** with a share target, so memes can be sent straight from the share sheet.
 
 ## Screenshots
@@ -34,7 +35,15 @@ Detail, Quotes and Profile: a meme with its comments, the quote wall and your ow
 <p align="center">
   <img src="docs/screenshots/detail-mobile.png" alt="Meme detail view on a phone with hashtags and comments" width="30%">
   <img src="docs/screenshots/quotes-mobile.png" alt="Quotes page on a phone with three voted office quotes" width="30%">
-  <img src="docs/screenshots/profile-mobile.png" alt="Profile page on a phone with counters, shortcuts, rules and FAQ" width="30%">
+  <img src="docs/screenshots/profile-mobile.png" alt="Profile page on a phone with an avatar, display name, motto, role chip, counters, shortcuts, rules and FAQ" width="30%">
+</p>
+
+Profiles: the profile editor, a detail view with role badges on the comments, and the admin user list.
+
+<p align="center">
+  <img src="docs/screenshots/profile-edit-mobile.png" alt="Profile editor on a phone with avatar upload, display name and motto fields and a Save button" width="30%">
+  <img src="docs/screenshots/detail-badges-mobile.png" alt="Meme detail view on a phone with a moderator badge next to a comment author" width="30%">
+  <img src="docs/screenshots/moderation-users-mobile.png" alt="Moderation user list on a phone with avatars, display names, role badges and admin tools" width="30%">
 </p>
 
 Stats, Upload and Report: what the board is up to, how a meme gets onto it, and how one gets flagged.

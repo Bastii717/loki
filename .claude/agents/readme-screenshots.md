@@ -30,7 +30,7 @@ You refresh the Loki README screenshots (`docs/screenshots/*.png`) from a seeded
    npx tsx --env-file=.env scripts/seed-demo.ts
    ```
 
-   This creates demo users, six generated meme images (real thumbnails and S3 objects via `createMedia`), English tags, votes (some negative) and comments, plus three quotes with votes, one open report (category misinformation, on "Prod is down (not my fault)"), rules and FAQ Markdown and one favorite. `--preview=DIR` only renders the images to DIR without touching anything.
+   This creates demo users, six generated meme images (real thumbnails and S3 objects via `createMedia`), English tags, votes (some negative) and comments, plus three quotes with votes, one open report (category misinformation, on "Prod is down (not my fault)"), rules and FAQ Markdown, one favorite and an avatar for `lena` (a letter image rendered with sharp, set once through `setAvatar`). `--preview=DIR` only renders the images to DIR without touching anything.
 
 2. Start the dev server in the background (port 5173, must match `ORIGIN` in `.env`) and wait until `http://localhost:5173/login` answers:
 
@@ -44,7 +44,7 @@ You refresh the Loki README screenshots (`docs/screenshots/*.png`) from a seeded
    npx tsx --env-file=.env scripts/readme-screenshots.ts
    ```
 
-   It signs in through the mock OIDC provider (a throwaway member, an admin for the moderation shots, the seeded `lena` for the profile pages) and writes 16 shots. Mobile is 390x844 @2x and dark unless the name says light, desktop is 1440x900 @2x:
+   It signs in through the mock OIDC provider (a throwaway member, an admin for the moderation shots, the seeded `lena` for the profile pages) and writes 19 shots. Mobile is 390x844 @2x and dark unless the name says light, desktop is 1440x900 @2x:
 
    | Mobile                       | Desktop                    |
    | ---------------------------- | -------------------------- |
@@ -53,6 +53,9 @@ You refresh the Loki README screenshots (`docs/screenshots/*.png`) from a seeded
    | `discover-mobile`            | `moderation-queue-desktop` |
    | `quotes-mobile`              |                            |
    | `profile-mobile`             |                            |
+   | `profile-edit-mobile`        |                            |
+   | `detail-badges-mobile`       |                            |
+   | `moderation-users-mobile`    |                            |
    | `stats-mobile`               |                            |
    | `upload-mobile`              |                            |
    | `report-dialog-mobile`       |                            |
@@ -62,7 +65,7 @@ You refresh the Loki README screenshots (`docs/screenshots/*.png`) from a seeded
    | `feed-light-mobile`          |                            |
    | `feed-halloween-mobile`      |                            |
 
-   `detail-*` is the meme with the most comments; `discover-mobile` shows whichever slide the shuffle serves first. `feed-halloween-mobile` is the feed as an admin with the request-scoped preview `/?season=halloween`, so nothing is switched on afterwards. `maintenance-mobile` switches maintenance on as an admin (message `Deploy in progress, back around 18:30`), shoots the feed as a different plain member so the banner shows without the admin addendum, and always switches it off again; if a run dies hard, turn it off on `/moderation/maintenance`. Pass `--only=feed-desktop,quotes-mobile` (comma-separated names, without `.png`) to retake just some shots. Set `SCREENSHOT_DEBUG=1` to log failed requests and redirects.
+   `detail-*` is the meme with the most comments; `discover-mobile` shows whichever slide the shuffle serves first. `feed-halloween-mobile` is the feed as an admin with the request-scoped preview `/?season=halloween`, so nothing is switched on afterwards. `maintenance-mobile` switches maintenance on as an admin (message `Deploy in progress, back around 18:30`), shoots the feed as a different plain member so the banner shows without the admin addendum, and always switches it off again; if a run dies hard, turn it off on `/moderation/maintenance`. `profile-mobile` is the seeded `lena`, who has an avatar and a motto from the seed; `profile-edit-mobile` is her editor. `detail-badges-mobile` is the same meme as `detail-*`, shot as the screenshot admin after that admin has commented once (`Approved by the mods.`, skipped when it exists), so the badge comes from the screenshot run itself: the seed promotes nobody. `moderation-users-mobile` is the admin user list, scrolled to `lena`. The run switches the seasonal themes off as an admin before the first shot and back to automatic afterwards (event themes follow the calendar, so shots would otherwise change colour around Halloween, Advent and Carnival); if a run dies hard, reset them on `/moderation/theme`. Pass `--only=feed-desktop,quotes-mobile` (comma-separated names, without `.png`) to retake just some shots. Set `SCREENSHOT_DEBUG=1` to log failed requests and redirects.
 
 4. Stop the dev server again.
 
@@ -70,8 +73,8 @@ You refresh the Loki README screenshots (`docs/screenshots/*.png`) from a seeded
 
 ## Where things land and how the README uses them
 
-- Output: `docs/screenshots/<name>.png` for each name above (16 files).
-- `README.md` has a `## Screenshots` section: one caption line per row, then a `<p align="center">` with up to three `<img ... width="30%">` of mobile shots (Feed and Discover; Detail, Quotes and Profile; Stats, Upload and Report; Moderation with the maintenance banner; Themes with the light and Halloween feeds), then the three desktop shots each full width in their own `<p>`. Relative paths, English alt texts. Keep file names stable so the README needs no change on a refresh.
+- Output: `docs/screenshots/<name>.png` for each name above (19 files).
+- `README.md` has a `## Screenshots` section: one caption line per row, then a `<p align="center">` with up to three `<img ... width="30%">` of mobile shots (Feed and Discover; Detail, Quotes and Profile; Profiles; Stats, Upload and Report; Moderation with the maintenance banner; Themes with the light and Halloween feeds), then the three desktop shots each full width in their own `<p>`. Relative paths, English alt texts. Keep file names stable so the README needs no change on a refresh.
 
 ## House rules
 

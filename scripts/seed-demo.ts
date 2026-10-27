@@ -61,7 +61,8 @@ const [
 	quotesMod,
 	moderationMod,
 	memesMod,
-	{ nameKey }
+	{ nameKey },
+	{ setAvatar }
 ] = await Promise.all([
 	import('sharp'),
 	import('../src/lib/server/db'),
@@ -73,7 +74,8 @@ const [
 	import('../src/lib/server/quotes'),
 	import('../src/lib/server/moderation'),
 	import('../src/lib/server/memes'),
-	import('../src/lib/server/profile')
+	import('../src/lib/server/profile'),
+	import('../src/lib/server/avatar')
 ]);
 const { users, media, comments, quotes, reports, siteContent, favorites } = schema;
 const { applyVote } = votesMod;
@@ -350,10 +352,35 @@ async function ensureUser(u: DemoUser) {
 			.where(and(eq(users.sub, u.sub), eq(users.motto, '')));
 	}
 	const [row] = await db
-		.select({ id: users.id, username: users.username, role: users.role })
+		.select({
+			id: users.id,
+			username: users.username,
+			displayName: users.displayName,
+			role: users.role,
+			avatarKey: users.avatarKey
+		})
 		.from(users)
 		.where(eq(users.sub, u.sub));
 	return row;
+}
+
+/** A 512x512 letter avatar: a coloured circle with the first letter of the name on top. */
+function renderAvatar(letter: string, hue: number): Promise<Buffer> {
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="hsl(${hue},40%,18%)"/>
+  <circle cx="256" cy="256" r="216" fill="hsl(${hue},68%,48%)"/>
+  <text x="256" y="256" dy="0.35em" text-anchor="middle" font-family="Impact, 'Arial Black', 'Helvetica Neue', Arial, sans-serif"
+        font-weight="900" font-size="280" fill="#fff">${escapeXml(letter)}</text>
+</svg>`;
+	return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+/** Gives lena an avatar once; a user who already has one is left alone. */
+async function ensureAvatar(user: Awaited<ReturnType<typeof ensureUser>>) {
+	if (user.avatarKey) return;
+	const { id, username, displayName, role } = user;
+	await setAvatar({ id, username, displayName, role }, await renderAvatar('L', 28));
+	console.log(`Avatar set for ${username}.`);
 }
 
 /** `--preview=DIR` renders the meme images to DIR and exits without touching the database. */
@@ -374,6 +401,7 @@ async function main() {
 	const byName = new Map<string, Awaited<ReturnType<typeof ensureUser>>>();
 	for (const u of [...AUTHORS, ...VOTERS]) byName.set(u.username, await ensureUser(u));
 	console.log(`Users ready: ${[...byName.keys()].join(', ')}`);
+	await ensureAvatar(byName.get('lena')!);
 
 	await seedMemes(byName);
 	await seedExtras(byName);
