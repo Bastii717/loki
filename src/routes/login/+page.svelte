@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { NO_ACCESS_MESSAGE } from '../../lib/auth-messages';
-
 	import SeasonIcon from '#lib/components/SeasonIcon.svelte';
 	import { seasonById } from '../../lib/seasons';
 

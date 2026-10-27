@@ -1,4 +1,4 @@
-import { json } from '@sveltejs/kit';
+import { json, type RequestEvent } from '@sveltejs/kit';
 import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, resolveSession } from './lib/server/auth/session';
 import { migrateWithRetry } from './lib/server/boot';
@@ -152,6 +152,27 @@ function secure(response: Response): Response {
 	return response;
 }
 
+/**
+ * The season for HTML responses only: health probes, static assets and the API never need it (and
+ * must not touch the database for it). A failing lookup degrades to "no theme", not an error page.
+ */
+async function resolveSeason(event: RequestEvent, path: string) {
+	if (
+		HEALTH_PATHS.has(path) ||
+		isOutageExempt(path) ||
+		path === '/api' ||
+		path.startsWith('/api/')
+	) {
+		return null;
+	}
+	try {
+		return await seasonForRequest(event);
+	} catch (e) {
+		console.warn('season resolution failed', e);
+		return null;
+	}
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
 	const path = routedPath(event.url.pathname);
 	// Before the session lookup, which needs the database. /login and /auth/callback need it too.
@@ -165,7 +186,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (token && session?.renewed) event.cookies.set(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
 	if (token && !event.locals.user) event.cookies.delete(SESSION_COOKIE, { path: '/' });
 	// Before the guards so the public /login page gets it too; the guards' own responses do not use it.
-	const season = await seasonForRequest(event);
+	const season = await resolveSeason(event, path);
 	event.locals.season = season;
 
 	if (!event.locals.user && !isPublic(path)) {

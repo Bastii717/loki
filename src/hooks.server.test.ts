@@ -592,6 +592,40 @@ describe('season attribute', () => {
 		expect(locals.season?.source).toBe('forced');
 	});
 
+	it('degrades to no theme when the season lookup fails, and spares the health paths', async () => {
+		let loads = 0;
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		configureSeasons({
+			load: async () => {
+				loads += 1;
+				throw new Error('db down');
+			}
+		});
+		const { session } = await userWithSession('member');
+		expect((await run('/healthz').response).status).toBe(200);
+		expect(loads).toBe(0);
+		const { html, locals } = await render('/', session);
+		expect(html).toBe(HTML);
+		expect(locals.season).toBeNull();
+		expect(warn).toHaveBeenCalledWith('season resolution failed', expect.any(Error));
+		warn.mockRestore();
+	});
+
+	it('never loads the season for API requests', async () => {
+		let loads = 0;
+		configureSeasons({
+			load: async () => {
+				loads += 1;
+				return { mode: 'forced', theme: 'halloween', until: null };
+			}
+		});
+		const { session } = await userWithSession('member');
+		const r = run('/api/feed', session);
+		await r.response;
+		expect(loads).toBe(0);
+		expect(r.event.locals.season).toBeNull();
+	});
+
 	it('does not touch the outage page', async () => {
 		forceHalloween();
 		configureMaintenance({
