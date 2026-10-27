@@ -262,6 +262,7 @@ describe('listActiveTimeouts', () => {
 		expect(list[0]).toMatchObject({
 			userId: a.id,
 			username: a.username,
+			displayName: null,
 			role: 'member',
 			reason: 'Streit',
 			setBy: admin.username
@@ -379,8 +380,28 @@ describe('searchUsers / namesById', () => {
 		]);
 		expect((await searchUsers('a_b')).map((u) => u.username)).toEqual(['Anna_Banane']);
 		expect(await searchUsers('%')).toEqual([]);
+		const [anna] = await searchUsers('a_b');
+		expect(anna.displayName).toBeNull();
 		expect(await searchUsers('')).toHaveLength(3);
 		expect(await searchUsers('', 2)).toHaveLength(2);
+	});
+
+	it('carries the display name in search hits and active timeouts', async () => {
+		const admin = asSession(await testUser({ role: 'admin' }));
+		const named = await testUser({
+			username: 'yan',
+			displayName: 'Yannick',
+			displayNameKey: 'yannick'
+		});
+		expect((await searchUsers('yan'))[0]).toMatchObject({
+			username: 'yan',
+			displayName: 'Yannick'
+		});
+		await setTimeout_(admin, named.id, 1, 'Streit');
+		expect((await listActiveTimeouts())[0]).toMatchObject({
+			username: 'yan',
+			displayName: 'Yannick'
+		});
 	});
 
 	it('resolves ids to display name, username and role', async () => {

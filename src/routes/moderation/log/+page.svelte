@@ -2,7 +2,12 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import ScrollText from 'lucide-svelte/icons/scroll-text';
-	import { AUDIT_LABELS, CONTENT_LABELS, formatDateTime } from '../../../lib/moderation-labels';
+	import {
+		AUDIT_LABELS,
+		CONTENT_LABELS,
+		formatDateTime,
+		modName
+	} from '../../../lib/moderation-labels';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -13,7 +18,7 @@
 
 	const target = (e: PageProps['data']['entries'][number]) =>
 		e.targetType === 'user'
-			? `User ${e.targetName ?? `#${e.targetId}`}`
+			? `User ${e.targetName ? modName(e.targetDisplay, e.targetName) : `#${e.targetId}`}`
 			: e.targetType === 'site_content'
 				? 'Site content'
 				: `${CONTENT_LABELS[e.targetType as keyof typeof CONTENT_LABELS] ?? e.targetType} #${e.targetId}`;

@@ -12,6 +12,7 @@
 		CATEGORY_LABELS,
 		CONTENT_LABELS,
 		formatDateTime,
+		modName,
 		pluralize
 	} from '../../lib/moderation-labels';
 	import { relativeTime } from '../../lib/time';
@@ -28,6 +29,7 @@
 	let days = $state(3);
 	let reason = $state('');
 
+	const author = $derived(modName(item.authorDisplay, item.author));
 	// same matrix as setTimeout_: never yourself, moderators only members
 	const canTimeoutAuthor = $derived(
 		item.authorId !== viewer.id && (viewer.role === 'admin' || item.authorRole === 'member')
@@ -70,10 +72,10 @@
 	}
 </script>
 
-<article class="card" aria-label="{CONTENT_LABELS[item.contentType]} by {item.author}">
+<article class="card" aria-label="{CONTENT_LABELS[item.contentType]} by {author}">
 	<header>
 		<span class="pill accent">{CONTENT_LABELS[item.contentType]}</span>
-		<span class="author">by <strong>{item.author}</strong></span>
+		<span class="author">by <strong>{author}</strong></span>
 		{#if item.underReview}<UnderReviewBadge />{/if}
 	</header>
 
@@ -116,7 +118,7 @@
 		<ul class="reporters">
 			{#each item.reports as r, i (i)}
 				<li>
-					<strong>{r.reporter}</strong>
+					<strong>{modName(r.reporterDisplay, r.reporter)}</strong>
 					<span class="muted">{CATEGORY_LABELS[r.category]}, {relativeTime(r.createdAt)}</span>
 					{#if r.text}<p class="reporter-text">{r.text}</p>{/if}
 				</li>
@@ -143,7 +145,7 @@
 		</div>
 	{:else if mode === 'timeout'}
 		<form class="timeout" onsubmit={submitTimeout}>
-			<p class="muted">Mute {item.author}. The reports then count as confirmed.</p>
+			<p class="muted">Mute {author}. The reports then count as confirmed.</p>
 			<p class="muted">The content stays visible. Delete or blur it as well if needed.</p>
 			<label>
 				Days (1 to 30)

@@ -387,6 +387,8 @@ export interface ActiveTimeout {
 	id: number;
 	userId: number;
 	username: string;
+	/** Display name, null until set. */
+	displayName: string | null;
 	role: Role;
 	reason: string;
 	until: string;
@@ -402,6 +404,7 @@ export async function listActiveTimeouts(): Promise<ActiveTimeout[]> {
 			id: timeouts.id,
 			userId: timeouts.userId,
 			username: users.username,
+			displayName: users.displayName,
 			role: users.role,
 			reason: timeouts.reason,
 			until: timeouts.until,
@@ -532,10 +535,15 @@ const escapeLike = (s: string) => s.replace(/[\\%_]/g, '\\$&');
 export async function searchUsers(
 	query: string,
 	limit = USER_SEARCH_LIMIT
-): Promise<{ id: number; username: string; role: Role }[]> {
+): Promise<{ id: number; username: string; displayName: string | null; role: Role }[]> {
 	const q = query.trim().slice(0, 50);
 	return db
-		.select({ id: users.id, username: users.username, role: users.role })
+		.select({
+			id: users.id,
+			username: users.username,
+			displayName: users.displayName,
+			role: users.role
+		})
 		.from(users)
 		.where(q === '' ? undefined : ilike(users.username, `%${escapeLike(q)}%`))
 		.orderBy(asc(sql`lower(${users.username})`), asc(users.id))

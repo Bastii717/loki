@@ -76,3 +76,7 @@ export const formatTime = (iso: string) => timeOnly.format(new Date(iso));
 
 /** "1 report" / "3 reports" */
 export const pluralize = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** "Display (username)" when a display name exists and differs from the username, else the username. */
+export const modName = (display: string | null | undefined, username: string) =>
+	display && display !== username ? `${display} (${username})` : username;

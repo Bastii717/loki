@@ -27,6 +27,7 @@ import { POST as caseAction } from '../api/moderation/case/+server';
 import { POST as setTimeoutRoute } from '../api/moderation/timeouts/+server';
 import { DELETE as liftTimeoutRoute } from '../api/moderation/timeouts/[userId]/+server';
 import { GET as searchUsers } from '../api/moderation/users/+server';
+import { POST as userProfile } from '../api/moderation/users/[id]/profile/+server';
 import { DELETE as deleteQuote } from '../api/quotes/[id]/+server';
 import { load as rootLayout } from '../+layout.server';
 import { load as moderationLayout } from './+layout.server';
@@ -206,6 +207,19 @@ const endpoints: Endpoint[] = [
 			method: 'DELETE',
 			params: { userId: String(w.victim.user.id) },
 			session
+		})
+	},
+	{
+		name: 'POST users/[id]/profile',
+		page: false,
+		adminOnly: true,
+		call: (w, session) => ({
+			handler: userProfile,
+			path: `/api/moderation/users/${w.victim.user.id}/profile`,
+			method: 'POST',
+			params: { id: String(w.victim.user.id) },
+			session,
+			body: { action: 'clearMotto' }
 		})
 	},
 	{

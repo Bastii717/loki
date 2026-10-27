@@ -29,6 +29,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			targetType: e.targetType,
 			targetId: e.targetId,
 			targetName: e.targetType === 'user' ? (names.get(e.targetId)?.username ?? null) : null,
+			targetDisplay: e.targetType === 'user' ? (names.get(e.targetId)?.display ?? null) : null,
 			detail: e.detail,
 			createdAt: e.createdAt.toISOString()
 		}))
