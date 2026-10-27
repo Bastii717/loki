@@ -50,6 +50,13 @@
       "when": 1792961063089,
       "tag": "0006_maintenance_switch",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793126413392,
+      "tag": "0007_season_settings",
+      "breakpoints": true
     }
   ]
 }

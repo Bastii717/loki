@@ -36,6 +36,7 @@ import { load as log } from './log/+page.server';
 import { load as usersPage } from './users/+page.server';
 import { load as timeoutsPage } from './timeouts/+page.server';
 import { actions as maintenanceActions, load as maintenancePage } from './maintenance/+page.server';
+import { actions as themeActions, load as themePage } from './theme/+page.server';
 
 /** Fixed far-future mute end, so the formatted date never depends on the run date. */
 const MUTED_UNTIL = new Date('2099-12-24T12:00:00Z');
@@ -139,6 +140,36 @@ const endpoints: Endpoint[] = [
 		call: (_w, session) => ({
 			handler: maintenanceActions.off,
 			path: '/moderation/maintenance?/off',
+			method: 'POST',
+			session,
+			form: {}
+		})
+	},
+	{
+		name: 'theme load',
+		page: true,
+		adminOnly: true,
+		call: (_w, session) => ({ handler: themePage, path: '/moderation/theme', session })
+	},
+	{
+		name: 'theme save action',
+		page: true, // a page form action: anonymous requests are redirected to /login
+		adminOnly: true,
+		call: (_w, session) => ({
+			handler: themeActions.save,
+			path: '/moderation/theme?/save',
+			method: 'POST',
+			session,
+			form: { mode: 'auto', theme: '', until: '' }
+		})
+	},
+	{
+		name: 'theme reset action',
+		page: true, // a page form action: anonymous requests are redirected to /login
+		adminOnly: true,
+		call: (_w, session) => ({
+			handler: themeActions.reset,
+			path: '/moderation/theme?/reset',
 			method: 'POST',
 			session,
 			form: {}
@@ -461,7 +492,11 @@ describe('open-case badge in the root layout', () => {
 	it('is null for members and anonymous, the count for moderators and admins', async () => {
 		const w = await world();
 		const load = (user: World['mod']['user'] | null) =>
-			rootLayout({ locals: { user }, depends: () => {} } as never) as Promise<{
+			rootLayout({
+				locals: { user },
+				url: new URL('http://localhost/'),
+				depends: () => {}
+			} as never) as Promise<{
 				openCases: number | null;
 			}>;
 		expect((await load(w.member.user)).openCases).toBeNull();
@@ -473,7 +508,11 @@ describe('open-case badge in the root layout', () => {
 	it('is null for a timed-out moderator or admin (their moderation rights rest)', async () => {
 		const w = await world();
 		const load = (user: World['mod']['user']) =>
-			rootLayout({ locals: { user }, depends: () => {} } as never) as Promise<{
+			rootLayout({
+				locals: { user },
+				url: new URL('http://localhost/'),
+				depends: () => {}
+			} as never) as Promise<{
 				openCases: number | null;
 			}>;
 		expect((await load(w.lockedMod.user)).openCases).toBeNull();
@@ -484,15 +523,45 @@ describe('open-case badge in the root layout', () => {
 describe('status data in the root layout', () => {
 	it("depends on 'loki:status' so the client can refresh it", async () => {
 		const depends = vi.fn();
-		await rootLayout({ locals: { user: null }, depends } as never);
+		await rootLayout({
+			locals: { user: null },
+			url: new URL('http://localhost/'),
+			depends
+		} as never);
 		expect(depends).toHaveBeenCalledWith('loki:status');
+	});
+});
+
+describe('season data in the root layout', () => {
+	type Layout = { season: { id: string } | null };
+
+	it('returns the season resolved for the request, the preview for an admin', async () => {
+		const w = await world();
+		const url = new URL('http://localhost/?season=advent');
+		const layout = (await rootLayout({
+			locals: { user: w.admin.user, season: { id: 'advent', source: 'preview' } },
+			url,
+			depends: () => {}
+		} as never)) as Layout;
+		expect(layout.season?.id).toBe('advent');
+	});
+
+	it('reads the pathname and the season parameter, so kit re-runs it on every navigation', async () => {
+		const url = new URL('http://localhost/?season=advent');
+		const get = vi.spyOn(url.searchParams, 'get');
+		await rootLayout({ locals: { user: null, season: null }, url, depends: () => {} } as never);
+		expect(get).toHaveBeenCalledWith('season');
 	});
 });
 
 describe('timeout banner data in the root layout', () => {
 	type Layout = { activeTimeout: { until: string; reason: string } | null };
 	const load = (user: World['mod']['user'] | null) =>
-		rootLayout({ locals: { user }, depends: () => {} } as never) as Promise<Layout>;
+		rootLayout({
+			locals: { user },
+			url: new URL('http://localhost/'),
+			depends: () => {}
+		} as never) as Promise<Layout>;
 
 	it('exposes the active timeout of a timed-out viewer', async () => {
 		const w = await world();

@@ -249,3 +249,15 @@ export const maintenance = pgTable('maintenance', {
 	updatedBy: integer('updated_by').references(() => users.id),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
+
+/** Admin seasonal-theme settings. A single row with id 1; no row means mode "auto". */
+export const seasonSettings = pgTable('season_settings', {
+	id: integer('id').primaryKey(),
+	mode: text('mode', { enum: ['auto', 'off', 'forced'] })
+		.notNull()
+		.default('auto'),
+	theme: text('theme'),
+	until: timestamp('until', { withTimezone: true }),
+	updatedBy: integer('updated_by').references(() => users.id),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+});

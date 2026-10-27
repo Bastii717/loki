@@ -25,7 +25,8 @@ export const AUDIT_ACTIONS = {
 	timeoutSet: 'timeout_set',
 	timeoutLifted: 'timeout_lifted',
 	contentReleased: 'content_released',
-	maintenanceChanged: 'maintenance_changed'
+	maintenanceChanged: 'maintenance_changed',
+	seasonChanged: 'season_changed'
 } as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
 

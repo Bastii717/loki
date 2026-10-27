@@ -9,7 +9,7 @@
 	import TimeoutBanner from '#lib/components/TimeoutBanner.svelte';
 	import { STATUS_KEY } from '../lib/status-context';
 	import { nextRefreshDelay } from '../lib/status-refresh';
-	import { watchThemeColor } from '../lib/theme';
+	import { syncThemeColor, watchThemeColor } from '../lib/theme';
 	import type { LayoutProps } from './$types';
 
 	let { children, data }: LayoutProps = $props();
@@ -56,6 +56,15 @@
 			clearTimeout(timer);
 			document.removeEventListener('visibilitychange', onVisible);
 		};
+	});
+
+	// The server renders data-season on <html>; client navigations and invalidations keep it in sync.
+	$effect(() => {
+		const root = document.documentElement;
+		if (data.season) root.dataset.season = data.season.id;
+		else delete root.dataset.season;
+		// the PWA status bar follows the season's --bg
+		syncThemeColor();
 	});
 
 	// the toggle only lives on the feed page, the meta must follow the theme on every page

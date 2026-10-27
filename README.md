@@ -17,6 +17,7 @@ Planned and being built. The whole app is English: UI, code and docs.
 - **Reports and moderation**: members report memes, comments and quotes. Content with too many open reports is hidden until a moderator decides in the moderation area (queue, timeouts, audit log).
 - **Rules and FAQ**, editable by admins in the app.
 - **Maintenance mode**: admins pause posting with a message; the app reports its own readiness and shows a designed page during outages.
+- **Seasonal themes**: Halloween, Advent and Carnival switch on by date; admins can force an event theme or turn seasons off.
 - **PWA** with a share target, so memes can be sent straight from the share sheet.
 
 ## Screenshots
@@ -52,10 +53,11 @@ Moderation: the open-case queue, the timeout tools and the maintenance banner.
   <img src="docs/screenshots/maintenance-mobile.png" alt="Feed on a phone with a maintenance banner announcing a deploy in progress" width="30%">
 </p>
 
-Light theme: a daytime feed.
+Themes: the light theme and the Halloween event theme.
 
 <p align="center">
   <img src="docs/screenshots/feed-light-mobile.png" alt="Feed on a phone in the light theme" width="30%">
+  <img src="docs/screenshots/feed-halloween-mobile.png" alt="Feed on a phone in the Halloween theme with an orange accent and a ghost icon next to the wordmark" width="30%">
 </p>
 
 On a desktop browser the layout stays a centered column.

@@ -1,4 +1,4 @@
-import { json } from '@sveltejs/kit';
+import { json, type RequestEvent } from '@sveltejs/kit';
 import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, resolveSession } from './lib/server/auth/session';
 import { migrateWithRetry } from './lib/server/boot';
@@ -7,6 +7,7 @@ import { env } from './lib/server/env';
 import { startJobs } from './lib/server/jobs';
 import { currentStatus } from './lib/server/maintenance';
 import { outagePage } from './lib/server/outage-page';
+import { seasonForRequest } from './lib/server/season-request';
 import { rateLimitRetryMs } from './lib/server/rate-limit';
 import { isWriteLockExempt, writeLockResponse } from './lib/server/write-lock';
 
@@ -151,9 +152,31 @@ function secure(response: Response): Response {
 	return response;
 }
 
+/**
+ * The season for HTML responses only: health probes, static assets and the API never need it (and
+ * must not touch the database for it). A failing lookup degrades to "no theme", not an error page.
+ */
+async function seasonForHtml(event: RequestEvent, path: string) {
+	if (
+		HEALTH_PATHS.has(path) ||
+		isOutageExempt(path) ||
+		path === '/api' ||
+		path.startsWith('/api/')
+	) {
+		return null;
+	}
+	try {
+		return await seasonForRequest(event);
+	} catch (e) {
+		console.warn('season resolution failed', e);
+		return null;
+	}
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
 	const path = routedPath(event.url.pathname);
 	// Before the session lookup, which needs the database. /login and /auth/callback need it too.
+	event.locals.season = null; // set before the outage return, so the type holds on every path
 	if (!isOutageExempt(path) && (await currentStatus(null)).state === 'down') {
 		return secure(outagePage());
 	}
@@ -163,6 +186,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.user = session?.user ?? null;
 	if (token && session?.renewed) event.cookies.set(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
 	if (token && !event.locals.user) event.cookies.delete(SESSION_COOKIE, { path: '/' });
+	// Before the guards so the public /login page gets it too; the guards' own responses do not use it.
+	const season = await seasonForHtml(event, path);
+	event.locals.season = season;
 
 	if (!event.locals.user && !isPublic(path)) {
 		if (path === '/api' || path.startsWith('/api/')) {
@@ -210,5 +236,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 			})
 		);
 	}
-	return secure(await resolve(event));
+	return secure(
+		await resolve(event, {
+			// the theme tokens key off this attribute, so it must be on the server-rendered tag (no flash)
+			transformPageChunk: ({ html }) =>
+				season
+					? html.replace('<html lang="en"', `<html lang="en" data-season="${season.id}"`)
+					: html
+		})
+	);
 };

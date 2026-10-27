@@ -31,7 +31,8 @@ export const AUDIT_LABELS: Record<string, string> = {
 	site_content_changed: 'Rules/FAQ changed',
 	timeout_set: 'Timeout set',
 	timeout_lifted: 'Timeout lifted',
-	maintenance_changed: 'Maintenance changed'
+	maintenance_changed: 'Maintenance changed',
+	season_changed: 'Theme changed'
 };
 
 export const ROLE_LABELS: Record<string, string> = {
