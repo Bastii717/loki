@@ -43,6 +43,7 @@ describe('display name format', () => {
 		['ba  sti', 'ba sti'],
 		[' ronja ', 'ronja'],
 		['Rönja', 'Rönja'],
+		['Ba\u0308sti', 'B\u00e4sti'],
 		['名前', '名前'],
 		['a-b_c', 'a-b_c']
 	];
@@ -66,6 +67,10 @@ describe('display name format', () => {
 		expect(() => validateDisplayName(name)).toThrow(new ProfileInputError(FORMAT_MESSAGE));
 	});
 
+	it('rejects a double space when validating directly', () => {
+		expect(() => validateDisplayName('ba  sti')).toThrow(new ProfileInputError(FORMAT_MESSAGE));
+	});
+
 	it('accepts exactly 24 characters and counts code points, not UTF-16 units', () => {
 		expect(() => validateDisplayName('x'.repeat(24))).not.toThrow();
 		expect(() => validateDisplayName('𠀀'.repeat(24))).not.toThrow();
@@ -83,6 +88,15 @@ describe('nameKey', () => {
 
 	it('applies NFKC', () => {
 		expect(nameKey('ＬＥＮＡ')).toBe('lena');
+	});
+});
+
+describe('display name key index', () => {
+	it('rejects two users with the same key but allows any number without one', async () => {
+		await testUser({ displayName: 'Le na', displayNameKey: 'lena' });
+		await expect(testUser({ displayName: 'lena', displayNameKey: 'lena' })).rejects.toThrow();
+		await testUser();
+		await testUser();
 	});
 });
 
@@ -211,6 +225,18 @@ describe('setDisplayName: other members', () => {
 		});
 	});
 
+	it("starts the member's own cooldown at the admin change", async () => {
+		const admin = await make('admin');
+		const m = await make();
+		const changed = new Date(NOW.getTime() + DAY);
+		await setDisplayName(admin, m.id, 'Noah', changed);
+		const date = formatDate(new Date(changed.getTime() + 30 * DAY).toISOString());
+		await expect(
+			setDisplayName(m, m.id, 'ronja', new Date(changed.getTime() + DAY))
+		).rejects.toThrow(new ProfileInputError(`You can change your name again on ${date}.`));
+		expect((await getProfile(m.id)).displayName).toBe('Noah');
+	});
+
 	it('does not require the admin to be free of a timeout on the target', async () => {
 		const admin = await make('admin');
 		const m = await make();
@@ -251,7 +277,8 @@ describe('resetDisplayName', () => {
 			actorId: admin.id,
 			action: 'display_name_reset',
 			targetType: 'user',
-			targetId: m.id
+			targetId: m.id,
+			detail: ''
 		});
 	});
 
@@ -279,7 +306,7 @@ describe('motto', () => {
 	it('rejects 81 characters, accepts 80', async () => {
 		const a = await make();
 		await expect(setMotto(a, 'x'.repeat(81))).rejects.toThrow(
-			new ProfileInputError('Keep your motto to 80 characters.')
+			new ProfileInputError('The motto can have at most 80 characters.')
 		);
 		await setMotto(a, 'x'.repeat(80));
 		expect((await getProfile(a.id)).motto).toBe('x'.repeat(80));
@@ -289,6 +316,24 @@ describe('motto', () => {
 		const a = await make();
 		await setMotto(a, '  hello\r\nworld\nagain  ');
 		expect((await getProfile(a.id)).motto).toBe('hello world again');
+	});
+
+	it('treats NEL, LS, PS, VT and FF as line breaks too', async () => {
+		const a = await make();
+		await setMotto(a, 'a\u0085b\u2028c\u2029d\ve\ff');
+		expect((await getProfile(a.id)).motto).toBe('a b c d e f');
+	});
+
+	it('treats an empty motto as a clear, not a change', async () => {
+		const a = await make();
+		await setMotto(a, 'carpe diem');
+		await setMotto(a, ' \r\n ');
+		expect((await getProfile(a.id)).motto).toBe('');
+		const rows = await auditRows();
+		expect(rows.map((r) => [r.action, r.detail])).toEqual([
+			['motto_changed', 'to="carpe diem"'],
+			['motto_cleared', 'by=self']
+		]);
 	});
 
 	it('audits motto_changed', async () => {

@@ -20,9 +20,10 @@ type Role = SessionUser['role'];
 /** Rejected profile input. The message is user-facing. */
 export class ProfileInputError extends Error {}
 
-/** Trims and collapses runs of spaces to one. */
+/** NFC-normalises, trims and collapses runs of spaces to one. */
 export function normalizeDisplayName(raw: string): string {
-	return raw.trim().replace(/ {2,}/g, ' ');
+	// NFC first: a decomposed "ä" (a + U+0308) is two code points and would fail the letter check
+	return raw.normalize('NFC').trim().replace(/ {2,}/g, ' ');
 }
 
 /** Comparison key: `Le na`, `lena` and `le_na` are one name. */
@@ -36,7 +37,12 @@ export function nameKey(name: string): string {
 /** Throws the format message unless `name` (already normalised) is a valid display name. */
 export function validateDisplayName(name: string): void {
 	const length = [...name].length;
-	if (length < DISPLAY_NAME_MIN || length > DISPLAY_NAME_MAX || !NAME_PATTERN.test(name)) {
+	if (
+		length < DISPLAY_NAME_MIN ||
+		length > DISPLAY_NAME_MAX ||
+		name.includes('  ') ||
+		!NAME_PATTERN.test(name)
+	) {
 		throw new ProfileInputError(FORMAT_MESSAGE);
 	}
 }
@@ -50,8 +56,8 @@ export function nextRenameAt(changedAt: Date | null, now: Date): Date | null {
 
 /** Postgres unique violation, whether raised directly or wrapped by the driver/ORM. */
 function isUniqueViolation(e: unknown): boolean {
-	const code = (e: unknown) => (e as { code?: string } | null)?.code;
-	return code(e) === '23505' || code((e as { cause?: unknown } | null)?.cause) === '23505';
+	const codeOf = (x: unknown) => (x as { code?: string } | null)?.code;
+	return codeOf(e) === '23505' || codeOf((e as { cause?: unknown } | null)?.cause) === '23505';
 }
 
 /**
@@ -123,6 +129,8 @@ export async function setDisplayName(
 			);
 		});
 	} catch (e) {
+		// Only reachable when two members race for the same key (the pre-check above passed for both),
+		// so it cannot be triggered deterministically; users_display_name_key_idx itself is tested.
 		if (isUniqueViolation(e)) throw new ProfileInputError('That name is taken.');
 		throw e;
 	}
@@ -147,17 +155,19 @@ export async function resetDisplayName(actor: SessionUser, userId: number): Prom
 	});
 }
 
-/** Line breaks become one space, then trimmed. */
+/** Line breaks (CR, LF, NEL, LS, PS, VT, FF) become one space, then trimmed. */
 function normalizeMotto(raw: string): string {
-	return raw.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+	return raw.replace(/\s*[\r\n\u0085\u2028\u2029\v\f]+\s*/g, ' ').trim();
 }
 
 export async function setMotto(actor: SessionUser, raw: string): Promise<void> {
 	await assertNotTimedOut(actor);
 	const motto = normalizeMotto(raw);
 	if ([...motto].length > MOTTO_MAX) {
-		throw new ProfileInputError(`Keep your motto to ${MOTTO_MAX} characters.`);
+		throw new ProfileInputError(`The motto can have at most ${MOTTO_MAX} characters.`);
 	}
+	// An empty motto is a clear, not a change to "".
+	if (motto === '') return clearMotto(actor, actor.id);
 	await db.transaction(async (tx) => {
 		await tx.update(users).set({ motto }).where(eq(users.id, actor.id));
 		await audit(actor.id, AUDIT_ACTIONS.mottoChanged, 'user', actor.id, `to="${motto}"`, tx);
