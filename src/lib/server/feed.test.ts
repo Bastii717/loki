@@ -197,6 +197,30 @@ describe('getFeedPage', () => {
 		expect(theirs.find((i) => i.id === id)).toMatchObject({ userVote: 1, userFavorite: true });
 	});
 
+	it('shows the display name when set, else the username, with role and avatar thumb', async () => {
+		const named = await testUser({
+			displayName: 'Ronja',
+			displayNameKey: 'ronja',
+			role: 'moderator',
+			avatarThumbKey: 'avatars/ronja-thumb.webp'
+		});
+		const plain = await testUser();
+		const a = await addMedia(named.id);
+		const b = await addMedia(plain.id);
+		const items = (await getFeedPage({ viewerId: plain.id, sort: 'new' })).items;
+		expect(items.find((i) => i.id === a)).toMatchObject({
+			uploader: 'Ronja',
+			uploaderRole: 'moderator',
+			uploaderAvatar: 'avatars/ronja-thumb.webp'
+		});
+		expect(items.find((i) => i.id === b)).toMatchObject({
+			uploader: plain.username,
+			uploaderRole: 'member',
+			uploaderAvatar: null
+		});
+		expect(await getFeedItem(plain.id, a)).toMatchObject({ uploader: 'Ronja' });
+	});
+
 	it('rejects a malformed cursor', async () => {
 		const u = await testUser();
 		await expect(
@@ -317,6 +341,7 @@ describe('under review', () => {
 		const mod = {
 			id: (await testUser({ role: 'moderator' })).id,
 			username: 'm',
+			displayName: null,
 			role: 'moderator' as const
 		};
 		await resolveReports(mod, 'meme', id, 'actioned');
@@ -328,6 +353,7 @@ describe('under review', () => {
 		const mod = {
 			id: (await testUser({ role: 'moderator' })).id,
 			username: 'm',
+			displayName: null,
 			role: 'moderator' as const
 		};
 		await resolveReports(mod, 'meme', id, 'dismissed');
@@ -382,7 +408,7 @@ describe('under review', () => {
 		await db.insert(mediaTags).values({ mediaId: id, tagId });
 		const mod = await testUser({ role: 'moderator' });
 		await resolveReports(
-			{ id: mod.id, username: mod.username, role: 'moderator' },
+			{ id: mod.id, username: mod.username, displayName: null, role: 'moderator' },
 			'meme',
 			id,
 			'dismissed'

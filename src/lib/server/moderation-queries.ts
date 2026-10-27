@@ -23,7 +23,10 @@ type Role = (typeof users.$inferSelect)['role'];
 
 export interface CaseReport {
 	reporterId: number;
+	/** Username (stable identifier). */
 	reporter: string;
+	/** Display name when set, else the username. */
+	reporterDisplay: string;
 	category: ReportCategory;
 	text: string;
 	createdAt: string;
@@ -45,7 +48,10 @@ interface CaseBase {
 	contentType: ContentType;
 	contentId: number;
 	authorId: number;
+	/** Username (stable identifier). */
 	author: string;
+	/** Display name when set, else the username. */
+	authorDisplay: string;
 	authorRole: Role;
 	/** Snapshot taken when the first report came in (survives deletion of the content). */
 	excerpt: string;
@@ -84,12 +90,22 @@ function countCategories(rows: { category: ReportCategory }[]): CaseBase['catego
 }
 
 async function authorsById(ids: number[]) {
-	if (ids.length === 0) return new Map<number, { username: string; role: Role }>();
+	if (ids.length === 0) return new Map<number, { username: string; display: string; role: Role }>();
 	const rows = await db
-		.select({ id: users.id, username: users.username, role: users.role })
+		.select({
+			id: users.id,
+			username: users.username,
+			displayName: users.displayName,
+			role: users.role
+		})
 		.from(users)
 		.where(inArray(users.id, ids));
-	return new Map(rows.map((r) => [r.id, { username: r.username, role: r.role }]));
+	return new Map(
+		rows.map((r) => [
+			r.id,
+			{ username: r.username, display: r.displayName ?? r.username, role: r.role }
+		])
+	);
 }
 
 /** The reports behind a set of report ids, with reporter names, oldest first. */
@@ -102,6 +118,7 @@ async function reportRows(ids: number[]) {
 			contentId: reports.contentId,
 			reporterId: reports.reporterId,
 			reporter: reporter.username,
+			reporterDisplay: sql<string>`coalesce(${reporter.displayName}, ${reporter.username})`,
 			authorId: reports.authorId,
 			category: reports.category,
 			text: reports.text,
@@ -123,6 +140,7 @@ type ReportRow = Awaited<ReturnType<typeof reportRows>>[number];
 const toCaseReport = (r: ReportRow): CaseReport => ({
 	reporterId: r.reporterId,
 	reporter: r.reporter,
+	reporterDisplay: r.reporterDisplay,
 	category: r.category,
 	text: r.text,
 	createdAt: r.createdAt.toISOString()
@@ -252,6 +270,7 @@ export async function listOpenCases(
 			contentId: g.contentId,
 			authorId: first.authorId,
 			author: author?.username ?? '',
+			authorDisplay: author?.display ?? '',
 			authorRole: author?.role ?? 'member',
 			excerpt: first.excerpt,
 			reports: mine.map(toCaseReport),
@@ -349,6 +368,7 @@ export async function listDoneCases(
 			contentId: g.content_id,
 			authorId: first.authorId,
 			author: author?.username ?? '',
+			authorDisplay: author?.display ?? '',
 			authorRole: author?.role ?? 'member',
 			excerpt: first.excerpt,
 			reports: mine.map(toCaseReport),
@@ -411,6 +431,11 @@ export interface UserTimeoutRecord {
 export interface UserOverview {
 	id: number;
 	username: string;
+	/** Self-chosen display name, null until set. */
+	displayName: string | null;
+	/** Thumb key of the avatar, null when none. */
+	avatarThumbKey: string | null;
+	motto: string;
 	role: Role;
 	createdAt: string;
 	memes: number;
@@ -428,6 +453,9 @@ export async function listUserOverview(): Promise<UserOverview[]> {
 	const rows = await db.execute<{
 		id: number;
 		username: string;
+		display_name: string | null;
+		avatar_thumb_key: string | null;
+		motto: string;
 		role: Role;
 		created_at: Date;
 		memes: number;
@@ -436,7 +464,7 @@ export async function listUserOverview(): Promise<UserOverview[]> {
 		confirmed_reports: number;
 		confirmed_cases: number;
 	}>(sql`
-		SELECT u.id, u.username, u.role, u.created_at,
+		SELECT u.id, u.username, u.display_name, u.avatar_thumb_key, u.motto, u.role, u.created_at,
 			(SELECT count(*)::int FROM media m WHERE m.uploader_id = u.id) AS memes,
 			(SELECT count(*)::int FROM comments c WHERE c.author_id = u.id) AS comments,
 			(SELECT count(*)::int FROM quotes q WHERE q.submitted_by = u.id) AS quotes,
@@ -483,6 +511,9 @@ export async function listUserOverview(): Promise<UserOverview[]> {
 	return [...rows].map((r) => ({
 		id: r.id,
 		username: r.username,
+		displayName: r.display_name,
+		avatarThumbKey: r.avatar_thumb_key,
+		motto: r.motto,
 		role: r.role,
 		createdAt: new Date(r.created_at).toISOString(),
 		memes: r.memes,
@@ -511,13 +542,25 @@ export async function searchUsers(
 		.limit(limit);
 }
 
-/** id to username for audit-log targets that point at users. Unknown ids are absent. */
-export async function usernamesById(ids: number[]): Promise<Map<number, string>> {
+/** id to display name, username and role for audit-log targets that point at users. Unknown ids are absent. */
+export async function namesById(
+	ids: number[]
+): Promise<Map<number, { display: string; username: string; role: Role }>> {
 	const unique = [...new Set(ids)];
 	if (unique.length === 0) return new Map();
 	const rows = await db
-		.select({ id: users.id, username: users.username })
+		.select({
+			id: users.id,
+			username: users.username,
+			displayName: users.displayName,
+			role: users.role
+		})
 		.from(users)
 		.where(inArray(users.id, unique));
-	return new Map(rows.map((r) => [r.id, r.username]));
+	return new Map(
+		rows.map((r) => [
+			r.id,
+			{ display: r.displayName ?? r.username, username: r.username, role: r.role }
+		])
+	);
 }

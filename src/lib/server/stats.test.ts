@@ -97,6 +97,19 @@ describe('getStats', () => {
 		]);
 	});
 
+	it('ranks uploaders by display name when set, else username', async () => {
+		const named = await testUser({ displayName: 'Ronja', displayNameKey: 'ronja' });
+		const plain = await testUser();
+		await addMedia(named.id, 'a');
+		await addMedia(named.id, 'b');
+		await addMedia(plain.id, 'c');
+		const s = await getStats();
+		expect(s.topUploaders).toEqual([
+			{ username: 'Ronja', count: 2 },
+			{ username: plain.username, count: 1 }
+		]);
+	});
+
 	it('leaves memes under review out of the top-voted list', async () => {
 		const u = await testUser();
 		await addMedia(u.id, 'harmlos', 5);

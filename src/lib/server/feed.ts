@@ -22,7 +22,11 @@ export interface FeedItem {
 	userFavorite: boolean;
 	viewCount: number;
 	blurred: 'nsfw' | 'spoiler' | null;
+	/** Display name when set, else the username. */
 	uploader: string;
+	uploaderRole: 'member' | 'moderator' | 'admin';
+	/** Thumb key of the uploader's avatar, null when they have none. */
+	uploaderAvatar: string | null;
 	/** The viewer uploaded this meme (never offer "Report" on it). */
 	mine: boolean;
 	createdAt: string;
@@ -106,6 +110,8 @@ interface Row extends Record<string, unknown> {
 	created_at: Date | string;
 	created_at_raw: string;
 	uploader: string;
+	uploader_role: FeedItem['uploaderRole'];
+	uploader_avatar: string | null;
 	mine: boolean;
 	tag_names: string[];
 	comment_count: number;
@@ -176,7 +182,9 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 		SELECT m.id, m.title, m.kind, m.object_key, m.thumb_key, m.width, m.height,
 			m.nsfw, m.spoiler, m.score, m.view_count, m.hot_score, m.created_at,
 			m.created_at::text AS created_at_raw,
-			u.username AS uploader,
+			COALESCE(u.display_name, u.username) AS uploader,
+			u.role AS uploader_role,
+			u.avatar_thumb_key AS uploader_avatar,
 			(m.uploader_id = ${opts.viewerId}) AS mine,
 			COALESCE(tg.names, ARRAY[]::text[]) AS tag_names,
 			cc.n AS comment_count,
@@ -230,6 +238,9 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 			viewCount: r.view_count,
 			blurred: r.nsfw || r.score <= env.AUTO_BLUR_SCORE ? 'nsfw' : r.spoiler ? 'spoiler' : null,
 			uploader: hide ? '' : r.uploader,
+			// the role would identify the hidden uploader as much as the name does
+			uploaderRole: hide ? 'member' : r.uploader_role,
+			uploaderAvatar: hide ? null : r.uploader_avatar,
 			mine: r.mine,
 			createdAt: new Date(r.created_at).toISOString(),
 			underReview: r.under_review

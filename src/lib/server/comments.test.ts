@@ -47,6 +47,31 @@ describe('comments', () => {
 		expect(list[0]).toMatchObject({ authorId: u.id, author: u.username });
 	});
 
+	it('shows the display name when set, else the username, with role and avatar thumb', async () => {
+		const named = await testUser({
+			displayName: 'Ronja',
+			displayNameKey: 'ronja',
+			role: 'admin',
+			avatarThumbKey: 'avatars/ronja-thumb.webp'
+		});
+		const plain = await testUser();
+		const id = await addMedia(named.id);
+		const added = await addComment(named.id, id, 'von Ronja');
+		expect(added).toMatchObject({ author: 'Ronja', authorRole: 'admin' });
+		await addComment(plain.id, id, 'von ohne');
+		const list = await listComments(id);
+		expect(list.find((c) => c.authorId === named.id)).toMatchObject({
+			author: 'Ronja',
+			authorRole: 'admin',
+			authorAvatar: 'avatars/ronja-thumb.webp'
+		});
+		expect(list.find((c) => c.authorId === plain.id)).toMatchObject({
+			author: plain.username,
+			authorRole: 'member',
+			authorAvatar: null
+		});
+	});
+
 	it('rejects empty and over-long text', async () => {
 		const u = await testUser();
 		const id = await addMedia(u.id);
@@ -64,7 +89,10 @@ describe('comments', () => {
 		const u = await testUser();
 		const id = await addMedia(u.id);
 		const c = await addComment(u.id, id, 'weg');
-		await deleteComment({ id: u.id, username: u.username, role: 'member' }, c.id);
+		await deleteComment(
+			{ id: u.id, username: u.username, displayName: null, role: 'member' },
+			c.id
+		);
 		expect(await db.select().from(comments)).toHaveLength(0);
 	});
 
@@ -74,7 +102,7 @@ describe('comments', () => {
 		const id = await addMedia(a.id);
 		const c = await addComment(a.id, id, 'meins');
 		await expect(
-			deleteComment({ id: b.id, username: b.username, role: 'member' }, c.id)
+			deleteComment({ id: b.id, username: b.username, displayName: null, role: 'member' }, c.id)
 		).rejects.toBeInstanceOf(CommentPermissionError);
 		expect(await db.select().from(comments)).toHaveLength(1);
 	});
@@ -86,8 +114,14 @@ describe('comments', () => {
 		const id = await addMedia(a.id);
 		const c1 = await addComment(a.id, id, 'eins');
 		const c2 = await addComment(a.id, id, 'zwei');
-		await deleteComment({ id: mod.id, username: mod.username, role: 'moderator' }, c1.id);
-		await deleteComment({ id: admin.id, username: admin.username, role: 'admin' }, c2.id);
+		await deleteComment(
+			{ id: mod.id, username: mod.username, displayName: null, role: 'moderator' },
+			c1.id
+		);
+		await deleteComment(
+			{ id: admin.id, username: admin.username, displayName: null, role: 'admin' },
+			c2.id
+		);
 		expect(await db.select().from(comments)).toHaveLength(0);
 	});
 
@@ -99,7 +133,12 @@ describe('comments', () => {
 		const foreign = await addComment(a.id, id, 'fremd');
 		const own = await addComment(mod.id, id, 'eigen');
 		await timeOut(mod.id, admin.id);
-		const modUser = { id: mod.id, username: mod.username, role: 'moderator' as const };
+		const modUser = {
+			id: mod.id,
+			username: mod.username,
+			displayName: null,
+			role: 'moderator' as const
+		};
 		await expect(deleteComment(modUser, foreign.id)).rejects.toBeInstanceOf(TimeoutActiveError);
 		await deleteComment(modUser, own.id);
 		expect((await db.select().from(comments)).map((c) => c.id)).toEqual([foreign.id]);
@@ -108,7 +147,7 @@ describe('comments', () => {
 	it('throws CommentNotFoundError for a missing comment', async () => {
 		const u = await testUser();
 		await expect(
-			deleteComment({ id: u.id, username: u.username, role: 'admin' }, 999999)
+			deleteComment({ id: u.id, username: u.username, displayName: null, role: 'admin' }, 999999)
 		).rejects.toBeInstanceOf(CommentNotFoundError);
 	});
 });
@@ -189,7 +228,7 @@ describe('listComments under review', () => {
 		const { mid, reported, author } = await setup(OVER_THRESHOLD);
 		const mod = await testUser({ role: 'moderator' });
 		await resolveReports(
-			{ id: mod.id, username: mod.username, role: 'moderator' },
+			{ id: mod.id, username: mod.username, displayName: null, role: 'moderator' },
 			'comment',
 			reported.id,
 			'dismissed'

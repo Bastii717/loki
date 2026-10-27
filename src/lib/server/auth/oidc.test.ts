@@ -36,7 +36,12 @@ describe('upsertUserFromClaims', () => {
 
 	it('creates a user keyed on sub with the mapped role', async () => {
 		const user = await upsertUserFromClaims(claims({}));
-		expect(user).toEqual({ id: expect.any(Number), username: 'alice', role: 'member' });
+		expect(user).toEqual({
+			id: expect.any(Number),
+			username: 'alice',
+			displayName: null,
+			role: 'member'
+		});
 	});
 
 	it('updates username and role on the same sub without duplicating', async () => {
@@ -44,8 +49,26 @@ describe('upsertUserFromClaims', () => {
 		const second = await upsertUserFromClaims(
 			claims({ preferred_username: 'alicia', groups: ['loki-admins'] })
 		);
-		expect(second).toEqual({ id: first.id, username: 'alicia', role: 'admin' });
+		expect(second).toEqual({ id: first.id, username: 'alicia', displayName: null, role: 'admin' });
 		expect(await db.select().from(users).where(eq(users.sub, 's1'))).toHaveLength(1);
+	});
+
+	it('keeps the display name across a re-login and returns it', async () => {
+		const first = await upsertUserFromClaims(claims({}));
+		await db
+			.update(users)
+			.set({ displayName: 'Lena', displayNameKey: 'lena' })
+			.where(eq(users.id, first.id));
+		const again = await upsertUserFromClaims(claims({ preferred_username: 'alicia' }));
+		expect(again).toEqual({
+			id: first.id,
+			username: 'alicia',
+			displayName: 'Lena',
+			role: 'member'
+		});
+		const [row] = await db.select().from(users).where(eq(users.id, first.id));
+		expect(row.displayName).toBe('Lena');
+		expect(row.displayNameKey).toBe('lena');
 	});
 
 	it('tolerates a missing groups claim by rejecting', async () => {

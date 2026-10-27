@@ -15,7 +15,7 @@ import {
 	listUserOverview,
 	QUEUE_PAGE_SIZE,
 	searchUsers,
-	usernamesById
+	namesById
 } from './moderation-queries';
 import { addOpenReports, OVER_THRESHOLD } from './moderation-test-utils';
 
@@ -24,7 +24,7 @@ beforeEach(resetDb);
 afterAll(resetDb);
 
 const asSession = (u: { id: number; username: string; role: string }) =>
-	({ id: u.id, username: u.username, role: u.role }) as SessionUser;
+	({ id: u.id, username: u.username, displayName: null, role: u.role }) as SessionUser;
 
 async function meme(uploaderId: number, title = 'Titel') {
 	const [row] = await db
@@ -89,6 +89,40 @@ describe('listOpenCases', () => {
 			[r3.username, 'hurtful', 'gemein']
 		]);
 		expect(new Date(c.oldest).getTime()).toBeLessThanOrEqual(Date.now());
+	});
+
+	it('exposes display forms next to usernames for author and reporters', async () => {
+		const author = await testUser({
+			username: 'auth',
+			displayName: 'Autorin',
+			displayNameKey: 'autorin'
+		});
+		const named = await testUser({
+			username: 'rep1',
+			displayName: 'Melder',
+			displayNameKey: 'melder'
+		});
+		const plain = await testUser({ username: 'rep2' });
+		const memeId = await meme(author.id);
+		await createReport(asSession(named), 'meme', memeId, 'spam');
+		await createReport(asSession(plain), 'meme', memeId, 'spam');
+
+		const [open] = (await listOpenCases()).cases;
+		expect(open).toMatchObject({ author: 'auth', authorDisplay: 'Autorin' });
+		expect(open.reports.map((r) => [r.reporter, r.reporterDisplay])).toEqual([
+			['rep1', 'Melder'],
+			['rep2', 'rep2']
+		]);
+
+		await resolveReports(
+			asSession(await testUser({ role: 'moderator' })),
+			'meme',
+			memeId,
+			'dismissed'
+		);
+		const [done] = (await listDoneCases()).cases;
+		expect(done).toMatchObject({ author: 'auth', authorDisplay: 'Autorin' });
+		expect(done.reports.map((r) => r.reporterDisplay)).toEqual(['Melder', 'rep2']);
 	});
 
 	it('shows comments and quotes with their text, and flags over-threshold ones as under review', async () => {
@@ -288,6 +322,29 @@ describe('listUserOverview', () => {
 	});
 });
 
+describe('listUserOverview profile fields', () => {
+	it('returns display name, avatar thumb key and motto, null/empty when unset', async () => {
+		const named = await testUser({
+			displayName: 'Ronja',
+			displayNameKey: 'ronja',
+			avatarThumbKey: 'avatars/b-thumb.webp',
+			motto: 'Ship it'
+		});
+		const plain = await testUser();
+		const overview = await listUserOverview();
+		expect(overview.find((u) => u.id === named.id)).toMatchObject({
+			displayName: 'Ronja',
+			avatarThumbKey: 'avatars/b-thumb.webp',
+			motto: 'Ship it'
+		});
+		expect(overview.find((u) => u.id === plain.id)).toMatchObject({
+			displayName: null,
+			avatarThumbKey: null,
+			motto: ''
+		});
+	});
+});
+
 describe('listUserOverview confirmed counts', () => {
 	it("excludes 'removed' and 'dismissed' reports from the confirmed count", async () => {
 		const admin = asSession(await testUser({ role: 'admin' }));
@@ -311,7 +368,7 @@ describe('listUserOverview confirmed counts', () => {
 	});
 });
 
-describe('searchUsers / usernamesById', () => {
+describe('searchUsers / namesById', () => {
 	it('matches usernames case-insensitively as a substring and escapes wildcards', async () => {
 		await testUser({ username: 'Anna_Banane' });
 		await testUser({ username: 'annabelle' });
@@ -326,11 +383,26 @@ describe('searchUsers / usernamesById', () => {
 		expect(await searchUsers('', 2)).toHaveLength(2);
 	});
 
-	it('resolves ids to usernames', async () => {
+	it('resolves ids to display name, username and role', async () => {
 		const u = await testUser({ username: 'Zed' });
-		const map = await usernamesById([u.id, u.id, 99999]);
-		expect(map.get(u.id)).toBe('Zed');
+		const named = await testUser({
+			username: 'yan',
+			displayName: 'Yannick',
+			displayNameKey: 'yannick',
+			role: 'moderator'
+		});
+		const map = await namesById([u.id, u.id, named.id, 99999]);
+		expect(map.get(u.id)).toEqual({
+			display: 'Zed',
+			username: 'Zed',
+			role: 'member'
+		});
+		expect(map.get(named.id)).toEqual({
+			display: 'Yannick',
+			username: 'yan',
+			role: 'moderator'
+		});
 		expect(map.has(99999)).toBe(false);
-		expect((await usernamesById([])).size).toBe(0);
+		expect((await namesById([])).size).toBe(0);
 	});
 });

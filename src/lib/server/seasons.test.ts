@@ -27,7 +27,7 @@ const auto: SeasonSettings = { mode: 'auto', theme: null, until: null };
 
 async function admin(): Promise<SessionUser> {
 	const u = await testUser({ role: 'admin' });
-	return { id: u.id, username: u.username, role: 'admin' };
+	return { id: u.id, username: u.username, displayName: null, role: 'admin' };
 }
 
 describe('resolveSeason', () => {

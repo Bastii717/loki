@@ -37,7 +37,7 @@ const on: MaintenanceRow = { ...off, enabled: true };
 
 async function admin(): Promise<SessionUser> {
 	const u = await testUser({ role: 'admin' });
-	return { id: u.id, username: u.username, role: 'admin' };
+	return { id: u.id, username: u.username, displayName: null, role: 'admin' };
 }
 
 describe('precedence', () => {
@@ -233,8 +233,8 @@ describe('currentStatus', () => {
 		});
 		setMigrated(partial.migrated ?? true);
 	}
-	const member: SessionUser = { id: 1, username: 'm', role: 'member' };
-	const adminUser: SessionUser = { id: 2, username: 'a', role: 'admin' };
+	const member: SessionUser = { id: 1, username: 'm', displayName: null, role: 'member' };
+	const adminUser: SessionUser = { id: 2, username: 'a', displayName: null, role: 'admin' };
 
 	it('ok: null message, writable', async () => {
 		ready();

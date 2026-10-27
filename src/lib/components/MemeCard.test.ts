@@ -22,6 +22,8 @@ function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
 		viewCount: 0,
 		blurred: null,
 		uploader: 'dev',
+		uploaderRole: 'member',
+		uploaderAvatar: null,
 		mine: false,
 		createdAt: new Date().toISOString(),
 		underReview: false,

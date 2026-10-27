@@ -47,7 +47,7 @@ export async function upsertUserFromClaims(claims: Record<string, unknown>): Pro
 		.values({ sub, username, role })
 		.onConflictDoUpdate({ target: users.sub, set: { username, role } })
 		.returning();
-	return { id: row.id, username: row.username, role };
+	return { id: row.id, username: row.username, displayName: row.displayName, role };
 }
 
 let configuration: Promise<client.Configuration> | undefined;

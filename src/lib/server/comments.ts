@@ -32,7 +32,11 @@ export interface CommentItem {
 	id: number;
 	mediaId: number;
 	authorId: number;
+	/** Display name when set, else the username. */
 	author: string;
+	authorRole: 'member' | 'moderator' | 'admin';
+	/** Thumb key of the author's avatar, null when they have none. */
+	authorAvatar: string | null;
 	/** null while under review, for viewers who may not see it. */
 	text: string | null;
 	underReview: boolean;
@@ -43,7 +47,9 @@ const columns = {
 	id: comments.id,
 	mediaId: comments.mediaId,
 	authorId: comments.authorId,
-	author: users.username,
+	author: sql<string>`coalesce(${users.displayName}, ${users.username})`,
+	authorRole: users.role,
+	authorAvatar: users.avatarThumbKey,
 	text: comments.text,
 	underReview: underReviewSql('comment', comments.id, comments.reviewedAt),
 	createdAt: comments.createdAt

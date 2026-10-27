@@ -13,7 +13,7 @@ afterAll(resetDb);
 
 async function userWithRole(role: SessionUser['role']): Promise<SessionUser> {
 	const u = await testUser({ role });
-	return { id: u.id, username: u.username, role };
+	return { id: u.id, username: u.username, displayName: u.displayName, role };
 }
 
 describe('content', () => {

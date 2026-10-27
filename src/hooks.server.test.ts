@@ -145,7 +145,12 @@ describe('auth guard', () => {
 		const r = run('/memes', token);
 		const res = await r.response;
 		expect(res.status).toBe(200);
-		expect(r.event.locals.user).toEqual({ id: user.id, username: user.username, role: 'admin' });
+		expect(r.event.locals.user).toEqual({
+			id: user.id,
+			username: user.username,
+			displayName: null,
+			role: 'admin'
+		});
 	});
 
 	it('clears an invalid cookie and redirects', async () => {

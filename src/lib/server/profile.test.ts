@@ -30,7 +30,7 @@ const FORMAT_MESSAGE = 'Pick 2 to 24 characters: letters, digits, spaces, dashes
 
 async function make(role: SessionUser['role'] = 'member', username?: string): Promise<SessionUser> {
 	const u = await testUser(username ? { role, username } : { role });
-	return { id: u.id, username: u.username, role };
+	return { id: u.id, username: u.username, displayName: u.displayName, role };
 }
 
 async function auditRows() {

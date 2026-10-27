@@ -270,6 +270,7 @@ describe('form actions', () => {
 	const asSessionUser = (u: { id: number; username: string }): SessionUser => ({
 		id: u.id,
 		username: u.username,
+		displayName: null,
 		role: 'member'
 	});
 
@@ -342,7 +343,9 @@ describe('form actions', () => {
 			form.set('markdown', '# Neu');
 			const result = (await pageActions.save!({
 				request: new Request('https://loki.test/rules?/save', { method: 'POST', body: form }),
-				locals: { user: { id: admin.id, username: admin.username, role: 'admin' } }
+				locals: {
+					user: { id: admin.id, username: admin.username, displayName: null, role: 'admin' }
+				}
 			} as never)) as { status: number; data: Record<string, unknown> };
 			expect(result.status).toBe(403);
 			expect(result.data).toMatchObject({
