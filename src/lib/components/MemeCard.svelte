@@ -15,7 +15,9 @@
 	import { relativeTime } from '../time';
 	import { createVoter } from '../vote';
 	import type { FeedItem } from '../server/feed';
+	import Avatar from './Avatar.svelte';
 	import ReportButton from './ReportButton.svelte';
+	import RoleBadge from './RoleBadge.svelte';
 	import UnderReviewBadge from './UnderReviewBadge.svelte';
 	import UnderReviewPanel from './UnderReviewPanel.svelte';
 
@@ -177,7 +179,12 @@
 				</ul>
 			{/if}
 			<p class="meta">
-				{#if item.uploader}<span>by {item.uploader}</span>{/if}
+				{#if item.uploader}
+					<span class="by"
+						>by <Avatar thumbKey={item.uploaderAvatar} name={item.uploader} size={20} />
+						<span class="name">{item.uploader}</span><RoleBadge role={item.uploaderRole} /></span
+					>
+				{/if}
 				<span
 					class="stat"
 					aria-label="{item.commentCount} {item.commentCount === 1 ? 'comment' : 'comments'}"
@@ -373,6 +380,21 @@
 		margin: 6px 0 0;
 		color: var(--text-muted);
 		font-size: 12px;
+	}
+
+	.by {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		min-width: 0;
+		max-width: 60%;
+		white-space: nowrap;
+	}
+
+	.by .name {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.votes {

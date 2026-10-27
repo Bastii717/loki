@@ -21,7 +21,9 @@
 	import { createVoter } from '../vote';
 	import type { CommentItem } from '../server/comments';
 	import type { FeedItem } from '../server/feed';
+	import Avatar from './Avatar.svelte';
 	import ReportButton from './ReportButton.svelte';
+	import RoleBadge from './RoleBadge.svelte';
 	import UnderReviewBadge from './UnderReviewBadge.svelte';
 	import UnderReviewPanel from './UnderReviewPanel.svelte';
 
@@ -380,7 +382,13 @@
 				<h1>{withheld ? 'Under review' : item.title || 'Untitled'}</h1>
 				{#if item.underReview && !withheld}<p class="review-note"><UnderReviewBadge /></p>{/if}
 				<p class="meta">
-					{#if item.uploader}by {item.uploader} ·{/if}
+					{#if item.uploader}
+						<span class="by"
+							>by <Avatar thumbKey={item.uploaderAvatar} name={item.uploader} size={24} />
+							<span class="name">{item.uploader}</span><RoleBadge role={item.uploaderRole} /></span
+						>
+						·
+					{/if}
 					<time datetime={item.createdAt}>{relativeTime(item.createdAt)}</time>
 					·
 					<span class="views" aria-label="{viewCount} {viewCount === 1 ? 'view' : 'views'}"
@@ -476,7 +484,10 @@
 				{#each comments as c (c.id)}
 					<li>
 						<div class="head">
-							<b>{c.author}</b>
+							<span class="author">
+								<Avatar thumbKey={c.authorAvatar} name={c.author} size={24} />
+								<b>{c.author}</b><RoleBadge role={c.authorRole} />
+							</span>
 							<time datetime={c.createdAt}>{relativeTime(c.createdAt)}</time>
 							<span class="actions">
 								{#if c.authorId === viewer.id || viewer.canModerate}
@@ -620,6 +631,21 @@
 		margin: 4px 0 0;
 		color: var(--text-muted);
 		font-size: 13px;
+	}
+
+	.by {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		max-width: 100%;
+		vertical-align: middle;
+		white-space: nowrap;
+	}
+
+	.by .name {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.star {
@@ -819,9 +845,23 @@
 
 	.head {
 		display: flex;
-		align-items: baseline;
+		align-items: center;
 		gap: 8px;
 		font-size: 13px;
+	}
+
+	.author {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		min-width: 0;
+	}
+
+	.author b {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.head time {
