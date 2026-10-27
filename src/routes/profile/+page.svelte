@@ -8,6 +8,8 @@
 	import LogOut from 'lucide-svelte/icons/log-out';
 	import Shield from 'lucide-svelte/icons/shield';
 	import Star from 'lucide-svelte/icons/star';
+	import UserPen from 'lucide-svelte/icons/user-pen';
+	import Avatar from '#lib/components/Avatar.svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -20,6 +22,7 @@
 
 	// Personal lists first, then the reference pages; Moderation is appended below for moderators.
 	const links = [
+		{ href: '/profile/edit', label: 'Edit profile', icon: UserPen },
 		{ href: '/profile/memes', label: 'My memes', icon: Images },
 		{ href: '/profile/favorites', label: 'Favorites', icon: Star },
 		{ href: '/profile/stats', label: 'Stats', icon: ChartColumn },
@@ -34,7 +37,15 @@
 
 <main>
 	<header>
-		<h1>{data.profile.username}</h1>
+		<Avatar
+			key={data.profile.avatarKey}
+			thumbKey={data.profile.avatarThumbKey}
+			name={data.profile.displayName ?? data.profile.username}
+			size={96}
+		/>
+		<h1>{data.profile.displayName ?? data.profile.username}</h1>
+		{#if data.profile.displayName}<p class="username">{data.profile.username}</p>{/if}
+		{#if data.profile.motto}<p class="motto">{data.profile.motto}</p>{/if}
 		<span class="role {data.profile.role}">{roleLabel[data.profile.role]}</span>
 	</header>
 
@@ -93,14 +104,32 @@
 
 	header {
 		display: flex;
+		flex-direction: column;
 		align-items: center;
-		gap: 10px;
+		gap: 6px;
+		text-align: center;
 	}
 
 	h1 {
-		margin: 0;
+		margin: 6px 0 0;
 		font-size: 22px;
 		overflow-wrap: anywhere;
+	}
+
+	.username,
+	.motto {
+		margin: 0;
+		max-width: 100%;
+		overflow-wrap: anywhere;
+	}
+
+	.username {
+		color: var(--text-muted);
+		font-size: 14px;
+	}
+
+	.motto {
+		font-size: 15px;
 	}
 
 	.role {

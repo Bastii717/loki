@@ -1,13 +1,13 @@
 import { eq, ne } from 'drizzle-orm';
 import { formatDate } from '../moderation-labels';
+import { DISPLAY_NAME_MAX, MOTTO_MAX } from '../profile-limits';
 import type { SessionUser } from './auth/session';
 import { db } from './db';
 import { users } from './db/schema';
 import { assertNotTimedOut, audit, AUDIT_ACTIONS } from './moderation';
 
 export const DISPLAY_NAME_MIN = 2;
-export const DISPLAY_NAME_MAX = 24;
-export const MOTTO_MAX = 80;
+export { DISPLAY_NAME_MAX, MOTTO_MAX };
 export const RENAME_COOLDOWN_DAYS = 30;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
