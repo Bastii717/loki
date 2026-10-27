@@ -8,10 +8,11 @@
 </script>
 
 {#if role === 'moderator'}
-	<span class="role" role="img" aria-label="Moderator"><Shield size={14} aria-hidden="true" /></span
+	<span class="role" role="img" title="Moderator" aria-label="Moderator"
+		><Shield size={14} aria-hidden="true" /></span
 	>
 {:else if role === 'admin'}
-	<span class="role" role="img" aria-label="Admin"
+	<span class="role" role="img" title="Admin" aria-label="Admin"
 		><ShieldCheck size={14} aria-hidden="true" /></span
 	>
 {/if}
@@ -21,6 +22,7 @@
 		display: inline-flex;
 		flex: none;
 		align-items: center;
-		color: var(--accent);
+		color: var(--role-badge-color, var(--accent-soft-text));
+		filter: var(--role-badge-shadow, none);
 	}
 </style>

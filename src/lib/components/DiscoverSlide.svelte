@@ -212,12 +212,17 @@
 		opacity: 0.85;
 	}
 
-	/* The group is the only dimmed element; its name must not dim twice. */
+	/* The text is dimmed by colour, not opacity, so the badge keeps full strength. The overlay is
+	   dark in every theme: the badge goes white with a halo (text-shadow does not reach SVG). */
 	.caption .by {
+		--role-badge-color: #fff;
+		--role-badge-shadow: drop-shadow(0 1px 2px rgb(0 0 0 / 0.8));
 		display: flex;
 		align-items: center;
 		gap: 4px;
 		max-width: 100%;
+		opacity: 1;
+		color: rgb(255 255 255 / 0.85);
 		white-space: nowrap;
 	}
 

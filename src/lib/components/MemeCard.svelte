@@ -302,8 +302,10 @@
 
 	.stat {
 		display: inline-flex;
+		flex: none;
 		align-items: center;
 		gap: 3px;
+		white-space: nowrap;
 	}
 
 	.badge {
@@ -375,19 +377,25 @@
 
 	.meta {
 		display: flex;
-		flex-wrap: wrap;
+		flex-wrap: nowrap;
+		align-items: center;
 		gap: 4px 10px;
 		margin: 6px 0 0;
 		color: var(--text-muted);
 		font-size: 12px;
 	}
 
+	.meta time {
+		flex: none;
+		white-space: nowrap;
+	}
+
 	.by {
 		display: inline-flex;
+		flex: 0 1 auto;
 		align-items: center;
 		gap: 4px;
 		min-width: 0;
-		max-width: 60%;
 		white-space: nowrap;
 	}
 

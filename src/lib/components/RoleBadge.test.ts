@@ -7,6 +7,7 @@ describe('RoleBadge', () => {
 		const { body } = render(RoleBadge, { props: { role: 'moderator' } });
 		expect(body).toContain('role="img"');
 		expect(body).toContain('aria-label="Moderator"');
+		expect(body).toContain('title="Moderator"');
 		expect(body).not.toContain('Admin');
 	});
 
@@ -14,6 +15,7 @@ describe('RoleBadge', () => {
 		const { body } = render(RoleBadge, { props: { role: 'admin' } });
 		expect(body).toContain('role="img"');
 		expect(body).toContain('aria-label="Admin"');
+		expect(body).toContain('title="Admin"');
 		expect(body).not.toContain('Moderator');
 	});
 
@@ -22,6 +24,7 @@ describe('RoleBadge', () => {
 		expect(body).not.toContain('role="img"');
 		expect(body).not.toContain('<svg');
 		expect(body).not.toContain('aria-label');
+		expect(body).not.toContain('title=');
 	});
 
 	it('draws a 14 px icon', () => {

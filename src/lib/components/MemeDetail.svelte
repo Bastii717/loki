@@ -385,9 +385,9 @@
 					{#if item.uploader}
 						<span class="by"
 							>by <Avatar thumbKey={item.uploaderAvatar} name={item.uploader} size={24} />
-							<span class="name">{item.uploader}</span><RoleBadge role={item.uploaderRole} /></span
+							<span class="name">{item.uploader}</span><RoleBadge role={item.uploaderRole} />
+							<span aria-hidden="true">·</span></span
 						>
-						·
 					{/if}
 					<time datetime={item.createdAt}>{relativeTime(item.createdAt)}</time>
 					·
@@ -865,7 +865,9 @@
 	}
 
 	.head time {
+		flex: none;
 		color: var(--text-muted);
+		white-space: nowrap;
 	}
 
 	.actions {
