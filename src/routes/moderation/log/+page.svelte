@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import ScrollText from 'lucide-svelte/icons/scroll-text';
+	import RoleBadge from '#lib/components/RoleBadge.svelte';
 	import {
 		AUDIT_LABELS,
 		CONTENT_LABELS,
@@ -54,7 +55,10 @@
 					<span class="pill accent">{AUDIT_LABELS[e.action] ?? e.action}</span>
 					<span class="muted">{formatDateTime(e.createdAt)}</span>
 				</div>
-				<p class="line"><strong>{e.actor}</strong>: {target(e)}</p>
+				<p class="line">
+					<strong>{e.actor}</strong>: {target(e)}
+					{#if e.targetRole}<RoleBadge role={e.targetRole} />{/if}
+				</p>
 				{#if e.detail}<p class="detail">{e.detail}</p>{/if}
 			</li>
 		{/each}

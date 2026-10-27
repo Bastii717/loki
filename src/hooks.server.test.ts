@@ -281,6 +281,23 @@ describe('429 responses', () => {
 		expect(res.headers.get('retry-after')).toBe(String(5 * 60));
 	});
 
+	it('counts avatar saves (POST /profile/edit, with or without ?/save) against the upload limit', async () => {
+		const user = await testUser();
+		const token = await createSession(user.id);
+		for (let i = 0; i < 10; i++) {
+			const path = i % 2 === 0 ? '/profile/edit' : '/profile/edit?/save';
+			const ok = await run(path, token, new Response('ok'), 'POST').response;
+			expect(ok.status).toBe(200);
+		}
+		const res = await run('/profile/edit?/save', token, new Response('ok'), 'POST').response;
+		expect(res.status).toBe(429);
+		// the shared bucket also blocks a meme upload, other pages stay under the write limit
+		const upload = await run('/upload', token, new Response('ok'), 'POST').response;
+		expect(upload.status).toBe(429);
+		const vote = await run('/profile/memes', token, new Response('ok'), 'POST').response;
+		expect(vote.status).toBe(200);
+	});
+
 	it('shrinks Retry-After as the window slides', async () => {
 		vi.useFakeTimers({ toFake: ['Date'] });
 		try {

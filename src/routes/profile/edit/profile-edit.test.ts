@@ -224,6 +224,8 @@ describe('load', () => {
 	type LoadData = {
 		profile: { username: string; displayName: string | null; motto: string };
 		nextRenameAt: string | null;
+		setByAdmin: boolean;
+		isAdmin: boolean;
 	};
 	const loadAs = (user: User) => load({ locals: { user } } as never) as Promise<LoadData>;
 
@@ -232,6 +234,16 @@ describe('load', () => {
 		const data = await loadAs(user);
 		expect(data.nextRenameAt).toBeNull();
 		expect(data.profile).toMatchObject({ username: user.username, displayName: null, motto: '' });
+	});
+
+	it('reports whether an admin set the name, never for a self-chosen one', async () => {
+		const admin = await userWithSession('admin');
+		const { user } = await userWithSession();
+		expect((await loadAs(user)).setByAdmin).toBe(false);
+		await setDisplayName(admin.user, user.id, 'Set By Admin');
+		expect((await loadAs(user)).setByAdmin).toBe(true);
+		expect((await loadAs(user)).isAdmin).toBe(false);
+		expect((await loadAs(admin.user)).isAdmin).toBe(true);
 	});
 
 	it('never locks the name for an admin, even after a recent rename', async () => {

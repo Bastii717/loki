@@ -11,7 +11,9 @@ const data = (over: Record<string, unknown> = {}) => ({
 		avatarThumbKey: 'avatars/u1/x-64.webp',
 		...over
 	},
-	nextRenameAt: null
+	nextRenameAt: null,
+	setByAdmin: false,
+	isAdmin: false
 });
 
 const html = (props: Record<string, unknown>) =>
@@ -43,6 +45,21 @@ describe('editor page', () => {
 		});
 		expect(body).toMatch(/name="displayName"[^>]*value="Lena K"/);
 		expect(body).toMatch(/name="motto"[^>]*value="typed"/);
+	});
+
+	it('says when an admin set the name', () => {
+		expect(html({ data: data(), form: null })).not.toContain('An admin set this name.');
+		const body = html({ data: { ...data(), setByAdmin: true }, form: null });
+		expect(body).toContain('An admin set this name.');
+	});
+
+	it('tells admins they can rename at any time instead of the 30-day rule', () => {
+		const member = html({ data: data(), form: null });
+		expect(member).toContain('once every 30 days');
+		const admin = html({ data: { ...data(), isAdmin: true }, form: null });
+		expect(admin).toContain('Admins can change their name at any time.');
+		expect(admin).toContain('Your username stays user1.');
+		expect(admin).not.toContain('30 days');
 	});
 
 	it('keeps the saved values after a failure that carries no echo', () => {

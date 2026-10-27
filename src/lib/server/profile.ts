@@ -11,6 +11,9 @@ export { DISPLAY_NAME_MAX, MOTTO_MAX };
 export const RENAME_COOLDOWN_DAYS = 30;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Control, format and default-ignorable code points (Hangul fillers, ZWJ, ...): invisible in a name. */
+const INVISIBLE = /[\p{C}\p{Default_Ignorable_Code_Point}]/u;
+const INVISIBLE_ALL = /[\p{C}\p{Default_Ignorable_Code_Point}]/gu;
 const NAME_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} _-]*[\p{L}\p{N}]$/u;
 
 const FORMAT_MESSAGE = `Pick ${DISPLAY_NAME_MIN} to ${DISPLAY_NAME_MAX} characters: letters, digits, spaces, dashes or underscores.`;
@@ -30,6 +33,7 @@ export function normalizeDisplayName(raw: string): string {
 export function nameKey(name: string): string {
 	return name
 		.normalize('NFKC')
+		.replace(INVISIBLE_ALL, '')
 		.toLowerCase()
 		.replace(/[\s._-]/g, '');
 }
@@ -41,6 +45,8 @@ export function validateDisplayName(name: string): void {
 		length < DISPLAY_NAME_MIN ||
 		length > DISPLAY_NAME_MAX ||
 		name.includes('  ') ||
+		INVISIBLE.test(name) ||
+		INVISIBLE.test(name.normalize('NFKC')) ||
 		!NAME_PATTERN.test(name)
 	) {
 		throw new ProfileInputError(FORMAT_MESSAGE);
@@ -155,9 +161,19 @@ export async function resetDisplayName(actor: SessionUser, userId: number): Prom
 	});
 }
 
-/** Line breaks (CR, LF, NEL, LS, PS, VT, FF) become one space, then trimmed. */
+/**
+ * Line breaks (CR, LF, NEL, LS, PS, VT, FF) and tabs become one space; other C0 controls and DEL
+ * are dropped (a NUL would make Postgres reject the text); then trimmed.
+ */
 export function normalizeMotto(raw: string): string {
-	return raw.replace(/\s*[\r\n\u0085\u2028\u2029\v\f]+\s*/g, ' ').trim();
+	return (
+		raw
+			// eslint-disable-next-line no-control-regex -- stripping control characters is the point
+			.replace(/[\u0000-\u0008\u000E-\u001F\u007F]/g, '')
+			.replace(/\s*[\r\n\u0085\u2028\u2029\v\f]+\s*/g, ' ')
+			.replace(/\t/g, ' ')
+			.trim()
+	);
 }
 
 export async function setMotto(actor: SessionUser, raw: string): Promise<void> {
@@ -174,19 +190,24 @@ export async function setMotto(actor: SessionUser, raw: string): Promise<void> {
 	});
 }
 
-/** Self or admin. Stays allowed while timed out, like deleting own content. */
+/**
+ * Self or admin. Stays allowed while timed out, like deleting own content. Does nothing, and
+ * records nothing, when the motto is already empty.
+ */
 export async function clearMotto(actor: SessionUser, userId: number): Promise<void> {
 	const self = actor.id === userId;
 	if (!self && actor.role !== 'admin') {
 		throw new ProfileInputError('Only admins can clear the motto of other members.');
 	}
 	await db.transaction(async (tx) => {
-		const updated = await tx
-			.update(users)
-			.set({ motto: '' })
+		const [row] = await tx
+			.select({ motto: users.motto })
+			.from(users)
 			.where(eq(users.id, userId))
-			.returning({ id: users.id });
-		if (updated.length === 0) throw new ProfileInputError('Member not found.');
+			.for('update');
+		if (!row) throw new ProfileInputError('Member not found.');
+		if (row.motto === '') return;
+		await tx.update(users).set({ motto: '' }).where(eq(users.id, userId));
 		await audit(
 			actor.id,
 			AUDIT_ACTIONS.mottoCleared,

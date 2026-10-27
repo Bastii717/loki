@@ -67,7 +67,8 @@
 			<div class="head">
 				<Avatar thumbKey={u.avatarThumbKey} name={u.displayName ?? u.username} size={32} />
 				<strong>{u.displayName ?? u.username}</strong>
-				{#if u.displayName}<span class="muted">({u.username})</span>{/if}
+				{#if u.displayName && u.displayName !== u.username}<span class="muted">({u.username})</span
+					>{/if}
 				<RoleBadge role={u.role} />
 				<span class="pill" class:accent={u.role !== 'member'}>{ROLE_LABELS[u.role]}</span>
 				{#if u.activeTimeout}<span class="pill timeout">muted</span>{/if}

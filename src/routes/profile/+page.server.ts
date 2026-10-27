@@ -1,7 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../../lib/server/db';
 import { comments, favorites, media } from '../../lib/server/db/schema';
-import { getProfile, nextRenameAt } from '../../lib/server/profile';
+import { getProfile } from '../../lib/server/profile';
 import type { PageServerLoad } from './$types';
 
 const n = sql<number>`count(*)::int`;
@@ -23,7 +23,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 			avatarThumbKey: profile.avatarThumbKey,
 			role: profile.role
 		},
-		nextRenameAt: nextRenameAt(profile.displayNameChangedAt, new Date())?.toISOString() ?? null,
 		counts: { memes: memes.n, favorites: favs.n, comments: comms.n }
 	};
 };

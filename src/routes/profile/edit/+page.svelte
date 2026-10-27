@@ -142,8 +142,15 @@
 					disabled={data.nextRenameAt !== null}
 				/>
 			</label>
+			{#if data.setByAdmin}
+				<p class="hint">An admin set this name.</p>
+			{/if}
 			{#if data.nextRenameAt}
 				<p class="hint">You can change your name again on {formatDate(data.nextRenameAt)}.</p>
+			{:else if data.isAdmin}
+				<p class="hint">
+					Admins can change their name at any time. Your username stays {data.profile.username}.
+				</p>
 			{:else}
 				<p class="hint">
 					You can change it once every 30 days. Your username stays {data.profile.username}.

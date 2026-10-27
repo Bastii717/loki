@@ -60,7 +60,12 @@ describe('display name format', () => {
 		['ba.sti', 'dot'],
 		['-ronja', 'leading dash'],
 		['ronja_', 'trailing underscore'],
-		['', 'empty']
+		['', 'empty'],
+		['Lena\u3164', 'Hangul filler'],
+		['Lena\u115F', 'Hangul choseong filler'],
+		['Lena\u200D', 'zero width joiner'],
+		['\u3164\u3164', 'only fillers'],
+		['Le\u200Bna', 'zero width space inside']
 	];
 	it.each(rejected)('rejects %j (%s)', (raw) => {
 		const name = normalizeDisplayName(raw);
@@ -84,6 +89,12 @@ describe('nameKey', () => {
 		expect(nameKey('le_na')).toBe('lena');
 		expect(nameKey('Le-Na')).toBe('lena');
 		expect(nameKey('mira.lang')).toBe('miralang');
+	});
+
+	it('ignores invisible characters', () => {
+		expect(nameKey('Le\u200Bna')).toBe('lena');
+		expect(nameKey('Lena\u3164')).toBe('lena');
+		expect(nameKey('Lena\uFFA0')).toBe('lena');
 	});
 
 	it('applies NFKC', () => {
@@ -324,6 +335,12 @@ describe('motto', () => {
 		expect((await getProfile(a.id)).motto).toBe('a b c d e f');
 	});
 
+	it('drops C0 controls such as NUL and maps tabs to spaces', async () => {
+		const a = await make();
+		await setMotto(a, 'a\u0000b\tc\u001Fd\u007Fe');
+		expect((await getProfile(a.id)).motto).toBe('ab cde');
+	});
+
 	it('treats an empty motto as a clear, not a change', async () => {
 		const a = await make();
 		await setMotto(a, 'carpe diem');
@@ -334,6 +351,12 @@ describe('motto', () => {
 			['motto_changed', 'to="carpe diem"'],
 			['motto_cleared', 'by=self']
 		]);
+	});
+
+	it('clears an already empty motto without an audit row', async () => {
+		const a = await make();
+		await clearMotto(a, a.id);
+		expect(await auditRows()).toHaveLength(0);
 	});
 
 	it('audits motto_changed', async () => {

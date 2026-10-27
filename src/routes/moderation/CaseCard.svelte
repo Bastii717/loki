@@ -6,6 +6,7 @@
 	import EyeOff from 'lucide-svelte/icons/eye-off';
 	import Timer from 'lucide-svelte/icons/timer';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
+	import RoleBadge from '#lib/components/RoleBadge.svelte';
 	import UnderReviewBadge from '#lib/components/UnderReviewBadge.svelte';
 	import { modRequest } from '../../lib/moderation-client';
 	import {
@@ -75,7 +76,7 @@
 <article class="card" aria-label="{CONTENT_LABELS[item.contentType]} by {author}">
 	<header>
 		<span class="pill accent">{CONTENT_LABELS[item.contentType]}</span>
-		<span class="author">by <strong>{author}</strong></span>
+		<span class="author">by <strong>{author}</strong> <RoleBadge role={item.authorRole} /></span>
 		{#if item.underReview}<UnderReviewBadge />{/if}
 	</header>
 

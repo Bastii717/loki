@@ -9,7 +9,6 @@ beforeEach(resetDb);
 
 type LoadData = {
 	profile: Record<string, unknown>;
-	nextRenameAt: string | null;
 	counts: { memes: number; favorites: number; comments: number };
 };
 
@@ -27,13 +26,6 @@ describe('profile load', () => {
 			avatarThumbKey: null,
 			role: 'member'
 		});
-		expect(data.nextRenameAt).toMatch(/^\d{4}-\d\d-\d\dT/);
 		expect(data.counts).toEqual({ memes: 0, favorites: 0, comments: 0 });
-	});
-
-	it('has no cooldown without a rename', async () => {
-		const { user } = await userWithSession();
-		const data = (await load({ locals: { user } } as never)) as LoadData;
-		expect(data.nextRenameAt).toBeNull();
 	});
 });

@@ -353,23 +353,55 @@ async function shootMaintenance(browser: Browser): Promise<void> {
 	);
 }
 
+/** The season form fields of `/moderation/theme` (the `until` value is a Berlin `datetime-local`). */
+interface SeasonForm {
+	mode: 'off' | 'auto' | 'forced';
+	theme: string;
+	until: string;
+}
+
+/** What the admin page currently shows, so the run can put exactly that back afterwards. */
+async function readSeasons(browser: Browser): Promise<SeasonForm> {
+	let current: SeasonForm | undefined;
+	await withContext(
+		browser,
+		MOBILE,
+		async (admin) => {
+			await admin.goto(`${BASE_URL}/moderation/theme`);
+			const mode = await admin.locator('input[name="mode"]:checked').inputValue();
+			if (mode !== 'off' && mode !== 'auto' && mode !== 'forced')
+				throw new Error(`unknown season mode ${mode}`);
+			current = {
+				mode,
+				theme: await admin.locator('select[name="theme"]').inputValue(),
+				until: await admin.locator('input[name="until"]').inputValue()
+			};
+		},
+		{ mobile: true, account: ADMIN }
+	);
+	return current!;
+}
+
 /**
- * Switches the seasonal themes off (or back to automatic) as an admin. Event themes follow the
- * calendar (Halloween, Advent, Carnival), so without this the shots would change colour around
- * those dates. The Halloween shot uses the request-scoped `?season=` preview, which still works.
+ * Sets the seasonal themes as an admin. Event themes follow the calendar (Halloween, Advent,
+ * Carnival), so the run switches them off first (otherwise the shots would change colour around
+ * those dates) and restores the mode it found. The Halloween shot uses the request-scoped
+ * `?season=` preview, which still works.
  */
-async function setSeasons(browser: Browser, mode: 'off' | 'auto'): Promise<void> {
+async function setSeasons(browser: Browser, form: SeasonForm): Promise<void> {
 	await withContext(
 		browser,
 		MOBILE,
 		async (admin) => {
 			const response = await admin.request.post(`${BASE_URL}/moderation/theme?/save`, {
-				form: { mode, theme: '', until: '' },
+				form: { ...form },
 				headers: { 'x-sveltekit-action': 'true' }
 			});
 			const body = await response.json().catch(() => null);
 			if (!response.ok() || body?.type !== 'success')
-				throw new Error(`season mode ${mode} failed: ${response.status()} ${JSON.stringify(body)}`);
+				throw new Error(
+					`season mode ${form.mode} failed: ${response.status()} ${JSON.stringify(body)}`
+				);
 		},
 		{ mobile: true, account: ADMIN }
 	);
@@ -378,8 +410,10 @@ async function setSeasons(browser: Browser, mode: 'off' | 'auto'): Promise<void>
 async function main(): Promise<void> {
 	await mkdir(OUT_DIR, { recursive: true });
 	const browser = await chromium.launch();
-	await setSeasons(browser, 'off');
+	let previous: SeasonForm | undefined;
 	try {
+		previous = await readSeasons(browser);
+		await setSeasons(browser, { mode: 'off', theme: '', until: '' });
 		if (
 			wantsAny(
 				'feed-mobile',
@@ -501,8 +535,11 @@ async function main(): Promise<void> {
 				{ mobile: false, account: ADMIN }
 			);
 	} finally {
-		await setSeasons(browser, 'auto');
-		await browser.close();
+		try {
+			if (previous) await setSeasons(browser, previous);
+		} finally {
+			await browser.close();
+		}
 	}
 }
 

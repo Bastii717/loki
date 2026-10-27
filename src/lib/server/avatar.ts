@@ -52,6 +52,14 @@ function square(file: Buffer, size: number): Promise<Buffer> {
 		.toBuffer();
 }
 
+/** The small copy comes from the already cropped 256 px image: the input is decoded only once. */
+function thumbnail(full: Buffer): Promise<Buffer> {
+	return sharp(full)
+		.resize(THUMB_SIZE, THUMB_SIZE, { fit: 'cover' })
+		.webp({ quality: WEBP_QUALITY })
+		.toBuffer();
+}
+
 async function deleteQuietly(keys: string[]): Promise<void> {
 	if (keys.length === 0) return;
 	try {
@@ -78,7 +86,8 @@ export async function setAvatar(
 	let full: Buffer;
 	let thumb: Buffer;
 	try {
-		[full, thumb] = await Promise.all([square(file, FULL_SIZE), square(file, THUMB_SIZE)]);
+		full = await square(file, FULL_SIZE);
+		thumb = await thumbnail(full);
 	} catch {
 		throw new AvatarError('process');
 	}

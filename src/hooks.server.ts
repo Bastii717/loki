@@ -83,7 +83,11 @@ function retryAfterSeconds(method: string, path: string, userId: number): number
 	if (method === 'POST' && SEEN_PATH.test(path)) return wait('seen', 300, 60_000);
 	const writes = wait('write', 60, 60_000);
 	if (writes > 0) return writes;
-	if (method === 'POST' && (path === '/upload' || path.startsWith('/upload/'))) {
+	// avatar saves (up to 8 MB, two image decodes) share the upload budget
+	if (
+		method === 'POST' &&
+		(path === '/upload' || path.startsWith('/upload/') || path === '/profile/edit')
+	) {
 		return wait('upload', 10, 5 * 60_000);
 	}
 	return 0;

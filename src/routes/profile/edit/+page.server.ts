@@ -22,7 +22,8 @@ import type { Actions, PageServerLoad } from './$types';
 // Reachable while timed out (own avatar removal and motto clearing stay allowed), so there is no
 // timeout guard here; the writes that need one raise TimeoutActiveError themselves.
 export const load: PageServerLoad = async ({ locals }) => {
-	const profile = await getProfile(locals.user!.id);
+	const user = locals.user!;
+	const profile = await getProfile(user.id);
 	return {
 		profile: {
 			username: profile.username,
@@ -31,6 +32,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 			avatarKey: profile.avatarKey,
 			avatarThumbKey: profile.avatarThumbKey
 		},
+		isAdmin: user.role === 'admin',
+		// an admin (not the member) set the current name
+		setByAdmin: profile.displayNameSetBy !== null && profile.displayNameSetBy !== user.id,
 		// admins rename without the cooldown (setDisplayName), so the field is never locked for them
 		nextRenameAt:
 			profile.role === 'admin'

@@ -10,6 +10,7 @@
 	import Star from 'lucide-svelte/icons/star';
 	import UserPen from 'lucide-svelte/icons/user-pen';
 	import Avatar from '#lib/components/Avatar.svelte';
+	import RoleBadge from '#lib/components/RoleBadge.svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -43,7 +44,10 @@
 			name={data.profile.displayName ?? data.profile.username}
 			size={96}
 		/>
-		<h1>{data.profile.displayName ?? data.profile.username}</h1>
+		<h1>
+			{data.profile.displayName ?? data.profile.username}
+			<RoleBadge role={data.profile.role} />
+		</h1>
 		{#if data.profile.displayName}<p class="username">{data.profile.username}</p>{/if}
 		{#if data.profile.motto}<p class="motto">{data.profile.motto}</p>{/if}
 		<span class="role {data.profile.role}">{roleLabel[data.profile.role]}</span>
