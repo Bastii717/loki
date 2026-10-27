@@ -32,6 +32,7 @@ Build the image yourself with `docker build -t ghcr.io/bastii717/loki:latest .`.
 | `OIDC_GROUPS_CLAIM` | no | Default `groups` |
 | `OIDC_GROUP_MEMBERS` / `OIDC_GROUP_MODS` / `OIDC_GROUP_ADMINS` | no | Defaults `loki-members`, `loki-mods`, `loki-admins` |
 | `MAX_UPLOAD_MB` | no | Default 50 |
+| `AVATAR_MAX_MB` | no | Default 8. Largest accepted profile picture before it is resized. |
 | `AUTO_BLUR_SCORE` | no | Default -3 |
 | `SESSION_ABSOLUTE_MAX_DAYS` | no | Default 90 |
 | `REPORT_REVIEW_THRESHOLD` | no | Default 3 (integer >= 1). Content is hidden from members pending moderator review once MORE than this many distinct members (reporters with an active timeout do not count) have an open report on it; moderators and admins always see it. A moderator releasing a case makes the item permanently immune to auto-hiding. |

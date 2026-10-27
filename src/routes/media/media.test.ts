@@ -100,6 +100,39 @@ describe('GET /media/[...key]', () => {
 		expect(res.headers.get('location')).toBeNull();
 	});
 
+	describe('avatars', () => {
+		const AVATAR = 'avatars/u1/abc-64.webp';
+
+		it('redirects to a presigned S3 URL with a session, without the under-review lookup', async () => {
+			const user = await testUser();
+			const res = await request(`/media/${AVATAR}`, await createSession(user.id));
+			expect(res.status).toBe(302);
+			const location = new URL(res.headers.get('location')!);
+			expect(location.host).toBe(s3Host);
+			expect(location.pathname).toContain(AVATAR);
+		});
+
+		it('requires a session', async () => {
+			const res = await request(`/media/${AVATAR}`);
+			expect(res.status).toBe(303);
+			expect(res.headers.get('location')).toBe('/login');
+		});
+
+		it('rejects traversal out of avatars/', async () => {
+			const user = await testUser();
+			// the URL parser resolves literal and %2e ".." segments; an encoded slash reaches the route decoded
+			const res = await request('/media/avatars%2F..%2Fmemes/x', await createSession(user.id));
+			expect(res.status).toBe(404);
+			expect(res.headers.get('location')).toBeNull();
+		});
+
+		it('rejects other prefixes', async () => {
+			const user = await testUser();
+			const res = await request('/media/other/x', await createSession(user.id));
+			expect(res.status).toBe(404);
+		});
+	});
+
 	describe('under review', () => {
 		const OBJ = `memes/utest/${crypto.randomUUID()}-o.txt`;
 		const THUMB = `memes/utest/${crypto.randomUUID()}-t.txt`;
