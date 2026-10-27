@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { enhance, type SubmitFunction } from '$app/forms';
+	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
 	import Save from 'lucide-svelte/icons/save';
@@ -13,20 +14,31 @@
 	let { data, form }: PageProps = $props();
 
 	// Inputs start from the saved profile (seeded at declaration so the server-rendered page shows
-	// it); after a rejected save they keep what was typed. The effect below only follows later updates.
+	// it). After a rejected save without script they show what was typed, echoed by the action; a
+	// failure that carries no echo (rate limit, write lock, avatar removal) or a locked name field
+	// falls back to the saved value, never to an empty field.
 	// svelte-ignore state_referenced_locally
 	let displayName = $state(
-		form?.error ? (form.displayName ?? '') : (data.profile.displayName ?? '')
+		data.nextRenameAt === null && form?.error && form.displayName !== undefined
+			? form.displayName
+			: (data.profile.displayName ?? '')
 	);
 	// svelte-ignore state_referenced_locally
-	let motto = $state(form?.error ? (form.motto ?? '') : data.profile.motto);
+	let motto = $state(form?.error && form.motto !== undefined ? form.motto : data.profile.motto);
 	let busy = $state(false);
 	let preview = $state<string | null>(null);
 	let fileInput: HTMLInputElement | undefined = $state();
 
+	// Typed values stay as they are through failures and through "Remove avatar" (a separate form);
+	// only a successful save re-reads the stored values (the server normalises them). Depends on
+	// `form` alone: `data` also refreshes in the background and must not wipe edits.
 	$effect(() => {
-		displayName = form?.error ? (form.displayName ?? '') : (data.profile.displayName ?? '');
-		motto = form?.error ? (form.motto ?? '') : data.profile.motto;
+		if (form?.saved) {
+			untrack(() => {
+				displayName = data.profile.displayName ?? '';
+				motto = data.profile.motto;
+			});
+		}
 	});
 
 	const shownName = $derived(data.profile.displayName ?? data.profile.username);
@@ -45,20 +57,22 @@
 		setPreview(file ? URL.createObjectURL(file) : null);
 	}
 
-	const submit = () => {
+	const submit: SubmitFunction = () => {
 		busy = true;
-		return async ({
-			result,
-			update
-		}: {
-			result: { type: string };
-			update: (options?: { reset?: boolean }) => Promise<void>;
-		}) => {
+		return async ({ result, update }) => {
 			await update({ reset: false });
 			if (result.type === 'success') {
 				if (fileInput) fileInput.value = '';
 				setPreview(null);
 			}
+			busy = false;
+		};
+	};
+
+	const remove: SubmitFunction = () => {
+		busy = true;
+		return async ({ update }) => {
+			await update({ reset: false });
 			busy = false;
 		};
 	};
@@ -102,7 +116,9 @@
 						/>
 					</label>
 					{#if data.profile.avatarKey}
-						<button type="submit" class="btn" formaction="?/removeAvatar" disabled={busy}>
+						<!-- Owned by the separate form below (form attribute), so Enter in a text field submits
+							Save, the only submit button of the main form, never this one. -->
+						<button type="submit" class="btn" form="remove-avatar" disabled={busy}>
 							<Trash size={16} aria-hidden="true" /> Remove avatar
 						</button>
 					{/if}
@@ -145,7 +161,7 @@
 					autocomplete="off"
 				/>
 			</label>
-			<p class="hint counter" aria-live="off">{motto.length} / {MOTTO_MAX}</p>
+			<p class="hint counter">{[...motto].length} / {MOTTO_MAX}</p>
 		</section>
 
 		{#if form?.error}<p class="error" role="alert">{form.error}</p>{/if}
@@ -156,6 +172,7 @@
 			<Save size={16} aria-hidden="true" /> Save
 		</button>
 	</form>
+	<form id="remove-avatar" method="POST" action="?/removeAvatar" use:enhance={remove}></form>
 </main>
 
 <style>
@@ -182,7 +199,7 @@
 
 	h1 {
 		margin: 0;
-		font-size: 20px;
+		font-size: 18px;
 	}
 
 	h2 {

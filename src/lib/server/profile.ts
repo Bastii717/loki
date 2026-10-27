@@ -156,7 +156,7 @@ export async function resetDisplayName(actor: SessionUser, userId: number): Prom
 }
 
 /** Line breaks (CR, LF, NEL, LS, PS, VT, FF) become one space, then trimmed. */
-function normalizeMotto(raw: string): string {
+export function normalizeMotto(raw: string): string {
 	return raw.replace(/\s*[\r\n\u0085\u2028\u2029\v\f]+\s*/g, ' ').trim();
 }
 

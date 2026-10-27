@@ -1,13 +1,15 @@
-import { eq } from 'drizzle-orm';
+import { HeadObjectCommand } from '@aws-sdk/client-s3';
+import { eq, like } from 'drizzle-orm';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { setAvatar } from '../../../lib/server/avatar';
 import { db } from '../../../lib/server/db';
-import { users } from '../../../lib/server/db/schema';
+import { auditLog, users } from '../../../lib/server/db/schema';
 import { resetDb, setupDb } from '../../../lib/server/db/test-utils';
 import { timeOut, userWithSession } from '../../../lib/server/moderation-test-utils';
-import { setDisplayName } from '../../../lib/server/profile';
-import { deleteObjects } from '../../../lib/server/storage';
+import { env } from '../../../lib/server/env';
+import { setDisplayName, setMotto } from '../../../lib/server/profile';
+import { deleteObjects, s3Client } from '../../../lib/server/storage';
 import { ensureBucket } from '../../../lib/server/storage-test-utils';
 import { actions, load } from './+page.server';
 
@@ -44,6 +46,17 @@ async function save(user: User, fields: Record<string, string>, avatar?: Buffer 
 	const request = new Request('https://loki.test/profile/edit', { method: 'POST', body });
 	return (await actions.save({ request, locals: { user } } as never)) as { saved: true } | Failure;
 }
+
+const exists = (Key: string) =>
+	s3Client()
+		.send(new HeadObjectCommand({ Bucket: env.S3_BUCKET, Key }))
+		.then(
+			() => true,
+			() => false
+		);
+
+const mottoAudits = async () =>
+	(await db.select().from(auditLog).where(like(auditLog.action, 'motto_%'))).length;
 
 const row = async (id: number) => (await db.select().from(users).where(eq(users.id, id)))[0];
 
@@ -158,12 +171,52 @@ describe('actions', () => {
 		expect(result.data.motto).toBe('hi');
 	});
 
-	it('removes the avatar', async () => {
+	it('removes the avatar and deletes both objects', async () => {
 		const { user } = await userWithSession();
 		const keys = await setAvatar(user, png);
 		created.push(keys.avatarKey, keys.avatarThumbKey);
+		expect(await exists(keys.avatarKey)).toBe(true);
 		expect(await actions.removeAvatar({ locals: { user } } as never)).toEqual({ removed: true });
 		expect((await row(user.id)).avatarKey).toBeNull();
+		expect(await exists(keys.avatarKey)).toBe(false);
+		expect(await exists(keys.avatarThumbKey)).toBe(false);
+	});
+
+	it('lets a muted member remove the avatar', async () => {
+		const { user } = await userWithSession();
+		const keys = await setAvatar(user, png);
+		created.push(keys.avatarKey, keys.avatarThumbKey);
+		await timeOut(user.id, user.id);
+		expect(await actions.removeAvatar({ locals: { user } } as never)).toEqual({ removed: true });
+		expect((await row(user.id)).avatarKey).toBeNull();
+	});
+
+	it('lets a muted member clear the motto through save', async () => {
+		const { user } = await userWithSession();
+		await setMotto(user, 'hello');
+		await timeOut(user.id, user.id);
+		expect(await save(user, { displayName: '', motto: '' })).toEqual({ saved: true });
+		expect((await row(user.id)).motto).toBe('');
+	});
+
+	it('still refuses a muted member a new motto', async () => {
+		const { user } = await userWithSession();
+		await timeOut(user.id, user.id);
+		const result = (await save(user, { displayName: '', motto: 'new' })) as Failure;
+		expect(result.status).toBe(403);
+	});
+
+	it('writes no motto audit row when the motto is unchanged', async () => {
+		const { user } = await userWithSession();
+		// no motto stored, avatar only
+		expect(await save(user, { displayName: '', motto: '' }, png)).toEqual({ saved: true });
+		const r = await row(user.id);
+		created.push(r.avatarKey!, r.avatarThumbKey!);
+		expect(await mottoAudits()).toBe(0);
+		// same motto twice: one row
+		await save(user, { displayName: '', motto: 'same' });
+		await save(user, { displayName: '', motto: ' same ' });
+		expect(await mottoAudits()).toBe(1);
 	});
 });
 
@@ -179,6 +232,12 @@ describe('load', () => {
 		const data = await loadAs(user);
 		expect(data.nextRenameAt).toBeNull();
 		expect(data.profile).toMatchObject({ username: user.username, displayName: null, motto: '' });
+	});
+
+	it('never locks the name for an admin, even after a recent rename', async () => {
+		const { user } = await userWithSession('admin');
+		await setDisplayName(user, user.id, 'Boss Lena');
+		expect((await loadAs(user)).nextRenameAt).toBeNull();
 	});
 
 	it('returns the end of the cooldown as an ISO date after a rename', async () => {

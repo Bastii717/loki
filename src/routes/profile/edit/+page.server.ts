@@ -8,8 +8,11 @@ import {
 import { TimeoutActiveError } from '../../../lib/server/moderation';
 import { timeoutMessage } from '../../../lib/server/moderation-http';
 import {
+	clearMotto,
 	getProfile,
 	nextRenameAt,
+	normalizeDisplayName,
+	normalizeMotto,
 	ProfileInputError,
 	setDisplayName,
 	setMotto
@@ -28,7 +31,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 			avatarKey: profile.avatarKey,
 			avatarThumbKey: profile.avatarThumbKey
 		},
-		nextRenameAt: nextRenameAt(profile.displayNameChangedAt, new Date())?.toISOString() ?? null
+		// admins rename without the cooldown (setDisplayName), so the field is never locked for them
+		nextRenameAt:
+			profile.role === 'admin'
+				? null
+				: (nextRenameAt(profile.displayNameChangedAt, new Date())?.toISOString() ?? null)
 	};
 };
 
@@ -40,11 +47,19 @@ export const actions: Actions = {
 		const motto = String(data.get('motto') ?? '');
 		const avatar = data.get('avatar');
 		try {
+			const stored = await getProfile(actor.id);
 			// An empty field with an existing name keeps it; a disabled field (cooldown) sends nothing.
-			if (displayName.trim() !== '' && displayName !== (actor.displayName ?? '')) {
+			const name = normalizeDisplayName(displayName);
+			if (name !== '' && name !== (stored.displayName ?? '')) {
 				await setDisplayName(actor, actor.id, displayName);
 			}
-			await setMotto(actor, motto);
+			// Only a real change is written (and audited). Clearing goes through clearMotto, which
+			// stays allowed while timed out; setMotto would be refused for a muted member.
+			const wanted = normalizeMotto(motto);
+			if (wanted !== stored.motto) {
+				if (wanted === '') await clearMotto(actor, actor.id);
+				else await setMotto(actor, motto);
+			}
 			// A browser sends an empty file part when none was chosen.
 			if (avatar instanceof File && avatar.size > 0) {
 				await setAvatar(actor, Buffer.from(await avatar.arrayBuffer()));
