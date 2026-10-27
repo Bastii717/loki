@@ -32,7 +32,13 @@ export const AUDIT_LABELS: Record<string, string> = {
 	timeout_set: 'Timeout set',
 	timeout_lifted: 'Timeout lifted',
 	maintenance_changed: 'Maintenance changed',
-	season_changed: 'Theme changed'
+	season_changed: 'Theme changed',
+	display_name_changed: 'Display name changed',
+	display_name_reset: 'Display name reset',
+	avatar_changed: 'Avatar changed',
+	avatar_removed: 'Avatar removed',
+	motto_changed: 'Motto changed',
+	motto_cleared: 'Motto cleared'
 };
 
 export const ROLE_LABELS: Record<string, string> = {

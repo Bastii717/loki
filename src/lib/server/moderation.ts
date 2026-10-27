@@ -26,7 +26,13 @@ export const AUDIT_ACTIONS = {
 	timeoutLifted: 'timeout_lifted',
 	contentReleased: 'content_released',
 	maintenanceChanged: 'maintenance_changed',
-	seasonChanged: 'season_changed'
+	seasonChanged: 'season_changed',
+	displayNameChanged: 'display_name_changed',
+	displayNameReset: 'display_name_reset',
+	avatarChanged: 'avatar_changed',
+	avatarRemoved: 'avatar_removed',
+	mottoChanged: 'motto_changed',
+	mottoCleared: 'motto_cleared'
 } as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
 
