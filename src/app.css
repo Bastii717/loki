@@ -63,6 +63,162 @@
 	color-scheme: dark;
 }
 
+/* Seasonal token layers (see seasons.ts): <html data-season="..."> swaps the accent and tints the
+   surfaces. Each season needs the dark block plus both light variants, in the same order as the
+   base palettes above; scripts/check-contrast.ts keeps every palette readable. */
+
+:root[data-season='halloween'] {
+	--bg: #121017;
+	--surface: #2a2330;
+	--surface-raised: #352c3c;
+	--border: #4a3f52;
+	--accent: #f28c28;
+	--accent-text: #1b1b1f;
+	--accent-soft: rgba(242, 140, 40, 0.18);
+	--accent-soft-text: #f7b267;
+	--overlay: rgba(18, 16, 23, 0.55);
+}
+
+@media (prefers-color-scheme: light) {
+	:root[data-season='halloween']:not([data-theme='dark']) {
+		--bg: #f6f1ea;
+		--surface: #ffffff;
+		--surface-raised: #f0e7dd;
+		--border: #ddd0c0;
+		--accent: #d9731a;
+		--accent-text: #ffffff;
+		--accent-soft: rgba(217, 115, 26, 0.12);
+		--accent-soft-text: #8f4a0c;
+		--overlay: rgba(246, 241, 234, 0.6);
+	}
+}
+
+:root[data-season='halloween'][data-theme='light'] {
+	--bg: #f6f1ea;
+	--surface: #ffffff;
+	--surface-raised: #f0e7dd;
+	--border: #ddd0c0;
+	--accent: #d9731a;
+	--accent-text: #ffffff;
+	--accent-soft: rgba(217, 115, 26, 0.12);
+	--accent-soft-text: #8f4a0c;
+	--overlay: rgba(246, 241, 234, 0.6);
+}
+
+:root[data-season='advent'] {
+	--bg: #0f1419;
+	--surface: #252c35;
+	--surface-raised: #2f3842;
+	--border: #3d4753;
+	--accent: #d23c4e;
+	--accent-text: #ffffff;
+	--accent-soft: rgba(210, 60, 78, 0.18);
+	--accent-soft-text: #f2a1aa;
+	--overlay: rgba(15, 20, 25, 0.55);
+}
+
+@media (prefers-color-scheme: light) {
+	:root[data-season='advent']:not([data-theme='dark']) {
+		--bg: #f3f4f6;
+		--surface: #ffffff;
+		--surface-raised: #e9edf2;
+		--border: #d3d8df;
+		--accent: #b22a3c;
+		--accent-text: #ffffff;
+		--accent-soft: rgba(178, 42, 60, 0.12);
+		--accent-soft-text: #8f1f2f;
+		--overlay: rgba(243, 244, 246, 0.6);
+	}
+}
+
+:root[data-season='advent'][data-theme='light'] {
+	--bg: #f3f4f6;
+	--surface: #ffffff;
+	--surface-raised: #e9edf2;
+	--border: #d3d8df;
+	--accent: #b22a3c;
+	--accent-text: #ffffff;
+	--accent-soft: rgba(178, 42, 60, 0.12);
+	--accent-soft-text: #8f1f2f;
+	--overlay: rgba(243, 244, 246, 0.6);
+}
+
+:root[data-season='carnival'] {
+	--bg: #111214;
+	--surface: #2b2d31;
+	--surface-raised: #3a2a36;
+	--border: #4a3a45;
+	--accent: #e0448a;
+	--accent-text: #ffffff;
+	--accent-soft: rgba(224, 68, 138, 0.18);
+	--accent-soft-text: #f19cc3;
+	--overlay: rgba(17, 18, 20, 0.55);
+}
+
+@media (prefers-color-scheme: light) {
+	:root[data-season='carnival']:not([data-theme='dark']) {
+		--bg: #f2f3f5;
+		--surface: #ffffff;
+		--surface-raised: #f6e8f0;
+		--border: #e0cfd9;
+		--accent: #c2306f;
+		--accent-text: #ffffff;
+		--accent-soft: rgba(194, 48, 111, 0.12);
+		--accent-soft-text: #9c1f55;
+		--overlay: rgba(242, 243, 245, 0.6);
+	}
+}
+
+:root[data-season='carnival'][data-theme='light'] {
+	--bg: #f2f3f5;
+	--surface: #ffffff;
+	--surface-raised: #f6e8f0;
+	--border: #e0cfd9;
+	--accent: #c2306f;
+	--accent-text: #ffffff;
+	--accent-soft: rgba(194, 48, 111, 0.12);
+	--accent-soft-text: #9c1f55;
+	--overlay: rgba(242, 243, 245, 0.6);
+}
+
+:root[data-season='party'] {
+	--bg: #111214;
+	--surface: #2b2d31;
+	--surface-raised: #243a38;
+	--border: #34504d;
+	--accent: #12b5a5;
+	--accent-text: #0b1a18;
+	--accent-soft: rgba(18, 181, 165, 0.18);
+	--accent-soft-text: #5fd8cb;
+	--overlay: rgba(17, 18, 20, 0.55);
+}
+
+@media (prefers-color-scheme: light) {
+	:root[data-season='party']:not([data-theme='dark']) {
+		--bg: #f2f3f5;
+		--surface: #ffffff;
+		--surface-raised: #e3f3f1;
+		--border: #c6e0dc;
+		--accent: #0e9488;
+		--accent-text: #ffffff;
+		--accent-soft: rgba(14, 148, 136, 0.12);
+		--accent-soft-text: #0a6b61;
+		--overlay: rgba(242, 243, 245, 0.6);
+	}
+}
+
+:root[data-season='party'][data-theme='light'] {
+	--bg: #f2f3f5;
+	--surface: #ffffff;
+	--surface-raised: #e3f3f1;
+	--border: #c6e0dc;
+	--accent: #0e9488;
+	--accent-text: #ffffff;
+	--accent-soft: rgba(14, 148, 136, 0.12);
+	--accent-soft-text: #0a6b61;
+	--overlay: rgba(242, 243, 245, 0.6);
+}
+
 *,
 *::before,
 *::after {
