@@ -78,6 +78,11 @@ describe('loadEnv', () => {
 		expect(() => loadEnv()).toThrow(/MAX_UPLOAD_MB/);
 	});
 
+	it.each(['0', '-1', '1.5'])('rejects AVATAR_MAX_MB=%s (positive integer required)', (value) => {
+		process.env.AVATAR_MAX_MB = value;
+		expect(() => loadEnv()).toThrow(/AVATAR_MAX_MB/);
+	});
+
 	it.each(['0', '-1', '1.5'])('rejects MAX_UPLOAD_MB=%s (positive integer required)', (value) => {
 		process.env.MAX_UPLOAD_MB = value;
 		expect(() => loadEnv()).toThrow(/MAX_UPLOAD_MB/);

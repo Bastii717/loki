@@ -101,7 +101,6 @@ describe('avatarErrorMessage', () => {
 		expect(avatarErrorMessage(new AvatarError('size'))).toBe(
 			`Image is too large (max ${env.AVATAR_MAX_MB} MB).`
 		);
-		expect(avatarErrorMessage(new AvatarError('size'))).toBe('Image is too large (max 8 MB).');
 		expect(avatarErrorMessage(new AvatarError('process'))).toBe(
 			'That image could not be processed.'
 		);
@@ -239,17 +238,45 @@ describe('setAvatar', () => {
 	it('does not touch the old objects when the row update fails', async () => {
 		const user = await testUser();
 		const first = await setAndTrack(asSession(user), png);
+		const put = vi.spyOn(storage, 'putObject');
 		const del = vi.spyOn(storage, 'deleteObjects');
 		// a nonexistent actor makes the audit insert fail its foreign key inside the transaction
 		const ghost = { ...asSession(user), id: user.id + 1000 };
 		await expect(setAvatar(ghost, png)).rejects.toThrow();
-		// only the cleanup of the freshly uploaded pair ran; the stored pair is untouched
-		for (const call of del.mock.calls) {
-			expect(call[0]).not.toContain(first.avatarKey);
-			expect(call[0]).not.toContain(first.avatarThumbKey);
-		}
+
+		const uploaded = put.mock.calls.map((c) => c[0]);
+		expect(uploaded).toHaveLength(2);
+		expect(uploaded).not.toContain(first.avatarKey);
+		// exactly one delete call: the freshly uploaded pair, never the stored one
+		expect(del).toHaveBeenCalledTimes(1);
+		expect([...del.mock.calls[0][0]].sort()).toEqual([...uploaded].sort());
+		for (const key of uploaded) expect(await exists(key)).toBe(false);
+		expect(await exists(first.avatarKey)).toBe(true);
+		expect(await exists(first.avatarThumbKey)).toBe(true);
+		expect(await avatarRow(user.id)).toEqual(first);
+	});
+
+	it('removes the first upload and leaves the row alone when the second put fails', async () => {
+		const user = await testUser();
+		const first = await setAndTrack(asSession(user), png);
+		const realPut = storage.putObject;
+		const put = vi
+			.spyOn(storage, 'putObject')
+			.mockImplementationOnce(realPut)
+			.mockRejectedValueOnce(new Error('s3 put failed'));
+		const del = vi.spyOn(storage, 'deleteObjects');
+
+		// the storage error is rethrown as is, it is not an AvatarError
+		await expect(setAvatar(asSession(user), webp)).rejects.toThrow('s3 put failed');
+
+		expect(put).toHaveBeenCalledTimes(2);
+		const [firstKey, secondKey] = put.mock.calls.map((c) => c[0]);
+		expect(del).toHaveBeenCalledTimes(1);
+		expect([...del.mock.calls[0][0]].sort()).toEqual([firstKey, secondKey].sort());
+		expect(await exists(firstKey)).toBe(false);
 		expect(await exists(first.avatarKey)).toBe(true);
 		expect(await avatarRow(user.id)).toEqual(first);
+		expect(await audits('avatar_changed')).toHaveLength(1);
 	});
 
 	it('still succeeds when deleting the old objects fails', async () => {

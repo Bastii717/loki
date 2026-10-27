@@ -1,12 +1,13 @@
 import { isHttpError, type RequestEvent } from '@sveltejs/kit';
 import type { Handle } from '@sveltejs/kit/hooks';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handle } from '../../hooks.server';
 import { createSession } from '../../lib/server/auth/session';
 import { resetDb, setupDb, testUser } from '../../lib/server/db/test-utils';
 import { env } from '../../lib/server/env';
 import { deleteObjects, putObject } from '../../lib/server/storage';
 import { ensureBucket } from '../../lib/server/storage-test-utils';
+import * as moderation from '../../lib/server/moderation';
 import { addOpenReports, OVER_THRESHOLD } from '../../lib/server/moderation-test-utils';
 import { db } from '../../lib/server/db';
 import { media } from '../../lib/server/db/schema';
@@ -105,7 +106,16 @@ describe('GET /media/[...key]', () => {
 
 		it('redirects to a presigned S3 URL with a session, without the under-review lookup', async () => {
 			const user = await testUser();
-			const res = await request(`/media/${AVATAR}`, await createSession(user.id));
+			const cookie = await createSession(user.id);
+			const lookup = vi.spyOn(moderation, 'isMediaKeyUnderReview');
+			let res: Response;
+			try {
+				res = await request(`/media/${AVATAR}`, cookie);
+			} finally {
+				const calls = lookup.mock.calls.length;
+				lookup.mockRestore();
+				expect(calls).toBe(0);
+			}
 			expect(res.status).toBe(302);
 			const location = new URL(res.headers.get('location')!);
 			expect(location.host).toBe(s3Host);
