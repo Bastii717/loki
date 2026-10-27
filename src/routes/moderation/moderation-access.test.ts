@@ -36,6 +36,7 @@ import { load as log } from './log/+page.server';
 import { load as usersPage } from './users/+page.server';
 import { load as timeoutsPage } from './timeouts/+page.server';
 import { actions as maintenanceActions, load as maintenancePage } from './maintenance/+page.server';
+import { actions as themeActions, load as themePage } from './theme/+page.server';
 
 /** Fixed far-future mute end, so the formatted date never depends on the run date. */
 const MUTED_UNTIL = new Date('2099-12-24T12:00:00Z');
@@ -139,6 +140,36 @@ const endpoints: Endpoint[] = [
 		call: (_w, session) => ({
 			handler: maintenanceActions.off,
 			path: '/moderation/maintenance?/off',
+			method: 'POST',
+			session,
+			form: {}
+		})
+	},
+	{
+		name: 'theme load',
+		page: true,
+		adminOnly: true,
+		call: (_w, session) => ({ handler: themePage, path: '/moderation/theme', session })
+	},
+	{
+		name: 'theme save action',
+		page: true, // a page form action: anonymous requests are redirected to /login
+		adminOnly: true,
+		call: (_w, session) => ({
+			handler: themeActions.save,
+			path: '/moderation/theme?/save',
+			method: 'POST',
+			session,
+			form: { mode: 'auto', theme: '', until: '' }
+		})
+	},
+	{
+		name: 'theme reset action',
+		page: true, // a page form action: anonymous requests are redirected to /login
+		adminOnly: true,
+		call: (_w, session) => ({
+			handler: themeActions.reset,
+			path: '/moderation/theme?/reset',
 			method: 'POST',
 			session,
 			form: {}
