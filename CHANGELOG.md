@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.4.0](https://github.com/Bastii717/loki/compare/v1.3.0...v1.4.0) (2026-10-28)
+
+
+### Features
+
+* move the profile from the tab bar to the feed header: the tab bar is Feed, Discover, post button, Quotes and Alerts, the feed header shows the viewer's avatar with the open-reports count for moderators, and Sign out lives on the profile page ([#39](https://github.com/Bastii717/loki/pull/39))
+
+
+### Documentation
+
+* Cloudflare Tunnel on another host and R2 token creation steps ([#38](https://github.com/Bastii717/loki/pull/38))
+* README screenshots refreshed for the new navigation ([#40](https://github.com/Bastii717/loki/pull/40))
+
+
+### Operations
+
+* CI runners pinned to Ubuntu 26.04 ([#37](https://github.com/Bastii717/loki/pull/37))
+* no migrations and no new environment variables
+
+
 ## [1.3.0](https://github.com/Bastii717/loki/compare/v1.2.0...v1.3.0) (2026-10-28)
 
 
