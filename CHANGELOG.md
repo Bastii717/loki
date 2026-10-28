@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.3.0](https://github.com/Bastii717/loki/compare/v1.2.0...v1.3.0) (2026-10-28)
+
+
+### Features
+
+* english user interface ([#27](https://github.com/Bastii717/loki/pull/27))
+* maintenance mode and readiness ([#28](https://github.com/Bastii717/loki/pull/28))
+* seasonal and event themes ([#31](https://github.com/Bastii717/loki/pull/31))
+* profiles with display names, avatars, mottos and role badges ([#32](https://github.com/Bastii717/loki/pull/32))
+* in-app notifications with activity and moderation notices ([#33](https://github.com/Bastii717/loki/pull/33))
+* search for memes, tags, people, comments and quotes; member pages ([#34](https://github.com/Bastii717/loki/pull/34))
+* meme of the month with automatic monthly awards ([#35](https://github.com/Bastii717/loki/pull/35))
+* meme generator with template library, canvas captions and remix ([#36](https://github.com/Bastii717/loki/pull/36))
+
+
+### Bug Fixes
+
+* login styling, blurred-card controls, upload header and small glitches ([#26](https://github.com/Bastii717/loki/pull/26))
+
+
+### Operations
+
+* migrations 0006 to 0012 run automatically at start (maintenance switch, season settings, user profiles, notifications, awards, trigram search with the `pg_trgm` extension, templates)
+* new environment variable `AVATAR_MAX_MB` (default 8), see `docs/deployment.md`
+
+
 ## [1.0.1](https://github.com/Bastii717/loki/compare/v1.0.0...v1.0.1) (2026-10-20)
 
 
