@@ -31,7 +31,7 @@ const FLAG_LABELS: Record<string, string> = {
 const OUTCOME_TEXT: Record<string, string> = {
 	dismissed: 'no action taken.',
 	actioned: 'action was taken.',
-	removed: 'the owner removed it.'
+	removed: 'the content was removed.'
 };
 
 /** Splits `<head>:<rest>` at the first colon; the rest may contain colons itself. */

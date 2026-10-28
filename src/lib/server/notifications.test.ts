@@ -4,7 +4,15 @@ import { NOTIFICATION_CATEGORY } from '../notification-labels';
 import { db } from './db';
 import { media, notificationPrefs, notifications, users } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
-import { insertComment, insertMeme, insertQuote } from './moderation-test-utils';
+import {
+	addOpenReports,
+	insertComment,
+	insertMeme,
+	insertQuote,
+	OVER_THRESHOLD,
+	userWithSession
+} from './moderation-test-utils';
+import { resolveReports } from './moderation';
 import {
 	commentExcerpt,
 	countUnread,
@@ -336,6 +344,21 @@ describe('listNotifications', () => {
 		expect(await ids('activity')).toEqual([t, c]);
 		expect(await ids('moderation')).toEqual([r, m]);
 		expect(await ids()).toEqual([r, m, t, c]);
+	});
+
+	it('hides the meme title while the meme is under review and shows it again after release', async () => {
+		const user = await testUser();
+		const mediaId = await insertMeme(user.id, 'Secret cat');
+		await seed(user.id, { kind: 'thread_comment', mediaId });
+		const title = async () => (await listNotifications(user.id, {})).items[0].title;
+		expect(await title()).toBe('Secret cat');
+
+		await addOpenReports('meme', mediaId, user.id, OVER_THRESHOLD);
+		expect(await title()).toBeNull();
+
+		const { user: mod } = await userWithSession('moderator');
+		await resolveReports(mod, 'meme', mediaId, 'dismissed');
+		expect(await title()).toBe('Secret cat');
 	});
 
 	it('maps the fields, with the actor name, avatar and meme title', async () => {

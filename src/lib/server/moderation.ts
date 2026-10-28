@@ -444,6 +444,8 @@ async function liveMediaId(
  * reports.content_id), tells each reporter the outcome (`report_resolved`, one per report) and
  * returns what was closed. `linkMeme` false writes the notices without a meme link: for reports
  * closed because their meme is about to be deleted, where a link would cascade the notice away.
+ * `mediaIdOverride` (when not undefined) wins over the live lookup: a deleted comment's meme, read
+ * before the delete, so the reporters' notices still lead to the meme.
  */
 async function closeOpenReportsWhere(
 	tx: Executor,
@@ -451,7 +453,8 @@ async function closeOpenReportsWhere(
 	contentType: ContentType,
 	idCondition: SQL,
 	outcome: ReportOutcome,
-	linkMeme = true
+	linkMeme = true,
+	mediaIdOverride?: number | null
 ) {
 	const closed = await tx
 		.update(reports)
@@ -469,7 +472,11 @@ async function closeOpenReportsWhere(
 		if (!mediaIds.has(report.contentId)) {
 			mediaIds.set(
 				report.contentId,
-				linkMeme ? await liveMediaId(tx, contentType, report.contentId) : null
+				mediaIdOverride !== undefined
+					? mediaIdOverride
+					: linkMeme
+						? await liveMediaId(tx, contentType, report.contentId)
+						: null
 			);
 		}
 		await notify(tx, {
@@ -491,8 +498,18 @@ const closeOpenReports = (
 	actor: SessionUser,
 	contentType: ContentType,
 	contentId: number,
-	outcome: ReportOutcome
-) => closeOpenReportsWhere(tx, actor, contentType, eq(reports.contentId, contentId), outcome);
+	outcome: ReportOutcome,
+	mediaIdOverride?: number | null
+) =>
+	closeOpenReportsWhere(
+		tx,
+		actor,
+		contentType,
+		eq(reports.contentId, contentId),
+		outcome,
+		true,
+		mediaIdOverride
+	);
 
 /** True while the content is hidden for review (see underReviewSql), read on the caller's transaction. */
 async function isUnderReviewIn(
@@ -516,20 +533,29 @@ async function isUnderReviewIn(
  * audit row here: the caller audits the concrete action it performed (resolveWithAudit,
  * timeout_set). Every closed report tells its reporter the outcome; releasing content that was
  * under review (checked before the reports close) also tells its author. Pass `executor` to run
- * inside the caller's transaction.
+ * inside the caller's transaction. `mediaIdOverride` is the meme the reporters' notices link to when
+ * the content is already gone (see closeOpenReportsWhere).
  */
 export async function resolveReports(
 	actor: SessionUser,
 	contentType: ContentType,
 	contentId: number,
 	outcome: ReportOutcome,
-	executor?: Executor
+	executor?: Executor,
+	mediaIdOverride?: number | null
 ): Promise<number> {
 	return inTransaction(executor, async (tx) => {
 		// the open reports are what puts content under review: look before they are closed
 		const wasUnderReview =
 			outcome === 'dismissed' && (await isUnderReviewIn(tx, contentType, contentId));
-		const closed = await closeOpenReports(tx, actor, contentType, contentId, outcome);
+		const closed = await closeOpenReports(
+			tx,
+			actor,
+			contentType,
+			contentId,
+			outcome,
+			mediaIdOverride
+		);
 		if (outcome !== 'dismissed' || closed.length === 0) return closed.length;
 
 		const table = contentTable[contentType];
@@ -604,7 +630,8 @@ export async function resolveWithAudit(
 	note = '',
 	executor?: Executor,
 	snapshot?: ContentSnapshot | null,
-	flags?: ('nsfw' | 'spoiler')[]
+	flags?: ('nsfw' | 'spoiler')[],
+	mediaIdOverride?: number | null
 ): Promise<number> {
 	return inTransaction(executor, async (tx) => {
 		const content = snapshot ?? (await snapshotContent(tx, contentType, contentId));
@@ -612,7 +639,7 @@ export async function resolveWithAudit(
 		const closed =
 			action === AUDIT_ACTIONS.flagsChanged
 				? []
-				: await closeOpenReports(tx, actor, contentType, contentId, 'actioned');
+				: await closeOpenReports(tx, actor, contentType, contentId, 'actioned', mediaIdOverride);
 		const authorId = content?.authorId ?? closed[0]?.authorId ?? null;
 		const excerpt = content?.excerpt ?? closed[0]?.excerpt ?? '';
 		const [author] =
@@ -657,7 +684,8 @@ export async function resolveWithAudit(
  * Closes the open reports of content that was just deleted. The author's own deletion closes them
  * as 'removed' (their own act, no audit row); anybody else is a moderator acting on foreign
  * content: content_deleted is audited ALWAYS (with the `snapshot` taken before the delete), and
- * open reports are closed as 'actioned'.
+ * open reports are closed as 'actioned'. `mediaId` is the deleted comment's meme (read before the
+ * delete): the reporters' notices link to it, `content_deleted` keeps none.
  */
 export function resolveAfterDelete(
 	actor: SessionUser,
@@ -665,10 +693,11 @@ export function resolveAfterDelete(
 	contentId: number,
 	authorId: number | null,
 	executor?: Executor,
-	snapshot?: ContentSnapshot | null
+	snapshot?: ContentSnapshot | null,
+	mediaId?: number | null
 ): Promise<number> {
 	return authorId === actor.id
-		? resolveReports(actor, contentType, contentId, 'removed', executor)
+		? resolveReports(actor, contentType, contentId, 'removed', executor, mediaId)
 		: resolveWithAudit(
 				actor,
 				contentType,
@@ -676,6 +705,8 @@ export function resolveAfterDelete(
 				AUDIT_ACTIONS.contentDeleted,
 				'',
 				executor,
-				snapshot
+				snapshot,
+				undefined,
+				mediaId
 			);
 }

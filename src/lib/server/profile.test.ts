@@ -297,6 +297,21 @@ describe('resetDisplayName', () => {
 		});
 	});
 
+	it('does nothing for a member without a display name', async () => {
+		const admin = await make('admin');
+		const m = await make();
+		await resetDisplayName(admin, m.id);
+		expect(await auditRows()).toEqual([]);
+		expect(await noticesOf(m.id)).toEqual([]);
+	});
+
+	it('still reports an unknown member', async () => {
+		const admin = await make('admin');
+		await expect(resetDisplayName(admin, 999_999)).rejects.toThrow(
+			new ProfileInputError('Member not found.')
+		);
+	});
+
 	it('is admin only', async () => {
 		const mod = await make('moderator');
 		const m = await make();

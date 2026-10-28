@@ -2,7 +2,7 @@ import { and, desc, eq, inArray, isNull, lt, sql, type SQL } from 'drizzle-orm';
 import { NOTIFICATION_CATEGORY } from '../notification-labels';
 import { db } from './db';
 import { media, notificationPrefs, notifications, quotes, users } from './db/schema';
-import type { ContentType, Executor } from './moderation';
+import { underReviewSql, type ContentType, type Executor } from './moderation';
 
 export const NOTIFICATION_KINDS = [
 	'comment',
@@ -188,6 +188,7 @@ export async function listNotifications(
 			contentType: notifications.contentType,
 			mediaId: notifications.mediaId,
 			title: media.title,
+			titleHidden: underReviewSql('meme', media.id, media.reviewedAt),
 			detail: notifications.detail,
 			count: notifications.count,
 			readAt: notifications.readAt,
@@ -215,7 +216,8 @@ export async function listNotifications(
 				: { name: r.actorName, avatarThumbKey: r.actorAvatarThumbKey },
 		contentType: r.contentType,
 		mediaId: r.mediaId,
-		title: r.title,
+		// never text the recipient could not see on the meme's page
+		title: r.titleHidden ? null : r.title,
 		detail: r.detail,
 		count: r.count,
 		read: r.readAt !== null,

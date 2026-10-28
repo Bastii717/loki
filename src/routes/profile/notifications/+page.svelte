@@ -49,6 +49,7 @@
 			</p>
 		</section>
 
+		{#if form?.error}<p class="error" role="alert">{form.error}</p>{/if}
 		{#if form?.saved && !busy}<p class="ok" role="status">Saved.</p>{/if}
 
 		<button type="submit" class="btn primary" disabled={busy}>
@@ -158,9 +159,17 @@
 		cursor: default;
 	}
 
+	.error,
 	.ok {
 		margin: 0;
-		color: var(--up);
 		font-size: 14px;
+	}
+
+	.error {
+		color: var(--down);
+	}
+
+	.ok {
+		color: var(--up);
 	}
 </style>

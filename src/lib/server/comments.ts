@@ -93,7 +93,9 @@ export async function addComment(
 		const earlier = await tx
 			.selectDistinct({ authorId: comments.authorId })
 			.from(comments)
-			.where(eq(comments.mediaId, mediaId));
+			.where(eq(comments.mediaId, mediaId))
+			// a fixed order keeps the per-recipient locks in notify from deadlocking two concurrent comments
+			.orderBy(comments.authorId);
 		const [inserted] = await tx
 			.insert(comments)
 			.values({ mediaId, authorId: userId, text: trimmed })
@@ -128,7 +130,7 @@ export async function addComment(
  */
 export async function deleteComment(user: SessionUser, commentId: number): Promise<void> {
 	const [c] = await db
-		.select({ authorId: comments.authorId })
+		.select({ authorId: comments.authorId, mediaId: comments.mediaId })
 		.from(comments)
 		.where(eq(comments.id, commentId));
 	if (!c) throw new CommentNotFoundError();
@@ -140,7 +142,7 @@ export async function deleteComment(user: SessionUser, commentId: number): Promi
 	await db.transaction(async (tx) => {
 		const snapshot = await snapshotContent(tx, 'comment', commentId);
 		await tx.delete(comments).where(eq(comments.id, commentId));
-		await resolveAfterDelete(user, 'comment', commentId, c.authorId, tx, snapshot);
+		await resolveAfterDelete(user, 'comment', commentId, c.authorId, tx, snapshot, c.mediaId);
 	});
 }
 

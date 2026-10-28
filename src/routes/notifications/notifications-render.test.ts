@@ -112,6 +112,12 @@ describe('notifications page', () => {
 		}
 	});
 
+	it('carries the current filter in a hidden field of every row form', () => {
+		const body = html(data({ items: [item({ id: 11 })], filter: 'moderation' }));
+		const form = /<form[^>]*action="\?\/open"[\s\S]*?<\/form>/.exec(body)![0];
+		expect(form).toMatch(/name="filter"[^>]*value="moderation"/);
+	});
+
 	it('shows the Mark all as read button only when something is unread', () => {
 		const some = html(data({ items: [item()], unread: 3 }));
 		expect(some).toMatch(/<form[^>]*action="\?\/readAll"/);

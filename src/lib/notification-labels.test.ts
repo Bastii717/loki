@@ -137,7 +137,7 @@ describe('notificationText', () => {
 	it.each([
 		['dismissed', 'Your report on a comment was reviewed: no action taken.'],
 		['actioned', 'Your report on a comment was reviewed: action was taken.'],
-		['removed', 'Your report on a comment was reviewed: the owner removed it.']
+		['removed', 'Your report on a comment was reviewed: the content was removed.']
 	])('report_resolved (%s)', (outcome, text) => {
 		expect(
 			notificationText(

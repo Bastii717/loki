@@ -1,10 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import {
-	countUnread,
-	listNotifications,
-	markAllRead,
-	openNotification
-} from '../../lib/server/notifications';
+import { listNotifications, markAllRead, openNotification } from '../../lib/server/notifications';
 import type { Actions, PageServerLoad } from './$types';
 
 /** Largest id a `serial` column holds; anything above can never match and must not reach the query. */
@@ -18,7 +13,7 @@ function parseId(raw: string | null): number | undefined {
 }
 
 // The hooks already require a session for this path, so there is no guard of its own.
-export const load: PageServerLoad = async ({ locals, url }) => {
+export const load: PageServerLoad = async ({ locals, url, parent }) => {
 	const user = locals.user!;
 	const param = url.searchParams.get('filter');
 	const filter = param === 'activity' || param === 'moderation' ? param : 'all';
@@ -26,7 +21,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		filter: filter === 'all' ? undefined : filter,
 		before: parseId(url.searchParams.get('before'))
 	});
-	return { items, hasMore, filter, unread: await countUnread(user.id) };
+	// the bell count comes from the root layout: one count per request, not two
+	const { unreadNotifications } = (await parent()) as { unreadNotifications?: number };
+	return { items, hasMore, filter, unread: unreadNotifications ?? 0 };
 };
 
 export const actions: Actions = {
@@ -36,7 +33,13 @@ export const actions: Actions = {
 		const data = await request.formData();
 		const id = parseId(String(data.get('id') ?? ''));
 		const target = id === undefined ? null : await openNotification(user.id, id);
-		redirect(303, target ?? '/notifications');
+		// a gone target keeps the filter the member was looking at
+		const filter = String(data.get('filter') ?? '');
+		const back =
+			filter === 'activity' || filter === 'moderation'
+				? `/notifications?filter=${filter}`
+				: '/notifications';
+		redirect(303, target === null || target === '/notifications' ? back : target);
 	},
 
 	readAll: async ({ locals }) => {

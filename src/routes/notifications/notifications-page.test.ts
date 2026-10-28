@@ -30,7 +30,9 @@ async function seed(userId: number, over: Partial<Row> = {}): Promise<number> {
 const loadFor = (member: Member, query = '') =>
 	load({
 		locals: { user: member.user },
-		url: new URL(`https://loki.test/notifications${query}`)
+		url: new URL(`https://loki.test/notifications${query}`),
+		// the root layout supplies the bell count
+		parent: async () => ({ unreadNotifications: await countUnread(member.user.id) })
 	} as never) as Promise<{
 		items: { id: number; kind: string }[];
 		hasMore: boolean;
@@ -38,13 +40,13 @@ const loadFor = (member: Member, query = '') =>
 		unread: number;
 	}>;
 
-const open = (member: Member, id: string) =>
+const open = (member: Member, id: string, filter?: string) =>
 	callRoute({
 		handler: actions.open,
 		path: '/notifications?/open',
 		method: 'POST',
 		session: member.session,
-		form: { id }
+		form: filter === undefined ? { id } : { id, filter }
 	});
 
 async function lockWrites() {
@@ -184,6 +186,29 @@ describe('open action', () => {
 		expect(res.response.status).toBe(303);
 		expect(res.response.headers.get('location')).toBe('/notifications');
 		expect(await countUnread(member.user.id)).toBe(1);
+	});
+
+	it('keeps the filter when the target is gone, and drops an unknown one', async () => {
+		const member = await userWithSession();
+		const id = await seed(member.user.id, { kind: 'timeout_lifted' });
+		for (const filter of ['activity', 'moderation']) {
+			const res = await open(member, String(id), filter);
+			expect(res.response.headers.get('location')).toBe(`/notifications?filter=${filter}`);
+		}
+		for (const filter of ['all', 'nonsense', '']) {
+			const res = await open(member, String(id), filter);
+			expect(res.response.headers.get('location')).toBe('/notifications');
+		}
+		const unknown = await open(member, '999999', 'moderation');
+		expect(unknown.response.headers.get('location')).toBe('/notifications?filter=moderation');
+	});
+
+	it('still goes to the target when a filter is sent', async () => {
+		const member = await userWithSession();
+		const memeId = await insertMeme(member.user.id);
+		const id = await seed(member.user.id, { mediaId: memeId });
+		const res = await open(member, String(id), 'activity');
+		expect(res.response.headers.get('location')).toBe(`/meme/${memeId}`);
 	});
 
 	it('does not open or mark a notice of someone else', async () => {

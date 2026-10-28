@@ -149,6 +149,14 @@ export async function setDisplayName(
 export async function resetDisplayName(actor: SessionUser, userId: number): Promise<void> {
 	if (actor.role !== 'admin') throw new ProfileInputError('Only admins can reset names.');
 	await db.transaction(async (tx) => {
+		const [member] = await tx
+			.select({ displayName: users.displayName })
+			.from(users)
+			.where(eq(users.id, userId))
+			.for('update');
+		if (!member) throw new ProfileInputError('Member not found.');
+		// nothing to reset: no change, no audit row, no notice
+		if (member.displayName === null) return;
 		const updated = await tx
 			.update(users)
 			.set({

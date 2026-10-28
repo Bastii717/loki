@@ -351,3 +351,55 @@ describe('addComment notices', () => {
 		expect(await db.select().from(notifications)).toHaveLength(0);
 	});
 });
+
+describe('deleteComment report notices', () => {
+	const noticesOf = (userId: number) =>
+		db
+			.select()
+			.from(notifications)
+			.where(eq(notifications.userId, userId))
+			.orderBy(notifications.id);
+
+	async function reportedComment() {
+		const uploader = await testUser();
+		const author = await testUser();
+		const memeId = await addMedia(uploader.id);
+		const [c] = await db
+			.insert(comments)
+			.values({ mediaId: memeId, authorId: author.id, text: 'reported text' })
+			.returning({ id: comments.id });
+		const [reporterId] = await addOpenReports('comment', c.id, author.id, 1);
+		return { uploader, author, memeId, commentId: c.id, reporterId };
+	}
+
+	it('keeps the meme link in the reporter notice when a moderator deletes the comment', async () => {
+		const { uploader, author, memeId, commentId, reporterId } = await reportedComment();
+		const mod = await testUser({ role: 'moderator' });
+		await db.delete(notifications);
+		await deleteComment(
+			{ id: mod.id, username: mod.username, displayName: null, role: 'moderator' },
+			commentId
+		);
+		expect(await noticesOf(reporterId)).toMatchObject([
+			{ kind: 'report_resolved', contentType: 'comment', mediaId: memeId, detail: 'actioned:x' }
+		]);
+		// the author hears of the deletion without a link; the uploader is not involved
+		expect(await noticesOf(author.id)).toMatchObject([
+			{ kind: 'content_deleted', contentType: 'comment', mediaId: null }
+		]);
+		expect(await noticesOf(uploader.id)).toHaveLength(0);
+	});
+
+	it('keeps the meme link when the author deletes their own reported comment', async () => {
+		const { author, memeId, commentId, reporterId } = await reportedComment();
+		await db.delete(notifications);
+		await deleteComment(
+			{ id: author.id, username: author.username, displayName: null, role: 'member' },
+			commentId
+		);
+		expect(await noticesOf(reporterId)).toMatchObject([
+			{ kind: 'report_resolved', mediaId: memeId, detail: 'removed:x' }
+		]);
+		expect(await noticesOf(author.id)).toHaveLength(0);
+	});
+});

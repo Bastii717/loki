@@ -9,7 +9,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 export const actions: Actions = {
-	save: async ({ locals, request }) => {
+	// `error` is never set here: the hook answers 503 (maintenance) or 429 (write budget) with it
+	save: async ({ locals, request }): Promise<{ saved: boolean; error?: string }> => {
 		const data = await request.formData();
 		// An unchecked box sends nothing, so presence is the value.
 		await setPrefs(locals.user!.id, {

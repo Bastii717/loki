@@ -165,6 +165,15 @@ describe('preferences page', () => {
 		);
 	});
 
+	it('shows a failed save and no error otherwise', () => {
+		const failed = html({ data: { prefs: ALL_ON }, form: { error: 'Posting is paused.' } });
+		expect(failed).toMatch(
+			/<p[^>]*class="error[^"]*"[^>]*role="alert"[^>]*>Posting is paused\.<\/p>/
+		);
+		expect(html({ data: { prefs: ALL_ON }, form: null })).not.toContain('role="alert"');
+		expect(html({ data: { prefs: ALL_ON }, form: { saved: true } })).not.toContain('role="alert"');
+	});
+
 	it('confirms a save and shows nothing before one', () => {
 		expect(html({ data: { prefs: ALL_ON }, form: null })).not.toContain('Saved.');
 		expect(html({ data: { prefs: ALL_ON }, form: { saved: true } })).toContain('Saved.');

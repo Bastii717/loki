@@ -70,6 +70,7 @@
 				<li class={['row', category, { unread: !item.read }]}>
 					<form method="POST" action="?/open" use:enhance>
 						<input type="hidden" name="id" value={item.id} />
+						<input type="hidden" name="filter" value={data.filter} />
 						<button type="submit">
 							<span class="icon" aria-hidden="true">
 								{#if category === 'moderation'}
