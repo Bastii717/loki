@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from './db';
-import { comments, media, mediaViews } from './db/schema';
+import { comments, media, mediaViews, notifications } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import {
 	addComment,
@@ -16,6 +16,7 @@ import { MediaNotFoundError } from './votes';
 import { addOpenReports, OVER_THRESHOLD, timeOut } from './moderation-test-utils';
 import { env } from './env';
 import { resolveReports, TimeoutActiveError } from './moderation';
+import { setPrefs } from './notifications';
 
 beforeAll(setupDb);
 beforeEach(resetDb);
@@ -239,5 +240,114 @@ describe('listComments under review', () => {
 			text: 'boese',
 			underReview: false
 		});
+	});
+});
+
+describe('addComment notices', () => {
+	const noticesOf = (userId: number) =>
+		db
+			.select()
+			.from(notifications)
+			.where(eq(notifications.userId, userId))
+			.orderBy(notifications.id);
+
+	it('notifies the uploader with the excerpt, the meme and the commenter', async () => {
+		const owner = await testUser();
+		const lena = await testUser();
+		const id = await addMedia(owner.id);
+		const added = await addComment(lena.id, id, '  first\n\nline  ');
+		expect(added.text).toBe('first\n\nline');
+		const rows = await noticesOf(owner.id);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({
+			kind: 'comment',
+			actorId: lena.id,
+			mediaId: id,
+			detail: 'first line',
+			count: 1,
+			readAt: null
+		});
+		expect(await noticesOf(lena.id)).toHaveLength(0);
+	});
+
+	it('writes nothing when the uploader comments on their own meme', async () => {
+		const owner = await testUser();
+		const id = await addMedia(owner.id);
+		await addComment(owner.id, id, 'talking to myself');
+		expect(await db.select().from(notifications)).toHaveLength(0);
+	});
+
+	it('notifies earlier commenters once each, not the uploader and not the author', async () => {
+		const owner = await testUser();
+		const a = await testUser();
+		const b = await testUser();
+		const c = await testUser();
+		const id = await addMedia(owner.id);
+		await addComment(a.id, id, 'a1');
+		await addComment(a.id, id, 'a2');
+		await addComment(b.id, id, 'b1');
+		await addComment(owner.id, id, 'owner reply');
+		await db.delete(notifications);
+
+		await addComment(c.id, id, 'newcomer');
+
+		const forA = await noticesOf(a.id);
+		const forB = await noticesOf(b.id);
+		expect(forA).toHaveLength(1);
+		expect(forB).toHaveLength(1);
+		expect(forA[0]).toMatchObject({
+			kind: 'thread_comment',
+			actorId: c.id,
+			mediaId: id,
+			detail: 'newcomer'
+		});
+		expect(forB[0].kind).toBe('thread_comment');
+		expect(await noticesOf(c.id)).toHaveLength(0);
+		expect((await noticesOf(owner.id)).map((r) => r.kind)).toEqual(['comment']);
+	});
+
+	it('does not notify an earlier commenter about their own follow-up', async () => {
+		const owner = await testUser();
+		const a = await testUser();
+		const id = await addMedia(owner.id);
+		await addComment(a.id, id, 'one');
+		await addComment(a.id, id, 'two');
+		expect(await noticesOf(a.id)).toHaveLength(0);
+	});
+
+	it('folds a run of comments into one unread notice that counts up (3 own, then 2 by another)', async () => {
+		const owner = await testUser();
+		const lena = await testUser();
+		const id = await addMedia(owner.id);
+		for (const t of ['one', 'two', 'three']) await addComment(owner.id, id, t);
+		await addComment(lena.id, id, 'hello');
+		await addComment(lena.id, id, 'again');
+		const rows = await noticesOf(owner.id);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({
+			kind: 'comment',
+			count: 2,
+			actorId: lena.id,
+			detail: 'again',
+			readAt: null
+		});
+	});
+
+	it('stops bumping and recreating once the recipient switched comments off', async () => {
+		const owner = await testUser();
+		const lena = await testUser();
+		const id = await addMedia(owner.id);
+		await addComment(lena.id, id, 'before');
+		await setPrefs(owner.id, { comments: false, threadComments: true, reportOutcomes: true });
+		await addComment(lena.id, id, 'after');
+		const rows = await noticesOf(owner.id);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({ count: 1, detail: 'before' });
+	});
+
+	it('leaves neither a comment nor a notice behind when the meme does not exist', async () => {
+		const lena = await testUser();
+		await expect(addComment(lena.id, 999999, 'hi')).rejects.toBeInstanceOf(MediaNotFoundError);
+		expect(await db.select().from(notifications)).toHaveLength(0);
 	});
 });

@@ -66,15 +66,17 @@ export interface NotifyInput {
 
 /**
  * Writes a notice for `userId`. Pass the caller's transaction so a failed action leaves no stray
- * notice. Writes nothing when the recipient is the actor or has switched the kind off; folds
+ * notice. Writes nothing when the recipient is the actor or has switched the kind off (the actor is
+ * stored for activity kinds only, moderation kinds store none); folds
  * `comment` and `thread_comment` into the recipient's unread notice of that kind for the same meme.
  */
 export async function notify(tx: Executor, input: NotifyInput): Promise<void> {
 	const { userId, kind } = input;
-	const actorId = input.actorId ?? null;
 	const mediaId = input.mediaId ?? null;
 	const detail = input.detail ?? '';
-	if (actorId !== null && actorId === userId) return;
+	if (input.actorId != null && input.actorId === userId) return;
+	// moderation notices never name who acted ("A moderator ..."): the audit log holds the name
+	const actorId = NOTIFICATION_CATEGORY[kind] === 'moderation' ? null : (input.actorId ?? null);
 
 	const prefKey = PREF_FOR_KIND[kind];
 	if (prefKey) {

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
+import { NOTIFICATION_CATEGORY } from '../notification-labels';
 import { db } from './db';
 import { media, notificationPrefs, notifications, users } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
@@ -16,6 +17,7 @@ import {
 	openNotification,
 	setPrefs,
 	sweepNotifications,
+	type NotificationKind,
 	type NotifyInput
 } from './notifications';
 
@@ -126,6 +128,20 @@ describe('notify', () => {
 			await notify(db, { userId: user.id, kind, actorId: user.id });
 		}
 		expect(await rows()).toHaveLength(0);
+	});
+
+	it('stores no actor for moderation kinds, even when one is passed, but keeps it for activity kinds', async () => {
+		const user = await testUser();
+		const actor = await testUser();
+		for (const kind of NOTIFICATION_KINDS) {
+			await notify(db, { userId: user.id, kind, actorId: actor.id });
+		}
+		for (const row of await rows()) {
+			expect(row.actorId).toBe(
+				NOTIFICATION_CATEGORY[row.kind as NotificationKind] === 'moderation' ? null : actor.id
+			);
+		}
+		expect(await rows()).toHaveLength(NOTIFICATION_KINDS.length);
 	});
 
 	it('skips comment, thread_comment and report_resolved when the pref is off, but not content_deleted', async () => {

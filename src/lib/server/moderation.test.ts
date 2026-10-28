@@ -2,7 +2,16 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import type { SessionUser } from './auth/session';
 import { db } from './db';
-import { auditLog, comments, media, quotes, reports, timeouts } from './db/schema';
+import {
+	auditLog,
+	comments,
+	media,
+	notificationPrefs,
+	notifications,
+	quotes,
+	reports,
+	timeouts
+} from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import { env } from './env';
 import {
@@ -16,6 +25,7 @@ import {
 	openReportCount,
 	ReportError,
 	resolveReports,
+	resolveWithAudit,
 	setTimeout_,
 	TimeoutActionError,
 	TimeoutActiveError
@@ -610,5 +620,240 @@ describe('audit / listAudit', () => {
 		const mod = await userWithRole('moderator');
 		await audit(mod.id, 'flags_forced', 'meme', 1);
 		expect((await listAudit()).entries[0].detail).toBe('');
+	});
+});
+
+describe('moderation notices', () => {
+	const noticesOf = (userId: number) =>
+		db
+			.select()
+			.from(notifications)
+			.where(eq(notifications.userId, userId))
+			.orderBy(notifications.id);
+
+	describe('resolveReports', () => {
+		it('dismissing reports of a meme under review releases it and tells the author and each reporter', async () => {
+			const author = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const id = await addMeme(author.id, 'Titel');
+			const reporters = await reportBy(env.REPORT_REVIEW_THRESHOLD + 1, 'meme', id);
+			await resolveReports(mod, 'meme', id, 'dismissed');
+
+			const forAuthor = await noticesOf(author.id);
+			expect(forAuthor).toHaveLength(1);
+			expect(forAuthor[0]).toMatchObject({
+				kind: 'content_released',
+				actorId: null,
+				contentType: 'meme',
+				contentId: id,
+				mediaId: id,
+				detail: 'Titel'
+			});
+			for (const r of reporters) {
+				const rows = await noticesOf(r.id);
+				expect(rows).toHaveLength(1);
+				expect(rows[0]).toMatchObject({
+					kind: 'report_resolved',
+					actorId: null,
+					contentType: 'meme',
+					contentId: id,
+					mediaId: id,
+					detail: 'dismissed:Titel'
+				});
+			}
+			expect(await noticesOf(mod.id)).toHaveLength(0);
+		});
+
+		it('dismissing a single report on a visible meme tells the reporter but not the author', async () => {
+			const author = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const id = await addMeme(author.id, 'Titel');
+			const [reporter] = await reportBy(1, 'meme', id);
+			await resolveReports(mod, 'meme', id, 'dismissed');
+			expect(await noticesOf(author.id)).toHaveLength(0);
+			expect((await noticesOf(reporter.id)).map((r) => r.kind)).toEqual(['report_resolved']);
+		});
+
+		it('a meme exactly at the threshold is still visible: dismissing releases nothing', async () => {
+			const author = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const id = await addMeme(author.id);
+			await reportBy(env.REPORT_REVIEW_THRESHOLD, 'meme', id);
+			await resolveReports(mod, 'meme', id, 'dismissed');
+			expect(await noticesOf(author.id)).toHaveLength(0);
+		});
+
+		it('a meme already released earlier is not announced again', async () => {
+			const author = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const id = await addMeme(author.id);
+			await db.update(media).set({ reviewedAt: new Date() }).where(eq(media.id, id));
+			await reportBy(env.REPORT_REVIEW_THRESHOLD + 1, 'meme', id);
+			await resolveReports(mod, 'meme', id, 'dismissed');
+			expect(await noticesOf(author.id)).toHaveLength(0);
+		});
+
+		it('writes nothing when no report was open (somebody was faster)', async () => {
+			const author = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const id = await addMeme(author.id);
+			expect(await resolveReports(mod, 'meme', id, 'dismissed')).toBe(0);
+			expect(await db.select().from(notifications)).toHaveLength(0);
+		});
+
+		it('releases a comment under review with the comment excerpt and its meme', async () => {
+			const author = await userWithRole();
+			const owner = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const memeId = await addMeme(owner.id);
+			const commentId = await addComment(author.id, memeId, 'Hallo Welt');
+			await reportBy(env.REPORT_REVIEW_THRESHOLD + 1, 'comment', commentId);
+			await resolveReports(mod, 'comment', commentId, 'dismissed');
+			const [notice] = await noticesOf(author.id);
+			expect(notice).toMatchObject({
+				kind: 'content_released',
+				contentType: 'comment',
+				contentId: commentId,
+				mediaId: memeId,
+				detail: 'Hallo Welt'
+			});
+		});
+
+		it('actioned tells the reporters with that outcome and releases nothing', async () => {
+			const author = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const id = await addMeme(author.id, 'Titel');
+			const [r1] = await reportBy(env.REPORT_REVIEW_THRESHOLD + 1, 'meme', id);
+			await resolveReports(mod, 'meme', id, 'actioned');
+			const [notice] = await noticesOf(r1.id);
+			expect(notice).toMatchObject({ kind: 'report_resolved', detail: 'actioned:Titel' });
+			expect(await noticesOf(author.id)).toHaveLength(0);
+		});
+
+		it('respects a reporter who switched report outcomes off', async () => {
+			const author = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const id = await addMeme(author.id);
+			const [reporter] = await reportBy(1, 'meme', id);
+			await db.insert(notificationPrefs).values({ userId: reporter.id, reportOutcomes: false });
+			await resolveReports(mod, 'meme', id, 'dismissed');
+			expect(await noticesOf(reporter.id)).toHaveLength(0);
+		});
+
+		it('does not notify a moderator who closes their own report', async () => {
+			const author = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const id = await addMeme(author.id);
+			await createReport(mod, 'meme', id, 'spam');
+			await resolveReports(mod, 'meme', id, 'actioned');
+			expect(await noticesOf(mod.id)).toHaveLength(0);
+		});
+
+		it('keeps no notice when the surrounding transaction rolls back', async () => {
+			const author = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const id = await addMeme(author.id);
+			await reportBy(1, 'meme', id);
+			await expect(
+				db.transaction(async (tx) => {
+					await resolveReports(mod, 'meme', id, 'dismissed', tx);
+					throw new Error('abort');
+				})
+			).rejects.toThrow('abort');
+			expect(await db.select().from(notifications)).toHaveLength(0);
+			const [r] = await db.select().from(reports);
+			expect(r.status).toBe('open');
+		});
+	});
+
+	describe('resolveWithAudit', () => {
+		it('content_deleted on a comment of another member tells the author with the excerpt and no meme', async () => {
+			const author = await userWithRole();
+			const owner = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const memeId = await addMeme(owner.id);
+			const commentId = await addComment(author.id, memeId, 'Rude words');
+			await resolveWithAudit(mod, 'comment', commentId, 'content_deleted');
+			const rows = await noticesOf(author.id);
+			expect(rows).toHaveLength(1);
+			expect(rows[0]).toMatchObject({
+				kind: 'content_deleted',
+				actorId: null,
+				contentType: 'comment',
+				contentId: commentId,
+				mediaId: null,
+				detail: 'Rude words'
+			});
+		});
+
+		it('content_deleted tells the author of already deleted content from the snapshot', async () => {
+			const author = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const id = await addMeme(author.id, 'Titel');
+			const snapshot = { authorId: author.id, excerpt: 'Titel' };
+			await db.delete(media).where(eq(media.id, id));
+			await resolveWithAudit(mod, 'meme', id, 'content_deleted', '', undefined, snapshot);
+			const [notice] = await noticesOf(author.id);
+			expect(notice).toMatchObject({ kind: 'content_deleted', mediaId: null, detail: 'Titel' });
+		});
+
+		it('a quote without a submitter notifies nobody', async () => {
+			const mod = await userWithRole('moderator');
+			const quoteId = await addQuote(null, 'Anon');
+			await resolveWithAudit(mod, 'quote', quoteId, 'content_deleted');
+			expect(await db.select().from(notifications)).toHaveLength(0);
+			expect(await auditActions()).toEqual(['content_deleted']);
+		});
+
+		it('flags_forced tells the author which blur, with the title and the meme', async () => {
+			const author = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const id = await addMeme(author.id, 'Titel');
+			await resolveWithAudit(mod, 'meme', id, 'flags_forced', 'NSFW on, ', undefined, null, [
+				'nsfw'
+			]);
+			const [notice] = await noticesOf(author.id);
+			expect(notice).toMatchObject({
+				kind: 'content_flagged',
+				actorId: null,
+				contentType: 'meme',
+				contentId: id,
+				mediaId: id,
+				detail: 'nsfw:Titel'
+			});
+		});
+
+		it('flags_forced names both flags in order', async () => {
+			const author = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const id = await addMeme(author.id, 'Titel');
+			await resolveWithAudit(mod, 'meme', id, 'flags_forced', '', undefined, null, [
+				'nsfw',
+				'spoiler'
+			]);
+			const [notice] = await noticesOf(author.id);
+			expect(notice.detail).toBe('nsfw,spoiler:Titel');
+		});
+
+		it('flags_changed writes nothing for the author', async () => {
+			const author = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const id = await addMeme(author.id);
+			await resolveWithAudit(mod, 'meme', id, 'flags_changed');
+			expect(await db.select().from(notifications)).toHaveLength(0);
+		});
+
+		it('also closes open reports and tells each reporter "actioned"', async () => {
+			const author = await userWithRole();
+			const mod = await userWithRole('moderator');
+			const id = await addMeme(author.id, 'Titel');
+			const reporters = await reportBy(2, 'meme', id);
+			await resolveWithAudit(mod, 'meme', id, 'flags_forced', '', undefined, null, ['nsfw']);
+			for (const r of reporters) {
+				const [notice] = await noticesOf(r.id);
+				expect(notice).toMatchObject({ kind: 'report_resolved', detail: 'actioned:Titel' });
+			}
+			expect((await noticesOf(author.id)).map((n) => n.kind)).toEqual(['content_flagged']);
+		});
 	});
 });

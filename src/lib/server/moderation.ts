@@ -3,6 +3,7 @@ import type { SessionUser } from './auth/session';
 import { db } from './db';
 import { auditLog, comments, media, quotes, reports, timeouts, users } from './db/schema';
 import { env } from './env';
+import { notify } from './notifications';
 
 export type ContentType = (typeof reports.$inferInsert)['contentType'];
 export type ReportCategory = (typeof reports.$inferInsert)['category'];
@@ -408,21 +409,73 @@ const inTransaction = <T>(executor: Executor | undefined, fn: (tx: Executor) => 
 	executor ? fn(executor) : db.transaction((tx) => fn(tx));
 
 /**
- * Closes the open reports of `contentType` rows matching `idCondition` (an SQL condition on
- * reports.content_id) and returns what was closed (excerpt, author).
+ * The meme page a notice about this content can lead to: the meme's id while the row exists, a
+ * comment's meme while the comment exists, null otherwise (a quote has no page). Read at the moment
+ * of writing, so a notice about content that was just deleted carries null and survives it.
  */
-function closeOpenReportsWhere(
+async function liveMediaId(
+	tx: Executor,
+	contentType: ContentType,
+	contentId: number
+): Promise<number | null> {
+	if (contentType === 'meme') {
+		const [row] = await tx.select({ id: media.id }).from(media).where(eq(media.id, contentId));
+		return row?.id ?? null;
+	}
+	if (contentType === 'comment') {
+		const [row] = await tx
+			.select({ mediaId: comments.mediaId })
+			.from(comments)
+			.where(eq(comments.id, contentId));
+		return row?.mediaId ?? null;
+	}
+	return null;
+}
+
+/**
+ * Closes the open reports of `contentType` rows matching `idCondition` (an SQL condition on
+ * reports.content_id), tells each reporter the outcome (`report_resolved`, one per report) and
+ * returns what was closed. `linkMeme` false writes the notices without a meme link: for reports
+ * closed because their meme is about to be deleted, where a link would cascade the notice away.
+ */
+async function closeOpenReportsWhere(
 	tx: Executor,
 	actor: SessionUser,
 	contentType: ContentType,
 	idCondition: SQL,
-	outcome: ReportOutcome
+	outcome: ReportOutcome,
+	linkMeme = true
 ) {
-	return tx
+	const closed = await tx
 		.update(reports)
 		.set({ status: 'resolved', outcome, resolvedAt: sql`now()`, resolvedBy: actor.id })
 		.where(and(eq(reports.contentType, contentType), idCondition, eq(reports.status, 'open')))
-		.returning({ excerpt: reports.excerpt, authorId: reports.authorId });
+		.returning({
+			id: reports.id,
+			reporterId: reports.reporterId,
+			contentId: reports.contentId,
+			excerpt: reports.excerpt,
+			authorId: reports.authorId
+		});
+	const mediaIds = new Map<number, number | null>();
+	for (const report of closed) {
+		if (!mediaIds.has(report.contentId)) {
+			mediaIds.set(
+				report.contentId,
+				linkMeme ? await liveMediaId(tx, contentType, report.contentId) : null
+			);
+		}
+		await notify(tx, {
+			userId: report.reporterId,
+			kind: 'report_resolved',
+			actorId: actor.id,
+			contentType,
+			contentId: report.contentId,
+			mediaId: mediaIds.get(report.contentId),
+			detail: `${outcome}:${report.excerpt}`
+		});
+	}
+	return closed;
 }
 
 /** Closes the open reports of a content item and returns what was closed (excerpt, author). */
@@ -434,13 +487,29 @@ const closeOpenReports = (
 	outcome: ReportOutcome
 ) => closeOpenReportsWhere(tx, actor, contentType, eq(reports.contentId, contentId), outcome);
 
+/** True while the content is hidden for review (see underReviewSql), read on the caller's transaction. */
+async function isUnderReviewIn(
+	tx: Executor,
+	contentType: ContentType,
+	contentId: number
+): Promise<boolean> {
+	const table = contentTable[contentType];
+	const [row] = await tx
+		.select({ hidden: underReviewSql(contentType, table.id, table.reviewedAt) })
+		.from(table)
+		.where(eq(table.id, contentId));
+	return row?.hidden === true;
+}
+
 /**
  * Closes all open reports of a content item with `outcome` and returns how many it closed (0 =
  * nothing was open, e.g. somebody else was faster). 'dismissed' (release) also stamps the
  * content's reviewedAt, which grants permanent immunity from auto-hiding, and writes the audit
  * row, both only when at least one report was actually closed. 'actioned' / 'removed' write no
  * audit row here: the caller audits the concrete action it performed (resolveWithAudit,
- * timeout_set). Pass `executor` to run inside the caller's transaction.
+ * timeout_set). Every closed report tells its reporter the outcome; releasing content that was
+ * under review (checked before the reports close) also tells its author. Pass `executor` to run
+ * inside the caller's transaction.
  */
 export async function resolveReports(
 	actor: SessionUser,
@@ -450,6 +519,9 @@ export async function resolveReports(
 	executor?: Executor
 ): Promise<number> {
 	return inTransaction(executor, async (tx) => {
+		// the open reports are what puts content under review: look before they are closed
+		const wasUnderReview =
+			outcome === 'dismissed' && (await isUnderReviewIn(tx, contentType, contentId));
 		const closed = await closeOpenReports(tx, actor, contentType, contentId, outcome);
 		if (outcome !== 'dismissed' || closed.length === 0) return closed.length;
 
@@ -466,6 +538,17 @@ export async function resolveReports(
 			`${closed.length} ${closed.length === 1 ? 'report' : 'reports'}: ${closed[0].excerpt}`,
 			tx
 		);
+		if (wasUnderReview) {
+			await notify(tx, {
+				userId: closed[0].authorId,
+				kind: 'content_released',
+				actorId: actor.id,
+				contentType,
+				contentId,
+				mediaId: await liveMediaId(tx, contentType, contentId),
+				detail: closed[0].excerpt
+			});
+		}
 		return closed.length;
 	});
 }
@@ -475,7 +558,7 @@ export async function resolveReports(
  * have no foreign key). Closes them in the caller's transaction as 'removed': collateral damage of
  * the meme's deletion, never a judgment on the commenter (an 'actioned' outcome would count as a
  * confirmed report against them). Call it BEFORE the meme row is deleted. No audit row: the meme's
- * own deletion is the decision.
+ * own deletion is the decision. The reporters are told, with no meme link: the meme is about to go.
  */
 export async function resolveCommentReportsOfMedia(
 	actor: SessionUser,
@@ -487,7 +570,8 @@ export async function resolveCommentReportsOfMedia(
 		actor,
 		'comment',
 		sql`${reports.contentId} IN (SELECT ${comments.id} FROM ${comments} WHERE ${comments.mediaId} = ${mediaId})`,
-		'removed'
+		'removed',
+		false
 	);
 }
 
@@ -498,7 +582,9 @@ export async function resolveCommentReportsOfMedia(
  * many reports it closed (0 = none were open). `note` prefixes the audit detail. `snapshot` is the
  * content as read BEFORE a deletion (same transaction); without it the row is read here, and when
  * it is already gone the closed reports' author/excerpt stand in. Used by the content modules for
- * inline actions and by the queue, so both behave identically.
+ * inline actions and by the queue, so both behave identically. Notices: each closed report tells its
+ * reporter; the author hears of `content_deleted` and, with `flags` (the blurs this action switched
+ * on), of `flags_forced`; `flags_changed` and an author-less quote tell nobody.
  */
 export async function resolveWithAudit(
 	actor: SessionUser,
@@ -510,7 +596,8 @@ export async function resolveWithAudit(
 		| typeof AUDIT_ACTIONS.flagsChanged,
 	note = '',
 	executor?: Executor,
-	snapshot?: ContentSnapshot | null
+	snapshot?: ContentSnapshot | null,
+	flags?: ('nsfw' | 'spoiler')[]
 ): Promise<number> {
 	return inTransaction(executor, async (tx) => {
 		const content = snapshot ?? (await snapshotContent(tx, contentType, contentId));
@@ -533,6 +620,28 @@ export async function resolveWithAudit(
 			`${note}${author?.username ?? ''}: ${excerpt}`,
 			tx
 		);
+		if (authorId !== null) {
+			if (action === AUDIT_ACTIONS.contentDeleted) {
+				await notify(tx, {
+					userId: authorId,
+					kind: 'content_deleted',
+					actorId: actor.id,
+					contentType,
+					contentId,
+					detail: excerpt
+				});
+			} else if (action === AUDIT_ACTIONS.flagsForced && flags?.length) {
+				await notify(tx, {
+					userId: authorId,
+					kind: 'content_flagged',
+					actorId: actor.id,
+					contentType,
+					contentId,
+					mediaId: await liveMediaId(tx, contentType, contentId),
+					detail: `${flags.join(',')}:${excerpt}`
+				});
+			}
+		}
 		return closed.length;
 	});
 }

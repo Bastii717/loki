@@ -7,6 +7,7 @@ import {
 	snapshotContent,
 	underReviewSql
 } from './moderation';
+import { commentExcerpt, notify } from './notifications';
 import type { SessionUser } from './auth/session';
 import { MediaNotFoundError } from './votes';
 
@@ -82,18 +83,43 @@ export async function addComment(
 	const trimmed = text.trim();
 	if (trimmed.length < 1 || trimmed.length > MAX_COMMENT_LENGTH) throw new CommentTextError();
 	await assertNotTimedOut({ id: userId });
-	const [m] = await db.select({ id: media.id }).from(media).where(eq(media.id, mediaId));
+	const [m] = await db
+		.select({ id: media.id, uploaderId: media.uploaderId })
+		.from(media)
+		.where(eq(media.id, mediaId));
 	if (!m) throw new MediaNotFoundError();
-	const [inserted] = await db
-		.insert(comments)
-		.values({ mediaId, authorId: userId, text: trimmed })
-		.returning({ id: comments.id });
-	const [row] = await db
-		.select(columns)
-		.from(comments)
-		.innerJoin(users, eq(users.id, comments.authorId))
-		.where(eq(comments.id, inserted.id));
-	return toItem(row);
+	return db.transaction(async (tx) => {
+		// earlier commenters are read before the insert, so the new comment never counts as one
+		const earlier = await tx
+			.selectDistinct({ authorId: comments.authorId })
+			.from(comments)
+			.where(eq(comments.mediaId, mediaId));
+		const [inserted] = await tx
+			.insert(comments)
+			.values({ mediaId, authorId: userId, text: trimmed })
+			.returning({ id: comments.id });
+
+		const base = {
+			actorId: userId,
+			contentType: 'comment',
+			contentId: inserted.id,
+			mediaId,
+			detail: commentExcerpt(trimmed)
+		} as const;
+		await notify(tx, { ...base, userId: m.uploaderId, kind: 'comment' });
+		for (const { authorId } of earlier) {
+			// the uploader got `comment` above; the author never hears about their own comment (notify skips them)
+			if (authorId === m.uploaderId) continue;
+			await notify(tx, { ...base, userId: authorId, kind: 'thread_comment' });
+		}
+
+		const [row] = await tx
+			.select(columns)
+			.from(comments)
+			.innerJoin(users, eq(users.id, comments.authorId))
+			.where(eq(comments.id, inserted.id));
+		return toItem(row);
+	});
 }
 
 /**
