@@ -34,7 +34,8 @@ beforeEach(async () => {
 	await resetDb();
 });
 
-function run(
+/** Builds a request event plus a counting resolve stub without running the hook. */
+function prepare(
 	path: string,
 	cookie?: string,
 	resolved: Response = new Response('ok'),
@@ -59,13 +60,13 @@ function run(
 		resolveCalls += 1;
 		return resolved;
 	}) as Parameters<Handle>[0]['resolve'];
-	return {
-		event,
-		deleted,
-		set,
-		calls: () => resolveCalls,
-		response: Promise.resolve(handle({ event, resolve }))
-	};
+	return { event, deleted, set, resolve, calls: () => resolveCalls };
+}
+
+/** Runs the hook once for a prepared event; `response` is the hook's result. */
+function run(...args: Parameters<typeof prepare>) {
+	const r = prepare(...args);
+	return { ...r, response: Promise.resolve(handle({ event: r.event, resolve: r.resolve })) };
 }
 
 describe('auth guard', () => {
@@ -573,7 +574,9 @@ describe('season attribute', () => {
 		path: string,
 		cookie?: string
 	): Promise<{ html: string; locals: App.Locals }> {
-		const r = run(path, cookie);
+		// prepare, not run: run() would start a second, unobserved request whose session query
+		// can still be in flight when the next test truncates the tables (a deadlock seen in CI)
+		const r = prepare(path, cookie);
 		const resolve = (async (
 			_event: RequestEvent,
 			opts?: Parameters<Parameters<Handle>[0]['resolve']>[1]
