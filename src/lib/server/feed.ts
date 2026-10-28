@@ -3,7 +3,7 @@ import { AWARD_KIND } from './awards';
 import { db } from './db';
 import { env } from './env';
 import { openReporterCountSelect, overThresholdSql, underReviewSql } from './moderation';
-import { isPublicId, publicIdOfMedia } from './public-ids';
+import { isPublicId } from './public-ids';
 
 export type FeedSort = 'new' | 'hot' | 'hof';
 
@@ -309,14 +309,4 @@ export async function getFeedItem(
 ): Promise<FeedItem | null> {
 	const { items } = await getFeedPage({ viewerId, revealAll, sort: 'new', id: pid, limit: 1 });
 	return items[0] ?? null;
-}
-
-/** Same as `getFeedItem` for server callers that hold the internal id (one extra lookup). */
-export async function getFeedItemById(
-	viewerId: number,
-	revealAll: boolean,
-	id: number
-): Promise<FeedItem | null> {
-	const pid = await publicIdOfMedia(id);
-	return pid === null ? null : getFeedItem(viewerId, revealAll, pid);
 }

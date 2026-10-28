@@ -13,7 +13,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const { cases, nextCursor } = await listOpenCases(parseCursor(url.searchParams.get('cursor')));
 	return {
 		cases,
-		nextCursor, // the public id, compared with the cases' public author ids
-		viewer: { id: actor.publicId, role: actor.role }
+		nextCursor,
+		viewer: { id: actor.publicId, role: actor.role } // the public id, compared with the cases' public author ids
 	};
 };

@@ -1,5 +1,5 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;--> statement-breakpoint
-CREATE OR REPLACE FUNCTION public_id() RETURNS text LANGUAGE sql VOLATILE AS $$
+CREATE OR REPLACE FUNCTION public_id() RETURNS text LANGUAGE sql VOLATILE SET search_path = public, pg_temp AS $$
   SELECT string_agg(substr('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789', (get_byte(b, i) % 62) + 1, 1), '' ORDER BY i)
   FROM gen_random_bytes(12) AS b, generate_series(0, 11) AS i
 $$;--> statement-breakpoint

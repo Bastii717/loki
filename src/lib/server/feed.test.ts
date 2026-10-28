@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
 import { awards, comments, favorites, media, mediaTags, reports, tags, votes } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
-import { getFeedItem, getFeedItemById, getFeedPage } from './feed';
+import { getFeedItem, getFeedPage } from './feed';
 import { isPublicId } from './public-ids';
 import { getDiscoverBatch } from './discover';
 import { addOpenReports, OVER_THRESHOLD, timeOut } from './moderation-test-utils';
@@ -409,14 +409,6 @@ describe('getFeedItem', () => {
 		expect(await getFeedItem(u.id, false, 'AAAAAAAAAAAA')).toBeNull();
 		// a numeric id is not a public id, so getFeedItem finds nothing for it
 		expect(await getFeedItem(u.id, false, String(inner(a)))).toBeNull();
-	});
-
-	it('getFeedItemById serves server callers that hold the internal id', async () => {
-		const u = await testUser();
-		const a = await addMedia(u.id);
-		const item = await getFeedItemById(u.id, false, inner(a));
-		expect(item).toMatchObject({ id: a, uploaderId: u.publicId });
-		expect(await getFeedItemById(u.id, false, 999999)).toBeNull();
 	});
 
 	it("flags the viewer's own memes as mine (report entry is never offered on them)", async () => {

@@ -76,17 +76,17 @@ describe('GET /api/feed?uploader=', () => {
 		'AAAAAAAAAAA',
 		'AAAAAAAAAAAAA',
 		'AAAAAA_AAAAA'
-	])('rejects ?uploader=%s with 400', async (value) => {
+	])('answers ?uploader=%s with 404 (invalid shape)', async (value) => {
 		const w = await world();
 		const res = await feed(`?uploader=${value}`, w.member.session);
-		expect(res.response.status).toBe(400);
-		expect(await res.response.text()).toBe('Invalid uploader');
+		expect(res.response.status).toBe(404);
+		expect(await res.response.text()).toBe('Not found');
 	});
 
-	it('rejects the numeric internal id of a real member with 400', async () => {
+	it('answers 404 for the numeric internal id of a real member', async () => {
 		const w = await world();
 		const res = await feed(`?uploader=${w.author.user.id}`, w.member.session);
-		expect(res.response.status).toBe(400);
+		expect(res.response.status).toBe(404);
 	});
 
 	it('answers 404 for a well-formed id that belongs to nobody', async () => {

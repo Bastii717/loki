@@ -1,10 +1,10 @@
-import { inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { SessionUser } from '../auth/session';
 import { db } from '../db';
-import { media, mediaTags, tags } from '../db/schema';
+import { media, mediaTags, tags, templates } from '../db/schema';
 import { env } from '../env';
 import { assertNotTimedOut } from '../moderation';
-import { isPublicId, resolveTemplateId } from '../public-ids';
+import { isPublicId } from '../public-ids';
 import { deleteObjects, mediaKey, putObject } from '../storage';
 import { processMedia, sniffMedia } from './process';
 
@@ -24,9 +24,15 @@ export function normalizeTag(raw: string): string | null {
 	return TAG_PATTERN.test(tag) ? tag : null;
 }
 
-/** A template's internal id from a public id in form input; null when malformed or unknown. */
+/** The internal id of an active (not removed) template from a public id in form input; null when malformed, unknown or removed. */
 export async function parseTemplateId(raw: FormDataEntryValue | null): Promise<number | null> {
-	return isPublicId(raw) ? resolveTemplateId(raw) : null;
+	if (!isPublicId(raw)) return null;
+	const [row] = await db
+		.select({ id: templates.id })
+		.from(templates)
+		.where(and(eq(templates.publicId, raw), isNull(templates.removedAt)))
+		.limit(1);
+	return row?.id ?? null;
 }
 
 export type CreateMediaOptions = {

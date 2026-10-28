@@ -1,7 +1,7 @@
 import { canSeeUnderReview } from '../../../lib/server/moderation';
 import { error, json } from '@sveltejs/kit';
 import { InvalidCursorError, getFeedPage, parseSort, parseTag } from '../../../lib/server/feed';
-import { isPublicId, resolveUserId } from '../../../lib/server/public-ids';
+import { resolveUserId } from '../../../lib/server/public-ids';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url, locals }) => {
@@ -11,7 +11,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	const uploaderParam = url.searchParams.get('uploader');
 	let uploaderId: number | undefined;
 	if (uploaderParam !== null) {
-		if (!isPublicId(uploaderParam)) error(400, 'Invalid uploader');
+		// an invalid shape resolves to null as well: 404, like every other malformed public id
 		const resolved = await resolveUserId(uploaderParam);
 		if (resolved === null) error(404, 'Not found');
 		uploaderId = resolved;

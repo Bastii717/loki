@@ -5,7 +5,7 @@ import { db } from '../../../lib/server/db';
 import { media } from '../../../lib/server/db/schema';
 import { listComments } from '../../../lib/server/comments';
 import { getFeedItem } from '../../../lib/server/feed';
-import { isPublicId, publicIdOfUser } from '../../../lib/server/public-ids';
+import { isPublicId } from '../../../lib/server/public-ids';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
@@ -25,17 +25,16 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.from(media)
 		.where(eq(media.publicId, params.pid));
 	if (!row) error(404, 'Meme not found');
-	const [item, comments, viewerId] = await Promise.all([
+	const [item, comments] = await Promise.all([
 		getFeedItem(user.id, canModerate, params.pid),
-		listComments(row.id, canModerate),
-		publicIdOfUser(user.id)
+		listComments(row.id, canModerate)
 	]);
-	if (!item || viewerId === null) error(404, 'Meme not found');
+	if (!item) error(404, 'Meme not found');
 	const canManage = row.uploaderId === user.id || canModerate;
 	return {
 		flags: canManage ? { nsfw: row.nsfw, spoiler: row.spoiler } : null,
 		item,
 		comments,
-		viewer: { id: viewerId, canModerate }
+		viewer: { id: user.publicId, canModerate }
 	};
 };
