@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../db';
-import { media, mediaTags, tags } from '../db/schema';
+import { media, mediaTags, tags, templates } from '../db/schema';
 import { resetDb, setupDb, testUser } from '../db/test-utils';
 import { env } from '../env';
 import { deleteObjects, s3Client } from '../storage';
@@ -108,6 +108,37 @@ describe('createMedia', () => {
 			.innerJoin(tags, eq(tags.id, mediaTags.tagId))
 			.where(eq(mediaTags.mediaId, id));
 		expect(rows.map((r) => r.name).sort()).toEqual(['kaffee', 'montag']);
+	});
+
+	it('stores the template id, or null without one', async () => {
+		const user = await testUser();
+		const [tpl] = await db
+			.insert(templates)
+			.values({
+				name: 'T',
+				objectKey: 'templates/x.webp',
+				thumbKey: 'templates/x-320.webp',
+				width: 10,
+				height: 10
+			})
+			.returning({ id: templates.id });
+		const make = async (templateId?: number | null) => {
+			const { id } = await createMedia({
+				uploader: asUploader(user),
+				file: png,
+				title: 'T',
+				tagNames: [],
+				nsfw: false,
+				spoiler: false,
+				templateId
+			});
+			const [row] = await db.select().from(media).where(eq(media.id, id));
+			created.push(row.objectKey, row.thumbKey);
+			return row.templateId;
+		};
+		expect(await make(tpl.id)).toBe(tpl.id);
+		expect(await make(null)).toBeNull();
+		expect(await make()).toBeNull();
 	});
 
 	it('rejects a PDF with UploadError(type) and leaves the bucket untouched', async () => {

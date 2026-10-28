@@ -1,5 +1,8 @@
 import type { RequestEvent } from '@sveltejs/kit';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { db } from '../../lib/server/db';
+import { templates } from '../../lib/server/db/schema';
+import { resetDb, setupDb } from '../../lib/server/db/test-utils';
 import { env } from '../../lib/server/env';
 import { UploadError } from '../../lib/server/media/create';
 import { render } from 'svelte/server';
@@ -7,10 +10,16 @@ import { actions } from './+page.server';
 import Page from './+page.svelte';
 
 // A plain function instead of vi.fn(): vitest's result tracking would flag the deliberate rejections.
-const stub = vi.hoisted(() => ({ createMedia: async (): Promise<void> => {} }));
+const stub = vi.hoisted(() => ({
+	calls: [] as Record<string, unknown>[],
+	createMedia: async (): Promise<void> => {}
+}));
 vi.mock('../../lib/server/media/create', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../../lib/server/media/create')>()),
-	createMedia: () => stub.createMedia()
+	createMedia: (opts: Record<string, unknown>) => {
+		stub.calls.push(opts);
+		return stub.createMedia();
+	}
 }));
 
 const rejectWith = (error: Error) => {
@@ -19,9 +28,10 @@ const rejectWith = (error: Error) => {
 	};
 };
 
-async function submit(file?: File) {
+async function submit(file?: File, fields: Record<string, string> = {}) {
 	const body = new FormData();
 	if (file) body.set('file', file);
+	for (const [key, value] of Object.entries(fields)) body.set(key, value);
 	const event = {
 		request: new Request('https://loki.test/upload', { method: 'POST', body }),
 		locals: { user: { id: 1 } }
@@ -56,6 +66,57 @@ describe('upload action messages', () => {
 		const res = await submit(new File(['x'], 'x.png'));
 		expect(res.status).toBe(500);
 		expect(res.data.message).toBe('Upload failed');
+	});
+});
+
+describe('upload action template provenance', () => {
+	beforeAll(setupDb);
+	beforeEach(async () => {
+		await resetDb();
+		stub.calls.length = 0;
+		stub.createMedia = async () => {};
+	});
+
+	const insertTemplate = async (removedAt: Date | null = null) => {
+		const [row] = await db
+			.insert(templates)
+			.values({
+				name: 'T',
+				objectKey: 'templates/x.webp',
+				thumbKey: 'templates/x-320.webp',
+				width: 10,
+				height: 10,
+				removedAt
+			})
+			.returning({ id: templates.id });
+		return row.id;
+	};
+
+	const posted = async (templateId?: string) => {
+		const fields: Record<string, string> = templateId === undefined ? {} : { templateId };
+		await expect(submit(new File(['x'], 'x.png'), fields)).rejects.toMatchObject({
+			status: 303,
+			location: '/'
+		});
+		expect(stub.calls).toHaveLength(1);
+		return stub.calls[0].templateId;
+	};
+
+	it('passes the id of an existing template to createMedia', async () => {
+		const id = await insertTemplate();
+		expect(await posted(String(id))).toBe(id);
+	});
+
+	it('ignores a removed, unknown or malformed template id', async () => {
+		const removed = await insertTemplate(new Date());
+		for (const raw of [String(removed), '999999', 'abc', '-1', '0', '2147483648', '1e3', '']) {
+			stub.calls.length = 0;
+			expect(await posted(raw), raw).toBeNull();
+		}
+	});
+
+	it('passes null when no template id was sent', async () => {
+		expect(await posted()).toBeNull();
 	});
 });
 
