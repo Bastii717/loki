@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+	import Trophy from 'lucide-svelte/icons/trophy';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import FeedList from '#lib/components/FeedList.svelte';
 	import RoleBadge from '#lib/components/RoleBadge.svelte';
@@ -30,7 +32,21 @@
 			<dt>Memes</dt>
 			<dd>{data.memeCount}</dd>
 		</div>
+		<div>
+			<dt>Awards</dt>
+			<dd>{data.awards.length}</dd>
+		</div>
 	</dl>
+
+	{#if data.awards.length > 0}
+		<p class="award-chips">
+			{#each data.awards as award (award.month)}
+				<a class="award-chip" href="{resolve('/awards')}?from={award.month}#{award.month}"
+					><Trophy size={12} aria-hidden="true" /> {formatMonthYear(award.month)}</a
+				>
+			{/each}
+		</p>
+	{/if}
 
 	{#key member.id}
 		<FeedList
@@ -83,6 +99,9 @@
 	}
 
 	.counts {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: 8px;
 		margin: 16px 0;
 	}
 
@@ -91,6 +110,27 @@
 		border-radius: var(--radius);
 		background: var(--surface);
 		text-align: center;
+	}
+
+	.award-chips {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 6px;
+		margin: -4px 0 16px;
+	}
+
+	.award-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		min-height: 28px;
+		padding: 0 10px;
+		border-radius: var(--radius-pill);
+		background: var(--accent-soft);
+		color: var(--accent-soft-text);
+		font-size: 12px;
+		font-weight: 600;
 	}
 
 	dt {

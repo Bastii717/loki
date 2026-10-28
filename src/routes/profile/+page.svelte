@@ -9,9 +9,11 @@
 	import LogOut from 'lucide-svelte/icons/log-out';
 	import Shield from 'lucide-svelte/icons/shield';
 	import Star from 'lucide-svelte/icons/star';
+	import Trophy from 'lucide-svelte/icons/trophy';
 	import UserPen from 'lucide-svelte/icons/user-pen';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import RoleBadge from '#lib/components/RoleBadge.svelte';
+	import { formatMonthYear } from '../../lib/moderation-labels';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -29,6 +31,7 @@
 		{ href: '/profile/memes', label: 'My memes', icon: Images },
 		{ href: '/profile/favorites', label: 'Favorites', icon: Star },
 		{ href: '/profile/stats', label: 'Stats', icon: ChartColumn },
+		{ href: '/awards', label: 'Awards', icon: Trophy },
 		{ href: '/rules', label: 'Rules', icon: BookOpen },
 		{ href: '/faq', label: 'FAQ', icon: CircleQuestionMark }
 	] as const;
@@ -68,7 +71,21 @@
 			<dt>Comments</dt>
 			<dd>{data.counts.comments}</dd>
 		</div>
+		<div>
+			<dt>Awards</dt>
+			<dd>{data.awards.length}</dd>
+		</div>
 	</dl>
+
+	{#if data.awards.length > 0}
+		<p class="award-chips">
+			{#each data.awards as award (award.month)}
+				<a class="award-chip" href="{resolve('/awards')}?from={award.month}#{award.month}"
+					><Trophy size={12} aria-hidden="true" /> {formatMonthYear(award.month)}</a
+				>
+			{/each}
+		</p>
+	{/if}
 
 	<nav aria-label="Profile">
 		<ul>
@@ -155,7 +172,7 @@
 
 	.counts {
 		display: grid;
-		grid-template-columns: repeat(3, 1fr);
+		grid-template-columns: repeat(4, 1fr);
 		gap: 8px;
 		margin: 16px 0;
 	}
@@ -165,6 +182,27 @@
 		border-radius: var(--radius);
 		background: var(--surface);
 		text-align: center;
+	}
+
+	.award-chips {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 6px;
+		margin: -4px 0 16px;
+	}
+
+	.award-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		min-height: 28px;
+		padding: 0 10px;
+		border-radius: var(--radius-pill);
+		background: var(--accent-soft);
+		color: var(--accent-soft-text);
+		font-size: 12px;
+		font-weight: 600;
 	}
 
 	dt {

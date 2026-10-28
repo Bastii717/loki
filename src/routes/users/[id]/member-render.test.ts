@@ -46,7 +46,14 @@ const feedItem = (id: number) => ({
 const renderPage = (over: Record<string, unknown> = {}, memberOver: Record<string, unknown> = {}) =>
 	render(Page as never, {
 		props: {
-			data: { member: member(memberOver), memeCount: 2, items: [], nextCursor: null, ...over },
+			data: {
+				member: member(memberOver),
+				memeCount: 2,
+				awards: [],
+				items: [],
+				nextCursor: null,
+				...over
+			},
 			form: null
 		} as never
 	});
@@ -68,6 +75,21 @@ describe('member page', () => {
 		expect(body).toContain('Member since Oct 2026');
 		expect(body).toMatch(/<dt[^>]*>Memes<\/dt>\s*<dd[^>]*>2<\/dd>/);
 		expect(body).toMatch(/<img class="avatar[^"]*" src="\/media\/avatars\/u7\/x-64\.webp"/);
+	});
+
+	it('shows the awards count after Memes, without chips when there are none', () => {
+		const { body } = renderPage();
+		expect(body).toMatch(/<dt[^>]*>Memes<\/dt>[\s\S]*<dt[^>]*>Awards<\/dt>\s*<dd[^>]*>0<\/dd>/);
+		expect(body).not.toContain('award-chip');
+	});
+
+	it('shows a chip per award linking to its month on the awards page', () => {
+		const { body } = renderPage({ awards: [{ month: '2026-10' }, { month: '2026-08' }] });
+		expect(body).toMatch(/<dt[^>]*>Awards<\/dt>\s*<dd[^>]*>2<\/dd>/);
+		expect(body).toMatch(
+			/<a[^>]*class="award-chip[^"]*"[^>]*href="\/awards\?from=2026-10#2026-10"[^>]*>[\s\S]*?lucide-trophy[\s\S]*?Oct 2026/
+		);
+		expect(body).toMatch(/href="\/awards\?from=2026-08#2026-08"[^>]*>[\s\S]*?Aug 2026/);
 	});
 
 	it('renders no username line and no motto when they are absent', () => {

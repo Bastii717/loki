@@ -118,6 +118,12 @@
 		{/each}
 	</nav>
 
+	{#if data.sort === 'hof'}
+		<a href={resolve('/awards')} class="awards-link"
+			><Trophy size={14} aria-hidden="true" /> Meme of the Month →</a
+		>
+	{/if}
+
 	{#if data.tag}
 		<p class="active-tag">
 			<span class="chip tag">
@@ -236,6 +242,16 @@
 	.sort[aria-current='true'] {
 		background: var(--accent);
 		color: var(--accent-text);
+		font-weight: 600;
+	}
+
+	.awards-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		margin: 0 0 10px;
+		color: var(--accent-soft-text);
+		font-size: 14px;
 		font-weight: 600;
 	}
 
