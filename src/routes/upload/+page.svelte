@@ -20,6 +20,8 @@
 	let submitting = $state(false);
 
 	let title = $state('');
+	// the template a generator hand-over was made from (empty for a plain upload)
+	let templateId = $state('');
 	let nsfw = $state(false);
 	let spoiler = $state(false);
 
@@ -81,6 +83,9 @@
 			const blob = await res.blob();
 			const name = decodeURIComponent(res.headers.get('x-shared-name') ?? 'shared');
 			takeFile(new File([blob], name, { type: blob.type }));
+			const sharedTitle = res.headers.get('x-shared-title');
+			if (sharedTitle && title.trim() === '') title = decodeURIComponent(sharedTitle);
+			templateId = res.headers.get('x-shared-template') ?? '';
 		} catch {
 			// the user can still pick the file manually
 		}
@@ -184,6 +189,10 @@
 			<p class="error" role="alert">{lockNote || form?.message}</p>
 		{/if}
 
+		<a href={resolve('/create')} class="generator-link"
+			>Make a meme from a template <span aria-hidden="true">→</span></a
+		>
+
 		<label
 			class="drop"
 			class:dragging
@@ -211,6 +220,8 @@
 			/>
 		</label>
 		{#if fileName}<p class="hint">{fileName}</p>{/if}
+
+		<input type="hidden" name="templateId" value={templateId} />
 
 		<label class="field">
 			<span>Title</span>
@@ -312,6 +323,15 @@
 		padding: 0.75rem;
 		border-radius: var(--radius);
 		background: color-mix(in srgb, var(--down) 18%, transparent);
+	}
+	.generator-link {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		min-height: 44px;
+		color: var(--accent);
+		font-weight: 600;
+		text-decoration: none;
 	}
 	.hint {
 		margin: -0.5rem 0 0;

@@ -136,3 +136,22 @@ describe('MemeDetail award badge', () => {
 		expect(html(feedItem(), [])).not.toContain('Meme of the Month');
 	});
 });
+
+describe('MemeDetail remix link', () => {
+	it('links an image meme to the generator', () => {
+		const body = html(feedItem({ id: 42 }), []);
+		const link = body.match(/<a\b[^>]*href="\/create\?meme=42"[^>]*>[\s\S]*?<\/a>/);
+		expect(link, 'remix link rendered').not.toBeNull();
+		expect(link![0]).toContain('Remix');
+	});
+
+	it('is absent for a gif and a video', () => {
+		expect(html(feedItem({ kind: 'gif' }), [])).not.toContain('/create?meme=');
+		expect(html(feedItem({ kind: 'video' }), [])).not.toContain('/create?meme=');
+	});
+
+	it('is absent when the meme is withheld from the viewer', () => {
+		const body = html(feedItem({ mediaUrl: null, underReview: true }), []);
+		expect(body).not.toContain('/create?meme=');
+	});
+});

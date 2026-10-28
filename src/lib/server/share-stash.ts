@@ -10,7 +10,16 @@ import { sniffMedia } from './media/process';
 
 export const SHARE_TTL_MS = 2 * 60 * 1000;
 
-export type SharedFile = { name: string; type: string; data: Buffer };
+export const MAX_SHARED_TITLE = 120;
+
+/** `title` and `templateId` ride along from the meme generator's hand-over to the upload form. */
+export type SharedFile = {
+	name: string;
+	type: string;
+	data: Buffer;
+	title?: string;
+	templateId?: number;
+};
 
 const stash = new Map<number, SharedFile & { expires: number }>();
 
@@ -29,7 +38,11 @@ export function putShared(userId: number, file: SharedFile): void {
 export function peekShared(userId: number): SharedFile | null {
 	sweep(Date.now());
 	const entry = stash.get(userId);
-	return entry ? { name: entry.name, type: entry.type, data: entry.data } : null;
+	if (!entry) return null;
+	const file: SharedFile = { name: entry.name, type: entry.type, data: entry.data };
+	if (entry.title !== undefined) file.title = entry.title;
+	if (entry.templateId !== undefined) file.templateId = entry.templateId;
+	return file;
 }
 
 /** Returns and removes the user's stashed file. */
@@ -46,10 +59,20 @@ export function takeShared(userId: number): SharedFile | null {
  */
 export async function stashSharedFile(
 	userId: number,
-	file: { name: string; data: Buffer }
+	file: { name: string; data: Buffer; title?: string; templateId?: number }
 ): Promise<boolean> {
 	const sniffed = await sniffMedia(file.data);
 	if (!sniffed) return false;
-	putShared(userId, { name: file.name, type: sniffed.mime, data: file.data });
+	const shared: SharedFile = { name: file.name, type: sniffed.mime, data: file.data };
+	const title = file.title?.trim().slice(0, MAX_SHARED_TITLE).trim();
+	if (title) shared.title = title;
+	if (
+		file.templateId !== undefined &&
+		Number.isSafeInteger(file.templateId) &&
+		file.templateId > 0
+	) {
+		shared.templateId = file.templateId;
+	}
+	putShared(userId, shared);
 	return true;
 }

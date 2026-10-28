@@ -15,6 +15,7 @@
 	import Star from 'lucide-svelte/icons/star';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
+	import WandSparkles from 'lucide-svelte/icons/wand-sparkles';
 	import { apiErrorMessage } from '../api-error';
 	import { lockMessage, refreshStatus, useStatus } from '../status-context';
 	import { relativeTime } from '../time';
@@ -456,6 +457,13 @@
 			</div>
 		</div>
 		{#if reactionError}<p class="error" role="alert">{reactionError}</p>{/if}
+		{#if item.kind === 'image' && !withheld}
+			<p class="remix-row">
+				<a href="{resolve('/create')}?meme={item.id}" class="remix"
+					><WandSparkles size={18} aria-hidden="true" /> Remix</a
+				>
+			</p>
+		{/if}
 		{#if item.tags.length > 0}
 			<ul class="tags">
 				{#each item.tags as tag (tag)}
@@ -678,6 +686,27 @@
 		color: var(--text-muted);
 		font-size: 12px;
 		cursor: pointer;
+	}
+
+	.remix-row {
+		margin: 0;
+	}
+
+	.remix {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		min-height: 44px;
+		padding: 0 14px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-pill);
+		color: inherit;
+		font-size: 14px;
+		text-decoration: none;
+	}
+
+	.remix:hover {
+		background: var(--accent-soft);
 	}
 
 	.views {

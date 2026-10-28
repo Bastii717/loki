@@ -15,6 +15,14 @@ describe('share stash', () => {
 		expect(takeShared(1)).toBeNull();
 	});
 
+	it('carries the optional title and template id through put, peek and take', () => {
+		const withMeta = { ...file, title: 'Montag', templateId: 4 };
+		putShared(3, withMeta);
+		expect(peekShared(3)).toEqual(withMeta);
+		expect(takeShared(3)).toEqual(withMeta);
+		expect(takeShared(3)).toBeNull();
+	});
+
 	it('expires after the TTL', () => {
 		putShared(1, file);
 		vi.advanceTimersByTime(SHARE_TTL_MS + 1);
@@ -39,6 +47,39 @@ describe('stashSharedFile', () => {
 		);
 		expect(await stashSharedFile(8, { name: 'x.png', data: svg })).toBe(false);
 		expect(peekShared(8)).toBeNull();
+	});
+
+	it('stores a trimmed title (max 120 chars) and a positive integer template id', async () => {
+		const png = await sharp({
+			create: { width: 2, height: 2, channels: 3, background: '#fff' }
+		})
+			.png()
+			.toBuffer();
+		const title = `  ${'x'.repeat(200)}  `;
+		expect(await stashSharedFile(10, { name: 'a.png', data: png, title, templateId: 12 })).toBe(
+			true
+		);
+		expect(peekShared(10)).toMatchObject({ title: 'x'.repeat(120), templateId: 12 });
+	});
+
+	it('drops an empty title and an invalid template id', async () => {
+		const png = await sharp({
+			create: { width: 2, height: 2, channels: 3, background: '#fff' }
+		})
+			.png()
+			.toBuffer();
+		for (const templateId of [0, -3, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1]) {
+			const stashed = await stashSharedFile(11, {
+				name: 'a.png',
+				data: png,
+				title: '   ',
+				templateId
+			});
+			expect(stashed).toBe(true);
+			const stored = takeShared(11)!;
+			expect(stored.title).toBeUndefined();
+			expect(stored.templateId).toBeUndefined();
+		}
 	});
 
 	it('rejects other non-media bytes', async () => {
