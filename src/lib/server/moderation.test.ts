@@ -856,4 +856,57 @@ describe('moderation notices', () => {
 			expect((await noticesOf(author.id)).map((n) => n.kind)).toEqual(['content_flagged']);
 		});
 	});
+
+	describe('timeouts', () => {
+		it('setTimeout_ tells the member with the stored until and the trimmed reason', async () => {
+			const mod = await userWithRole('moderator');
+			const u = await userWithRole();
+			await setTimeout_(mod, u.id, 3, '  Too loud  ');
+			const [row] = await db.select().from(timeouts).where(eq(timeouts.userId, u.id));
+			const [notice] = await noticesOf(u.id);
+			expect(notice).toMatchObject({
+				kind: 'timeout_set',
+				actorId: null,
+				contentType: null,
+				mediaId: null,
+				detail: `${row.until.toISOString()}:Too loud`
+			});
+			expect(await noticesOf(mod.id)).toHaveLength(0);
+		});
+
+		it('replacing an active timeout writes one more timeout_set and no timeout_lifted', async () => {
+			const mod = await userWithRole('moderator');
+			const u = await userWithRole();
+			await setTimeout_(mod, u.id, 3, 'first');
+			await setTimeout_(mod, u.id, 5, 'second');
+			const rows = await noticesOf(u.id);
+			expect(rows.map((n) => n.kind)).toEqual(['timeout_set', 'timeout_set']);
+			expect(rows[1].detail.endsWith(':second')).toBe(true);
+		});
+
+		it('a rejected setTimeout_ leaves no notice', async () => {
+			const mod = await userWithRole('moderator');
+			const admin = await userWithRole('admin');
+			await expectTimeoutError(setTimeout_(mod, admin.id, 3, 'x'), 'forbidden');
+			await expectTimeoutError(setTimeout_(mod, 99999, 3, 'x'), 'notfound');
+			expect(await db.select().from(notifications)).toHaveLength(0);
+		});
+
+		it('liftTimeout tells the member', async () => {
+			const mod = await userWithRole('moderator');
+			const u = await userWithRole();
+			await setTimeout_(mod, u.id, 3, 'x');
+			await liftTimeout(mod, u.id);
+			const rows = await noticesOf(u.id);
+			expect(rows.map((n) => n.kind)).toEqual(['timeout_set', 'timeout_lifted']);
+			expect(rows[1]).toMatchObject({ actorId: null, detail: '' });
+		});
+
+		it('a failed liftTimeout (nothing active) writes no notice', async () => {
+			const mod = await userWithRole('moderator');
+			const u = await userWithRole();
+			await expectTimeoutError(liftTimeout(mod, u.id), 'notfound');
+			expect(await db.select().from(notifications)).toHaveLength(0);
+		});
+	});
 });

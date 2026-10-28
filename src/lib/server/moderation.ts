@@ -221,6 +221,12 @@ export async function setTimeout_(
 			`${days} ${days === 1 ? 'day' : 'days'}: ${trimmed}`,
 			tx
 		);
+		await notify(tx, {
+			userId,
+			kind: 'timeout_set',
+			actorId: actor.id,
+			detail: `${until.toISOString()}:${trimmed}`
+		});
 	});
 }
 
@@ -244,6 +250,7 @@ export async function liftTimeout(actor: SessionUser, userId: number): Promise<v
 			.returning({ id: timeouts.id });
 		if (lifted.length === 0) throw new TimeoutActionError('notfound');
 		await audit(actor.id, AUDIT_ACTIONS.timeoutLifted, 'user', userId, '', tx);
+		await notify(tx, { userId, kind: 'timeout_lifted', actorId: actor.id });
 	});
 }
 

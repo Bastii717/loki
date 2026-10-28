@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { formatDate } from '../moderation-labels';
 import type { SessionUser } from './auth/session';
 import { db } from './db';
-import { auditLog, users } from './db/schema';
+import { auditLog, notifications, users } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import { TimeoutActiveError } from './moderation';
 import { timeOut } from './moderation-test-utils';
@@ -35,6 +35,10 @@ async function make(role: SessionUser['role'] = 'member', username?: string): Pr
 
 async function auditRows() {
 	return db.select().from(auditLog).orderBy(auditLog.id);
+}
+
+async function noticesOf(userId: number) {
+	return db.select().from(notifications).where(eq(notifications.userId, userId));
 }
 
 describe('display name format', () => {
@@ -401,6 +405,70 @@ describe('motto', () => {
 			targetId: m.id,
 			detail: 'by=admin'
 		});
+	});
+});
+
+describe('profile notices', () => {
+	it('an admin renaming a member tells them the stored, normalised name', async () => {
+		const admin = await make('admin');
+		const m = await make();
+		await setDisplayName(admin, m.id, '  Ba\u0308sti  ', NOW);
+		const rows = await noticesOf(m.id);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({ kind: 'name_changed', actorId: null, detail: 'B\u00e4sti' });
+		expect(await noticesOf(admin.id)).toHaveLength(0);
+	});
+
+	it('renaming yourself writes nothing, admin or not', async () => {
+		const admin = await make('admin');
+		const m = await make();
+		await setDisplayName(m, m.id, 'ronja', NOW);
+		await setDisplayName(admin, admin.id, 'chief', NOW);
+		expect(await db.select().from(notifications)).toHaveLength(0);
+	});
+
+	it('a rejected rename writes nothing', async () => {
+		const admin = await make('admin');
+		const m = await make();
+		const other = await make();
+		await setDisplayName(other, other.id, 'ronja', NOW);
+		await expect(setDisplayName(admin, m.id, 'ronja', NOW)).rejects.toThrow(ProfileInputError);
+		expect(await db.select().from(notifications)).toHaveLength(0);
+	});
+
+	it('resetDisplayName tells the member', async () => {
+		const admin = await make('admin');
+		const m = await make();
+		await setDisplayName(m, m.id, 'ronja', NOW);
+		await resetDisplayName(admin, m.id);
+		const rows = await noticesOf(m.id);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({ kind: 'name_reset', actorId: null, detail: '' });
+	});
+
+	it('an admin resetting their own name writes nothing', async () => {
+		const admin = await make('admin');
+		await resetDisplayName(admin, admin.id);
+		expect(await db.select().from(notifications)).toHaveLength(0);
+	});
+
+	it('an admin clearing a motto tells the member', async () => {
+		const admin = await make('admin');
+		const m = await make();
+		await setMotto(m, 'carpe diem');
+		await clearMotto(admin, m.id);
+		const rows = await noticesOf(m.id);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({ kind: 'motto_cleared', actorId: null, detail: '' });
+	});
+
+	it('clearing an empty motto, or your own, writes nothing', async () => {
+		const admin = await make('admin');
+		const m = await make();
+		await clearMotto(admin, m.id);
+		await setMotto(m, 'carpe diem');
+		await clearMotto(m, m.id);
+		expect(await db.select().from(notifications)).toHaveLength(0);
 	});
 });
 
