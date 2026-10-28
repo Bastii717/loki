@@ -176,6 +176,21 @@ describe('search page load', () => {
 		]);
 	});
 
+	it('gives members no username in the people section, moderators the username', async () => {
+		const member = await userWithSession();
+		const moderator = await userWithSession('moderator');
+		const lena = await userWithSession();
+		await db.execute(sql`UPDATE users SET display_name = 'Lena K' WHERE id = ${lena.user.id}`);
+		const people = (data: Data) =>
+			(data.sections.people as { items: { id: number; username: string | null }[] }).items;
+		const asMember = people(await loadFor(member, '?q=lena&type=people'));
+		expect(asMember).toEqual([expect.objectContaining({ id: lena.user.id, username: null })]);
+		const asModerator = people(await loadFor(moderator, '?q=lena&type=people'));
+		expect(asModerator).toEqual([
+			expect.objectContaining({ id: lena.user.id, username: lena.user.username })
+		]);
+	});
+
 	it('hides a meme under review from members but not from moderators', async () => {
 		const member = await userWithSession();
 		const moderator = await userWithSession('moderator');

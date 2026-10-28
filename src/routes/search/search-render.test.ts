@@ -92,7 +92,7 @@ describe('search page', () => {
 			expect(input![0]).toContain('type="search"');
 			expect(input![0]).toContain('placeholder="Memes, #tags, @people, comments, quotes"');
 			expect(body).toMatch(
-				/<button[^>]*type="submit"[^>]*aria-label="Search"[^>]*>[\s\S]*?lucide-search/
+				/<button[^>]*type="submit"[^>]*aria-label="Submit search"[^>]*>[\s\S]*?lucide-search/
 			);
 		});
 
@@ -243,12 +243,40 @@ describe('search page', () => {
 			expect(body).not.toMatch(/<h2/);
 		});
 
-		it('links Show more to the next page when the page is full', () => {
+		it('links Show more to the next page when more results are left', () => {
 			const body = html(ran({ memes: { items: memes(30), total: 45 } }, { type: 'memes' }));
 			const more = links(body, 'Show more');
 			expect(more).toHaveLength(1);
 			expect(more[0]).toContain('href="/search?q=standup&amp;type=memes&amp;page=2"');
 			expect(body).not.toContain('Show all');
+		});
+
+		it('has no Show more when the results end exactly on a full page', () => {
+			const body = html(ran({ memes: { items: memes(30), total: 30 } }, { type: 'memes' }));
+			expect(body).not.toContain('Show more');
+			const last = html(
+				ran({ memes: { items: memes(30), total: 60 } }, { type: 'memes', page: 2 })
+			);
+			expect(last).not.toContain('Show more');
+		});
+
+		it.each([
+			['people', { people: { items: [person(2, 'Lena K')], total: 31 } }],
+			['comments', { comments: { items: [comment()], total: 31 } }],
+			[
+				'quotes',
+				{
+					quotes: {
+						items: [
+							{ id: 1, text: 'No standup', author: 'Boss', createdAt: '2026-10-28T10:00:00.000Z' }
+						],
+						total: 31
+					}
+				}
+			]
+		])('decides Show more by the total in the %s view', (type, sections) => {
+			const body = html(ran(sections, { type }));
+			expect(links(body, 'Show more')[0]).toContain(`type=${type}&amp;page=2`);
 		});
 
 		it('counts on from the current page', () => {

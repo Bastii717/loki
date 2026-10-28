@@ -51,8 +51,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 				? 'people'
 				: parseType(url.searchParams.get('type'));
 	const page = parsePage(url.searchParams.get('page'));
-	const sections: Sections = {};
-	if (!parsed) return { q, text, scope, type, page, tooShort, sections };
+	if (!parsed) return { q, text, scope, type, page, tooShort, sections: {} as Sections };
 
 	const revealAll = canSeeUnderReview(user);
 	const all = type === 'all';
@@ -61,16 +60,20 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		: { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE };
 	const wants = (t: SearchType) => all || type === t;
 
-	await Promise.all([
-		wants('memes') &&
-			searchMemes(user.id, revealAll, text, paging).then((r) => void (sections.memes = r)),
-		wants('tags') &&
-			searchTags(revealAll, text, paging.limit).then((r) => void (sections.tags = r)),
-		wants('people') &&
-			searchPeople(revealAll, text, paging).then((r) => void (sections.people = r)),
-		wants('comments') &&
-			searchComments(revealAll, text, paging).then((r) => void (sections.comments = r)),
-		wants('quotes') && searchQuotes(revealAll, text, paging).then((r) => void (sections.quotes = r))
+	const [memes, tags, people, comments, quotes] = await Promise.all([
+		wants('memes') ? searchMemes(user.id, revealAll, text, paging) : undefined,
+		wants('tags') ? searchTags(revealAll, text, paging.limit) : undefined,
+		wants('people') ? searchPeople(revealAll, text, paging) : undefined,
+		wants('comments') ? searchComments(revealAll, text, paging) : undefined,
+		wants('quotes') ? searchQuotes(revealAll, text, paging) : undefined
 	]);
+	// a section is present only when it was queried
+	const sections: Sections = {
+		...(memes && { memes }),
+		...(tags && { tags }),
+		...(people && { people }),
+		...(comments && { comments }),
+		...(quotes && { quotes })
+	};
 	return { q, text, scope, type, page, tooShort, sections };
 };

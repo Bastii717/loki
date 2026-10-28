@@ -48,10 +48,10 @@
 	<title>Search · Loki</title>
 </svelte:head>
 
-<!-- All view: "Show all <total>" when a section has more than the preview; typed view: "Show more" while pages are full. -->
-{#snippet pager(type: SearchType, count: number, total: number | null)}
+<!-- All view: "Show all <total>" when a section has more than the preview; typed view: "Show more" while results are left beyond this page. -->
+{#snippet pager(type: SearchType, total: number | null)}
 	{#if typed}
-		{#if type !== 'tags' && count === PAGE_SIZE}
+		{#if type !== 'tags' && total !== null && total > data.page * PAGE_SIZE}
 			<div class="pager">
 				<a href="{resolve('/search')}{query(type, data.page + 1)}">Show more</a>
 			</div>
@@ -77,7 +77,7 @@
 			autocomplete="off"
 			autofocus={!data.q}
 		/>
-		<button type="submit" class="submit" aria-label="Search"
+		<button type="submit" class="submit" aria-label="Submit search"
 			><Search size={20} aria-hidden="true" /></button
 		>
 	</form>
@@ -110,7 +110,7 @@
 						<MemeCard {item} feedIds={memeIds} />
 					{/each}
 				</div>
-				{@render pager('memes', sections.memes.items.length, sections.memes.total)}
+				{@render pager('memes', sections.memes.total)}
 			</section>
 		{/if}
 
@@ -143,7 +143,7 @@
 						</li>
 					{/each}
 				</ul>
-				{@render pager('people', sections.people.items.length, sections.people.total)}
+				{@render pager('people', sections.people.total)}
 			</section>
 		{/if}
 
@@ -172,7 +172,7 @@
 						</li>
 					{/each}
 				</ul>
-				{@render pager('comments', sections.comments.items.length, sections.comments.total)}
+				{@render pager('comments', sections.comments.total)}
 			</section>
 		{/if}
 
@@ -189,7 +189,7 @@
 						</li>
 					{/each}
 				</ul>
-				{@render pager('quotes', sections.quotes.items.length, sections.quotes.total)}
+				{@render pager('quotes', sections.quotes.total)}
 			</section>
 		{/if}
 	{/if}
