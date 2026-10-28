@@ -1,8 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import sharp from 'sharp';
 import { resetDb, setupDb } from '../../lib/server/db/test-utils';
 import { userWithSession } from '../../lib/server/moderation-test-utils';
 import { resetRateLimits } from '../../lib/server/rate-limit';
-import { putShared } from '../../lib/server/share-stash';
+import { putShared, stashSharedFile } from '../../lib/server/share-stash';
 import { callRoute } from '../../lib/server/test-request';
 import { GET } from './file/+server';
 
@@ -37,5 +38,32 @@ describe('GET /share/file hand-over headers', () => {
 		expect(response.status).toBe(200);
 		expect(response.headers.has('x-shared-title')).toBe(false);
 		expect(response.headers.has('x-shared-template')).toBe(false);
+	});
+});
+
+describe('GET /share/file with a malformed stored title', () => {
+	it('still answers with a decodable x-shared-title', async () => {
+		const { user, session } = await userWithSession();
+		// a lone high surrogate, as a UTF-16 slice through an emoji would leave
+		putShared(user.id, { ...png, title: `${'a'.repeat(119)}\ud83d` });
+		const { response } = await callRoute({ handler: GET, path: '/share/file', session });
+		expect(response.status).toBe(200);
+		const decoded = decodeURIComponent(response.headers.get('x-shared-title')!);
+		expect(decoded.isWellFormed()).toBe(true);
+		expect(decoded.startsWith('a'.repeat(119))).toBe(true);
+	});
+
+	it('keeps an emoji that fits intact through stash and response', async () => {
+		const { user, session } = await userWithSession();
+		const data = await sharp({ create: { width: 2, height: 2, channels: 3, background: '#fff' } })
+			.png()
+			.toBuffer();
+		expect(
+			await stashSharedFile(user.id, { name: 'a.png', data, title: `${'a'.repeat(119)}😀tail` })
+		).toBe(true);
+		const { response } = await callRoute({ handler: GET, path: '/share/file', session });
+		expect(decodeURIComponent(response.headers.get('x-shared-title')!)).toBe(
+			`${'a'.repeat(119)}😀`
+		);
 	});
 });

@@ -64,7 +64,10 @@ export async function stashSharedFile(
 	const sniffed = await sniffMedia(file.data);
 	if (!sniffed) return false;
 	const shared: SharedFile = { name: file.name, type: sniffed.mime, data: file.data };
-	const title = file.title?.trim().slice(0, MAX_SHARED_TITLE).trim();
+	// cut by code point: a UTF-16 slice could leave a lone surrogate from an emoji at the boundary
+	const title = file.title
+		? Array.from(file.title.trim()).slice(0, MAX_SHARED_TITLE).join('').trim()
+		: '';
 	if (title) shared.title = title;
 	if (
 		file.templateId !== undefined &&

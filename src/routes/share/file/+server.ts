@@ -14,7 +14,8 @@ export const GET: RequestHandler = ({ locals }) => {
 		'cache-control': 'no-store'
 	};
 	// meme generator hand-over: prefilled title and the template the meme was made from
-	if (file.title) headers['x-shared-title'] = encodeURIComponent(file.title);
+	// toWellFormed: encodeURIComponent throws on a lone surrogate, and the stash is already consumed
+	if (file.title) headers['x-shared-title'] = encodeURIComponent(file.title.toWellFormed());
 	if (file.templateId !== undefined) headers['x-shared-template'] = String(file.templateId);
 	return new Response(new Uint8Array(file.data), { headers });
 };
