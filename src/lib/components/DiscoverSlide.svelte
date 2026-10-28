@@ -19,6 +19,9 @@
 	let video = $state<HTMLVideoElement>();
 	// Under review and withheld by the server (members): panel only, no reveal. Mods keep the content.
 	const withheld = $derived(item.mediaUrl === null);
+	const userHref = $derived(
+		item.uploaderId === null ? null : resolve('/users/[id]', { id: String(item.uploaderId) })
+	);
 
 	// Only the active slide plays; the rest stay paused so swiping does not decode a pile of videos.
 	$effect(() => {
@@ -96,7 +99,9 @@
 	{#if item.uploader}
 		<span class="by"
 			>by <Avatar thumbKey={item.uploaderAvatar} name={item.uploader} size={20} />
-			<span class="name">{item.uploader}</span><RoleBadge role={item.uploaderRole} /></span
+			{#if userHref}<a href={userHref} class="name">{item.uploader}</a>{:else}<span class="name"
+					>{item.uploader}</span
+				>{/if}<RoleBadge role={item.uploaderRole} /></span
 		>
 	{/if}
 	{#if item.underReview && !withheld}<UnderReviewBadge />{/if}
@@ -231,6 +236,21 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		opacity: 1;
+	}
+
+	/* the caption lets taps fall through to the media; the name link is the one clickable part */
+	.caption a.name {
+		pointer-events: auto;
+	}
+
+	.caption a.name:hover {
+		text-decoration: underline;
+	}
+
+	.caption a.name:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+		border-radius: 2px;
 	}
 
 	.rail {

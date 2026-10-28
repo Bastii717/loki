@@ -21,6 +21,7 @@ function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
 		viewCount: 0,
 		blurred: null,
 		uploader: 'Hanna Lee',
+		uploaderId: 7,
 		uploaderRole: 'member',
 		uploaderAvatar: null,
 		mine: false,
@@ -36,7 +37,21 @@ function html(item: FeedItem): string {
 
 describe('DiscoverSlide uploader', () => {
 	it('shows the display name', () => {
-		expect(html(feedItem())).toMatch(/class="name[^"]*">Hanna Lee<\/span>/);
+		expect(html(feedItem())).toMatch(/class="name[^"]*"[^>]*>Hanna Lee<\/a>/);
+	});
+
+	it('links the name to the member page', () => {
+		const link = html(feedItem()).match(/<a\b[^>]*href="\/users\/7"[^>]*>[\s\S]*?<\/a>/);
+		expect(link, 'name link rendered').not.toBeNull();
+		expect(link![0]).toMatch(/class="name[^"]*"/);
+		expect(link![0]).toContain('>Hanna Lee</a>');
+		expect(link![0]).not.toContain('avatar');
+	});
+
+	it('renders a plain name when the uploader id is withheld', () => {
+		const body = html(feedItem({ uploaderId: null }));
+		expect(body).toMatch(/<span class="name[^"]*">Hanna Lee<\/span>/);
+		expect(body).not.toContain('/users/');
 	});
 
 	it('shows the avatar image when the uploader has one', () => {
@@ -66,7 +81,13 @@ describe('DiscoverSlide uploader', () => {
 
 	it('renders no uploader for hidden items', () => {
 		const body = html(
-			feedItem({ uploader: '', uploaderRole: 'member', uploaderAvatar: null, underReview: true })
+			feedItem({
+				uploader: '',
+				uploaderId: null,
+				uploaderRole: 'member',
+				uploaderAvatar: null,
+				underReview: true
+			})
 		);
 		expect(body).not.toContain('class="by');
 		expect(body).not.toContain('avatar letter');

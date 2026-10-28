@@ -68,6 +68,7 @@
 	const scoreLabel = $derived(score > 0 ? `+${score}` : String(score));
 	// Under review and withheld by the server (members): panel only, no reveal. Mods keep the content.
 	const withheld = $derived(item.mediaUrl === null);
+	const userHref = (id: number) => resolve('/users/[id]', { id: String(id) });
 
 	// While writes are locked the controls stay in the DOM (focusable, with the reason as title);
 	// activating one shows the reason in its usual error line instead of calling the API.
@@ -385,7 +386,11 @@
 					{#if item.uploader}
 						<span class="by"
 							>by <Avatar thumbKey={item.uploaderAvatar} name={item.uploader} size={24} />
-							<span class="name">{item.uploader}</span><RoleBadge role={item.uploaderRole} />
+							{#if item.uploaderId !== null}<a href={userHref(item.uploaderId)} class="name"
+									>{item.uploader}</a
+								>{:else}<span class="name">{item.uploader}</span>{/if}<RoleBadge
+								role={item.uploaderRole}
+							/>
 							<span aria-hidden="true">·</span></span
 						>
 					{/if}
@@ -486,7 +491,9 @@
 						<div class="head">
 							<span class="author">
 								<Avatar thumbKey={c.authorAvatar} name={c.author} size={24} />
-								<b>{c.author}</b><RoleBadge role={c.authorRole} />
+								<b><a href={userHref(c.authorId)} class="name">{c.author}</a></b><RoleBadge
+									role={c.authorRole}
+								/>
 							</span>
 							<time datetime={c.createdAt}>{relativeTime(c.createdAt)}</time>
 							<span class="actions">
@@ -646,6 +653,16 @@
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	a.name:hover {
+		text-decoration: underline;
+	}
+
+	a.name:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+		border-radius: 2px;
 	}
 
 	.star {

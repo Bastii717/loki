@@ -20,6 +20,7 @@ Planned and being built. The whole app is English: UI, code and docs.
 - **Seasonal themes**: Halloween, Advent and Carnival switch on by date; admins can force an event theme or turn seasons off.
 - **Profiles**: pick a display name (once every 30 days), an avatar and a motto; moderators and admins carry a badge.
 - **Notifications**: a bell with activity (comments on your memes and threads) and moderation notices, with per-member preferences.
+- **Search**: find memes by title, tag or comment; look up people and see what they posted.
 - **PWA** with a share target, so memes can be sent straight from the share sheet.
 
 ## Screenshots
@@ -52,6 +53,13 @@ Notifications: the notices page with one unread and several read rows, and the p
 <p align="center">
   <img src="docs/screenshots/notifications-mobile.png" alt="Notifications page on a phone with filter chips, a mark-all-as-read button and five notices: one unread comment notice highlighted, the rest read, two moderation notices with an amber edge" width="30%">
   <img src="docs/screenshots/profile-notifications-mobile.png" alt="Notification preferences on a phone with checkboxes for comments on my memes, thread comments and report outcomes, a note on the always-on notices and a Save button" width="30%">
+</p>
+
+Search: memes, tags and quotes for one query, and a member page with their memes.
+
+<p align="center">
+  <img src="docs/screenshots/search-mobile.png" alt="Search page on a phone with a query, filter chips and result sections for memes, tags and quotes" width="30%">
+  <img src="docs/screenshots/member-mobile.png" alt="Member page on a phone with an avatar, display name, member-since date, meme count and the member's memes" width="30%">
 </p>
 
 Stats, Upload and Report: what the board is up to, how a meme gets onto it, and how one gets flagged.

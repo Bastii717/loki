@@ -36,7 +36,12 @@ export const users = pgTable(
 	(t) => [
 		uniqueIndex('users_display_name_key_idx')
 			.on(t.displayNameKey)
-			.where(sql`${t.displayNameKey} IS NOT NULL`)
+			.where(sql`${t.displayNameKey} IS NOT NULL`),
+		// search: people by the name the board shows (pg_trgm, see migration 0010)
+		index('users_name_trgm_idx').using(
+			'gin',
+			sql`(coalesce(${t.displayName}, ${t.username})) gin_trgm_ops`
+		)
 	]
 );
 
@@ -75,14 +80,20 @@ export const media = pgTable(
 		index('media_created_at_idx').on(t.createdAt),
 		// /media/[...key] resolves a requested key to its row to enforce under-review
 		index('media_object_key_idx').on(t.objectKey),
-		index('media_thumb_key_idx').on(t.thumbKey)
+		index('media_thumb_key_idx').on(t.thumbKey),
+		// search: substring and typo matching (pg_trgm, see migration 0010)
+		index('media_title_trgm_idx').using('gin', sql`${t.title} gin_trgm_ops`)
 	]
 );
 
-export const tags = pgTable('tags', {
-	id: serial('id').primaryKey(),
-	name: text('name').notNull().unique()
-});
+export const tags = pgTable(
+	'tags',
+	{
+		id: serial('id').primaryKey(),
+		name: text('name').notNull().unique()
+	},
+	(t) => [index('tags_name_trgm_idx').using('gin', sql`${t.name} gin_trgm_ops`)]
+);
 
 export const mediaTags = pgTable(
 	'media_tags',
@@ -125,18 +136,22 @@ export const favorites = pgTable(
 	(t) => [primaryKey({ columns: [t.userId, t.mediaId] })]
 );
 
-export const comments = pgTable('comments', {
-	id: serial('id').primaryKey(),
-	mediaId: integer('media_id')
-		.notNull()
-		.references(() => media.id, { onDelete: 'cascade' }),
-	authorId: integer('author_id')
-		.notNull()
-		.references(() => users.id),
-	text: text('text').notNull(),
-	reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
-	createdAt: createdAt()
-});
+export const comments = pgTable(
+	'comments',
+	{
+		id: serial('id').primaryKey(),
+		mediaId: integer('media_id')
+			.notNull()
+			.references(() => media.id, { onDelete: 'cascade' }),
+		authorId: integer('author_id')
+			.notNull()
+			.references(() => users.id),
+		text: text('text').notNull(),
+		reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+		createdAt: createdAt()
+	},
+	(t) => [index('comments_text_trgm_idx').using('gin', sql`${t.text} gin_trgm_ops`)]
+);
 
 export const mediaViews = pgTable(
 	'media_views',
@@ -152,14 +167,18 @@ export const mediaViews = pgTable(
 	(t) => [primaryKey({ columns: [t.userId, t.mediaId] })]
 );
 
-export const quotes = pgTable('quotes', {
-	id: serial('id').primaryKey(),
-	text: text('text').notNull(),
-	author: text('author').notNull(),
-	submittedBy: integer('submitted_by').references(() => users.id, { onDelete: 'set null' }),
-	reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
-	createdAt: createdAt()
-});
+export const quotes = pgTable(
+	'quotes',
+	{
+		id: serial('id').primaryKey(),
+		text: text('text').notNull(),
+		author: text('author').notNull(),
+		submittedBy: integer('submitted_by').references(() => users.id, { onDelete: 'set null' }),
+		reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+		createdAt: createdAt()
+	},
+	(t) => [index('quotes_text_trgm_idx').using('gin', sql`${t.text} gin_trgm_ops`)]
+);
 
 export const quoteVotes = pgTable(
 	'quote_votes',

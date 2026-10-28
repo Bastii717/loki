@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import Clock from 'lucide-svelte/icons/clock';
 	import Flame from 'lucide-svelte/icons/flame';
+	import Search from 'lucide-svelte/icons/search';
 	import Trophy from 'lucide-svelte/icons/trophy';
 	import X from 'lucide-svelte/icons/x';
 	import { untrack } from 'svelte';
@@ -89,6 +90,9 @@
 		{/if}
 	</span>
 	<div class="actions">
+		<a href={resolve('/search')} class="search" aria-label="Search"
+			><Search size={20} aria-hidden="true" /></a
+		>
 		<ThemeToggle />
 		<form method="POST" action="/logout">
 			<button
@@ -167,6 +171,16 @@
 		display: flex;
 		align-items: center;
 		gap: 4px;
+	}
+
+	.search {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		border-radius: var(--radius-pill);
+		color: var(--text-muted);
 	}
 
 	.brand-group {

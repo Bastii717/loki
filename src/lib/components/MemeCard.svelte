@@ -32,6 +32,9 @@
 		if (img.complete && img.naturalWidth === 0) broken = true;
 	}
 	const memeHref = $derived(resolve('/meme/[id]', { id: String(item.id) }));
+	const userHref = $derived(
+		item.uploaderId === null ? null : resolve('/users/[id]', { id: String(item.uploaderId) })
+	);
 
 	// Client-side nav that hands the feed's id order to the detail view for swipe navigation.
 	function open(e: MouseEvent) {
@@ -182,7 +185,9 @@
 				{#if item.uploader}
 					<span class="by"
 						>by <Avatar thumbKey={item.uploaderAvatar} name={item.uploader} size={20} />
-						<span class="name">{item.uploader}</span><RoleBadge role={item.uploaderRole} /></span
+						{#if userHref}<a href={userHref} class="name">{item.uploader}</a>{:else}<span
+								class="name">{item.uploader}</span
+							>{/if}<RoleBadge role={item.uploaderRole} /></span
 					>
 				{/if}
 				<span
@@ -403,6 +408,16 @@
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	a.name:hover {
+		text-decoration: underline;
+	}
+
+	a.name:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+		border-radius: 2px;
 	}
 
 	.votes {
