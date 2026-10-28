@@ -1,3 +1,4 @@
+import { isRedirect } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -10,6 +11,9 @@ import {
 	OVER_THRESHOLD,
 	userWithSession
 } from '../../lib/server/moderation-test-utils';
+import { env } from '../../lib/server/env';
+import { resetRateLimits } from '../../lib/server/rate-limit';
+import { peekShared, takeShared } from '../../lib/server/share-stash';
 import { deleteObjects } from '../../lib/server/storage';
 import { ensureBucket } from '../../lib/server/storage-test-utils';
 import { callRoute } from '../../lib/server/test-request';
@@ -172,8 +176,109 @@ describe('create page actions', () => {
 		expect(Object.keys(actions)).toEqual(['stash']);
 	});
 
-	it('answers 501 until posting is wired', async () => {
-		const result = await (actions.stash as (e: never) => unknown)({} as never);
-		expect(result).toMatchObject({ status: 501, data: { error: 'Posting is not wired yet.' } });
+	const stash = async (member: Member, fields: Record<string, string | File>) => {
+		const body = new FormData();
+		for (const [key, value] of Object.entries(fields)) body.set(key, value);
+		const event = {
+			request: new Request('https://loki.test/create?/stash', { method: 'POST', body }),
+			locals: { user: member.user }
+		};
+		try {
+			return (await (actions.stash as (e: never) => unknown)(event as never)) as {
+				status: number;
+				data: { error: string };
+			};
+		} catch (e) {
+			if (isRedirect(e)) return e;
+			throw e;
+		}
+	};
+
+	const pngFile = (data = png) =>
+		new File([new Uint8Array(data)], 'meme.png', { type: 'image/png' });
+
+	beforeEach(() => resetRateLimits());
+
+	it('stashes the PNG with title and template, then redirects to the upload form', async () => {
+		const id = await template('Drake');
+		const member = await userWithSession();
+		const res = await stash(member, {
+			file: pngFile(),
+			title: '  Monday  ',
+			templateId: String(id)
+		});
+		expect(res).toMatchObject({ status: 303, location: '/upload?shared=1' });
+		const shared = takeShared(member.user.id);
+		expect(shared).toMatchObject({
+			name: 'meme.png',
+			type: 'image/png',
+			title: 'Monday',
+			templateId: id
+		});
+		expect(shared!.data.equals(png)).toBe(true);
+		expect(await db.select().from(media)).toHaveLength(0);
+	});
+
+	it('drops an unknown, removed or malformed template id and still stashes', async () => {
+		const gone = await template('Gone');
+		await removeTemplate(admin.user, gone);
+		const member = await userWithSession();
+		for (const templateId of ['999999', String(gone), 'abc', '-1', '0', '2147483648', '']) {
+			const res = await stash(member, { file: pngFile(), templateId });
+			expect(res, templateId).toMatchObject({ status: 303 });
+			const shared = takeShared(member.user.id);
+			expect(shared, templateId).not.toBeNull();
+			expect(shared!.templateId, templateId).toBeUndefined();
+		}
+	});
+
+	it('rejects a JPEG with 415', async () => {
+		const jpeg = await sharp({ create: { width: 20, height: 20, channels: 3, background: '#f00' } })
+			.jpeg()
+			.toBuffer();
+		const member = await userWithSession();
+		const res = await stash(member, { file: new File([new Uint8Array(jpeg)], 'meme.png') });
+		expect(res).toMatchObject({ status: 415, data: { error: 'Unsupported file type' } });
+		expect(peekShared(member.user.id)).toBeNull();
+	});
+
+	it('rejects an empty or missing file with 400', async () => {
+		const member = await userWithSession();
+		const cases: Record<string, string | File>[] = [
+			{ file: new File([], 'meme.png') },
+			{ title: 'x' }
+		];
+		for (const fields of cases) {
+			const res = await stash(member, fields);
+			expect(res).toMatchObject({ status: 400, data: { error: 'Nothing to post yet.' } });
+		}
+		expect(peekShared(member.user.id)).toBeNull();
+	});
+
+	it('rejects a file over MAX_UPLOAD_MB with 413', async () => {
+		const member = await userWithSession();
+		const big = Buffer.concat([png, Buffer.alloc(env.MAX_UPLOAD_MB * 1024 * 1024)]);
+		const res = await stash(member, { file: pngFile(big) });
+		expect(res).toMatchObject({
+			status: 413,
+			data: { error: `File is too large (max ${env.MAX_UPLOAD_MB} MB)` }
+		});
+		expect(peekShared(member.user.id)).toBeNull();
+	});
+
+	it('shares the upload budget: the eleventh POST in five minutes is 429', async () => {
+		const member = await userWithSession();
+		const post = () =>
+			callRoute({
+				handler: actions.stash as never,
+				path: '/create',
+				method: 'POST',
+				form: { title: 'x' },
+				session: member.session
+			});
+		for (let i = 0; i < 10; i++) expect((await post()).response.status).not.toBe(429);
+		const res = (await post()).response;
+		expect(res.status).toBe(429);
+		expect(await res.text()).toContain('Slow down, Lord! Too many requests.');
 	});
 });
