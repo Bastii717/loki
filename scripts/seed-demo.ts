@@ -7,8 +7,9 @@
  * Goes through the real server modules (createMedia, applyVote, addComment), so
  * thumbnails and S3 objects are real. Refuses to touch anything that is not a private
  * address unless LOKI_SEED_FORCE=1 is set. Idempotent: every block (memes, quotes, report,
- * rules and FAQ, favorite, award, notifications) is skipped when its rows already exist.
+ * rules and FAQ, favorite, award, notifications, templates) is skipped when its rows already exist.
  */
+import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { and, count, eq, isNull } from 'drizzle-orm';
@@ -65,7 +66,8 @@ const [
 	{ nameKey },
 	{ setAvatar },
 	awardsMod,
-	{ fromBerlinLocal }
+	{ fromBerlinLocal },
+	{ putObject }
 ] = await Promise.all([
 	import('sharp'),
 	import('../src/lib/server/db'),
@@ -80,10 +82,21 @@ const [
 	import('../src/lib/server/profile'),
 	import('../src/lib/server/avatar'),
 	import('../src/lib/server/awards'),
-	import('../src/lib/server/berlin-time')
+	import('../src/lib/server/berlin-time'),
+	import('../src/lib/server/storage')
 ]);
-const { users, media, comments, quotes, reports, siteContent, favorites, notifications, awards } =
-	schema;
+const {
+	users,
+	media,
+	comments,
+	quotes,
+	reports,
+	siteContent,
+	favorites,
+	notifications,
+	awards,
+	templates
+} = schema;
 const { AWARD_KIND, berlinMonth, findWinner, monthStart } = awardsMod;
 const { applyVote } = votesMod;
 const { addComment } = commentsMod;
@@ -421,6 +434,7 @@ async function main() {
 
 	await seedMemes(byName);
 	await seedExtras(byName);
+	await seedTemplates();
 	console.log('Done.');
 }
 
@@ -661,6 +675,115 @@ async function seedNotifications(byName: UserMap, winner: Awaited<ReturnType<typ
 		}))
 	);
 	console.log(`Seeded ${rows.length} notifications for lena`);
+}
+
+const TEMPLATE_W = 1200;
+const TEMPLATE_H = 900;
+const LABEL_FONT = "'Helvetica Neue', Arial, 'DejaVu Sans', sans-serif";
+
+/** A large, muted panel label (white at low opacity), centred on (x, y). */
+const panelLabel = (text: string, x: number, y: number, size = 96) =>
+	`<text x="${x}" y="${y}" text-anchor="middle" font-family="${LABEL_FONT}" font-weight="900" font-size="${size}" letter-spacing="4" fill="#fff" fill-opacity="0.6">${escapeXml(text)}</text>`;
+
+interface DemoTemplate {
+	name: string;
+	/** Inner SVG markup for a 1200 x 900 canvas; no caption text, only placeholder labels. */
+	body: string;
+}
+
+const TEMPLATES: DemoTemplate[] = [
+	{
+		// three panels side by side: a coffee, a deadline and "me"
+		name: 'Distracted coworker',
+		body: `
+  <rect x="0" y="0" width="400" height="900" fill="hsl(24,72%,46%)"/>
+  <rect x="400" y="0" width="400" height="900" fill="hsl(350,62%,42%)"/>
+  <rect x="800" y="0" width="400" height="900" fill="hsl(222,58%,40%)"/>
+  <circle cx="200" cy="360" r="120" fill="#fff" fill-opacity="0.12"/>
+  <circle cx="600" cy="360" r="120" fill="#fff" fill-opacity="0.12"/>
+  <circle cx="1000" cy="360" r="120" fill="#fff" fill-opacity="0.12"/>
+  ${panelLabel('COFFEE', 200, 700, 60)}
+  ${panelLabel('DEADLINE', 600, 700, 60)}
+  ${panelLabel('ME', 1000, 700, 60)}`
+	},
+	{
+		// two big rounded buttons stacked on a dark panel, a second panel as a header strip
+		name: 'Two buttons',
+		body: `
+  <rect width="1200" height="900" fill="hsl(262,40%,24%)"/>
+  <rect x="0" y="0" width="1200" height="180" fill="hsl(262,48%,32%)"/>
+  <rect x="150" y="260" width="400" height="460" rx="64" fill="hsl(152,58%,38%)"/>
+  <rect x="650" y="260" width="400" height="460" rx="64" fill="hsl(8,66%,48%)"/>
+  <rect x="150" y="260" width="400" height="140" rx="64" fill="#fff" fill-opacity="0.1"/>
+  <rect x="650" y="260" width="400" height="140" rx="64" fill="#fff" fill-opacity="0.1"/>
+  ${panelLabel('MERGE', 350, 520, 78)}
+  ${panelLabel('REBASE', 850, 520, 78)}`
+	},
+	{
+		// one warm orange gradient with a table and a cup silhouette
+		name: 'This is fine',
+		body: `
+  <defs>
+    <linearGradient id="fire" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="hsl(36,92%,58%)"/>
+      <stop offset="0.6" stop-color="hsl(18,88%,50%)"/>
+      <stop offset="1" stop-color="hsl(4,72%,34%)"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#fire)"/>
+  <circle cx="1000" cy="170" r="260" fill="#fff" fill-opacity="0.08"/>
+  <circle cx="170" cy="820" r="300" fill="#000" fill-opacity="0.1"/>
+  <g fill="#2a120a" fill-opacity="0.78">
+    <rect x="260" y="560" width="680" height="36" rx="8"/>
+    <rect x="320" y="596" width="44" height="240"/>
+    <rect x="836" y="596" width="44" height="240"/>
+    <g transform="translate(0 -26)"><path d="M540 440 h150 v70 a75 75 0 0 1 -75 75 a75 75 0 0 1 -75 -75 z"/>
+    <path d="M690 458 h26 a30 30 0 0 1 0 60 h-26 v-16 h26 a14 14 0 0 0 0 -28 h-26 z"/>
+    <rect x="520" y="584" width="190" height="14" rx="6"/></g>
+  </g>`
+	}
+];
+
+/** One placeholder image, 1200 x 900 WebP plus the 320 px thumbnail, like templates.ts produces. */
+async function renderTemplate(t: DemoTemplate) {
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${TEMPLATE_W}" height="${TEMPLATE_H}" viewBox="0 0 ${TEMPLATE_W} ${TEMPLATE_H}">${t.body}
+</svg>`;
+	const processed = await sharp(Buffer.from(svg))
+		.resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
+		.webp({ quality: 90 })
+		.toBuffer({ resolveWithObject: true });
+	const thumb = await sharp(processed.data)
+		.resize({ width: 320, height: 320, fit: 'inside', withoutEnlargement: true })
+		.webp({ quality: 82 })
+		.toBuffer();
+	return {
+		full: processed.data,
+		thumb,
+		width: processed.info.width,
+		height: processed.info.height
+	};
+}
+
+/**
+ * Three library templates for the generator. The seed has no admin, so the rows are written
+ * directly (no createdBy, no audit entries) with the same keys and processing as addTemplate.
+ */
+async function seedTemplates() {
+	const [{ n }] = await db
+		.select({ n: count() })
+		.from(templates)
+		.where(isNull(templates.removedAt));
+	if (n > 0) return;
+	for (const t of TEMPLATES) {
+		const { full, thumb, width, height } = await renderTemplate(t);
+		const id = randomUUID();
+		const objectKey = `templates/${id}.webp`;
+		const thumbKey = `templates/${id}-320.webp`;
+		await putObject(objectKey, full, 'image/webp');
+		await putObject(thumbKey, thumb, 'image/webp');
+		await db.insert(templates).values({ name: t.name, objectKey, thumbKey, width, height });
+	}
+	console.log(`Seeded ${TEMPLATES.length} templates`);
 }
 
 try {
