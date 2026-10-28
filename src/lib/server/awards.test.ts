@@ -89,6 +89,13 @@ describe('month helpers', () => {
 		expect(() => monthStart('2026-13')).toThrow(RangeError);
 		expect(() => nextMonth('2026-1')).toThrow(RangeError);
 	});
+
+	it('rejects year 0000 and years below 1000, which Postgres cannot cast', () => {
+		expect(() => monthStart('0000-01')).toThrow(RangeError);
+		expect(() => nextMonth('0999-12')).toThrow(RangeError);
+		expect(() => monthsBetween('0000-01', '2026-01')).toThrow(RangeError);
+		expect(nextMonth('1000-12')).toBe('1001-01');
+	});
 });
 
 describe('findWinner', () => {

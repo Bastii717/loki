@@ -120,7 +120,8 @@
 
 	{#if data.sort === 'hof'}
 		<a href={resolve('/awards')} class="awards-link"
-			><Trophy size={14} aria-hidden="true" /> Meme of the Month →</a
+			><Trophy size={14} aria-hidden="true" /> Meme of the Month
+			<span aria-hidden="true">→</span></a
 		>
 	{/if}
 
@@ -249,7 +250,8 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		margin: 0 0 10px;
+		min-height: 44px;
+		margin: 0 0 4px;
 		color: var(--accent-soft-text);
 		font-size: 14px;
 		font-weight: 600;

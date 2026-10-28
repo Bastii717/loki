@@ -10,7 +10,8 @@ import { canSeeUnderReview } from '../../lib/server/moderation';
 import type { PageServerLoad } from './$types';
 
 const PAGE_SIZE = 12;
-const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+// years 1000-9999: Postgres rejects year 0000
+const MONTH = /^[1-9]\d{3}-(0[1-9]|1[0-2])$/;
 
 /** A `YYYY-MM` from the query, else undefined. */
 const parseMonth = (raw: string | null) => (raw !== null && MONTH.test(raw) ? raw : undefined);
@@ -23,9 +24,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const before = parseMonth(url.searchParams.get('before'));
 	const from = parseMonth(url.searchParams.get('from'));
 
+	// the leader belongs to the first page only; a paged or anchored view skips the query too
+	const firstPage = before === undefined && from === undefined;
 	const [{ rows, hasMore }, lead] = await Promise.all([
 		listAwards({ before, from, limit: PAGE_SIZE }),
-		leadingNow(now)
+		firstPage ? leadingNow(now) : null
 	]);
 
 	// one hydration for the page and the leader; a meme deleted meanwhile is simply not returned
@@ -42,12 +45,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		for (const item of page.items) byId.set(item.id, item);
 	}
 
-	const sections = rows.map((row) => {
-		const item = (row.mediaId !== null && byId.get(row.mediaId)) || null;
-		// a winner hidden for review must not leak its title through the stored copy either
-		const hidden = item?.underReview === true && !revealAll;
-		return { month: row.month, item, title: hidden ? '' : row.title };
-	});
+	// no stored title goes to the page: a deleted winner shows a fixed note, a hidden one a placeholder
+	const sections = rows.map((row) => ({
+		month: row.month,
+		item: (row.mediaId !== null && byId.get(row.mediaId)) || null
+	}));
 	const leadItem = lead ? (byId.get(lead.mediaId) ?? null) : null;
 	// a member never gets a placeholder for the leader: no card is better than a hidden one
 	const leading =

@@ -26,7 +26,7 @@ const freeze = (iso: string) => {
 type Member = Awaited<ReturnType<typeof userWithSession>>;
 interface Data {
 	leading: { month: string; item: FeedItem; score: number } | null;
-	sections: { month: string; item: FeedItem | null; title: string }[];
+	sections: { month: string; item: FeedItem | null }[];
 	hasMore: boolean;
 	nextBefore: string | null;
 	firstClose: string;
@@ -67,27 +67,41 @@ describe('awards page load', () => {
 		const oct = await winner(author.user.id, '2026-10');
 		const sep = await winner(author.user.id, '2026-09');
 		const data = await loadFor(viewer);
-		expect(data.sections.map((s) => [s.month, s.item?.id, s.title])).toEqual([
-			['2026-10', oct, 'Title 2026-10'],
-			['2026-09', sep, 'Title 2026-09'],
-			['2026-08', aug, 'Title 2026-08']
+		expect(data.sections.map((s) => [s.month, s.item?.id])).toEqual([
+			['2026-10', oct],
+			['2026-09', sep],
+			['2026-08', aug]
 		]);
 		expect(data.sections[0].item).toMatchObject({ title: 'Title 2026-10', awardMonth: '2026-10' });
 		expect(data.hasMore).toBe(false);
 		expect(data.nextBefore).toBeNull();
 	});
 
-	it('keeps a deleted winner as a row without a card, with its title', async () => {
+	it('keeps a deleted winner as a row without a card and without its title', async () => {
 		const viewer = await userWithSession();
 		const author = await userWithSession();
 		const id = await winner(author.user.id, '2026-09', 'Gone soon');
 		await winner(author.user.id, '2026-08');
 		await db.delete(media).where(eq(media.id, id));
 		const data = await loadFor(viewer);
-		expect(data.sections.map((s) => [s.month, s.item === null, s.title])).toEqual([
-			['2026-09', true, 'Gone soon'],
-			['2026-08', false, 'Title 2026-08']
+		expect(data.sections.map((s) => [s.month, s.item === null])).toEqual([
+			['2026-09', true],
+			['2026-08', false]
 		]);
+		expect(Object.keys(data.sections[0]).sort()).toEqual(['item', 'month']);
+	});
+
+	it('never puts the title of a deleted winner into a member payload', async () => {
+		const viewer = await userWithSession();
+		const author = await userWithSession();
+		const id = await winner(author.user.id, '2026-09', 'Deleted secret title');
+		await db.delete(media).where(eq(media.id, id));
+		// the stored copy survives for the audit trail, but the page never reads it out
+		const [row] = await db.select().from(awards);
+		expect(row.title).toBe('Deleted secret title');
+		const data = await loadFor(viewer);
+		expect(data.sections).toEqual([{ month: '2026-09', item: null }]);
+		expect(JSON.stringify(data)).not.toContain('Deleted secret title');
 	});
 
 	it('skips months without a winner', async () => {
@@ -121,7 +135,7 @@ describe('awards page load', () => {
 		expect(from.sections.map((s) => s.month)).toEqual(['2025-02', '2025-01']);
 	});
 
-	it.each(['2026-13', 'soon', '2026-1', '2026-10-01', ''])(
+	it.each(['2026-13', 'soon', '2026-1', '2026-10-01', '', '0000-01', '0999-12'])(
 		'ignores a bad month %j',
 		async (bad) => {
 			const viewer = await userWithSession();
@@ -154,6 +168,23 @@ describe('awards page load', () => {
 		expect(data.leading?.item).toMatchObject({ id, title: 'Running hot' });
 	});
 
+	it('shows the leader on the first page only', async () => {
+		freeze('2026-10-28T10:00:00Z');
+		const viewer = await userWithSession();
+		const author = await userWithSession();
+		const id = await insertMeme(author.user.id, 'Running hot');
+		await db
+			.update(media)
+			.set({ score: 3, createdAt: new Date('2026-10-20T08:00:00Z') })
+			.where(eq(media.id, id));
+		await winner(author.user.id, '2026-08');
+		expect((await loadFor(viewer)).leading).toMatchObject({ month: '2026-10' });
+		expect((await loadFor(viewer, '?before=2026-10')).leading).toBeNull();
+		expect((await loadFor(viewer, '?from=2026-08')).leading).toBeNull();
+		// an ignored bad month is no page switch
+		expect((await loadFor(viewer, '?before=nope')).leading).toMatchObject({ month: '2026-10' });
+	});
+
 	it('gives the first close as the start of next month', async () => {
 		const viewer = await userWithSession();
 		// 23:30 UTC on 31 October is already 1 November in Berlin, so November is the running month
@@ -174,11 +205,9 @@ describe('awards page load', () => {
 		const asMember = await loadFor(viewer);
 		expect(asMember.sections).toHaveLength(1);
 		expect(asMember.sections[0].item).toMatchObject({ id, underReview: true, title: '' });
-		expect(asMember.sections[0].title).toBe('');
 		expect(JSON.stringify(asMember)).not.toContain('Secret winner');
 
 		const asMod = await loadFor(mod);
 		expect(asMod.sections[0].item).toMatchObject({ id, underReview: true, title: 'Secret winner' });
-		expect(asMod.sections[0].title).toBe('Secret winner');
 	});
 });

@@ -10,7 +10,8 @@ export const AWARD_KIND = 'meme_of_the_month';
 export const NOTICE_WINDOW_DAYS = 31;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const MONTH = /^(\d{4})-(0[1-9]|1[0-2])$/;
+// years 1000-9999: Postgres rejects year 0000
+const MONTH = /^([1-9]\d{3})-(0[1-9]|1[0-2])$/;
 
 const berlinParts = new Intl.DateTimeFormat('en-US', {
 	timeZone: 'Europe/Berlin',

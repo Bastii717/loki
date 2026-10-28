@@ -57,8 +57,8 @@ describe('awards page', () => {
 	it('renders one section per month with an id, a long month heading and the card', () => {
 		const { body } = renderPage({
 			sections: [
-				{ month: '2026-10', item: feedItem(3, { awardMonth: '2026-10' }), title: 'Meme 3' },
-				{ month: '2026-09', item: feedItem(2, { awardMonth: '2026-09' }), title: 'Meme 2' }
+				{ month: '2026-10', item: feedItem(3, { awardMonth: '2026-10' }) },
+				{ month: '2026-09', item: feedItem(2, { awardMonth: '2026-09' }) }
 			]
 		});
 		expect(body).toMatch(/<section[^>]*id="2026-10"[^>]*>\s*<h2[^>]*>October 2026<\/h2>/);
@@ -69,11 +69,13 @@ describe('awards page', () => {
 		expect(body).not.toContain('No winners yet');
 	});
 
-	it('renders a deleted winner as a muted line with its title', () => {
+	it('shows the deleted note for a deleted winner and never a title', () => {
 		const { body } = renderPage({
+			// a stray title in the data must not reach the page either
 			sections: [{ month: '2026-09', item: null, title: 'Gone meme' }]
 		});
-		expect(body).toMatch(/<p class="deleted[^"]*">“Gone meme” \(deleted\)<\/p>/);
+		expect(body).toMatch(/<p class="deleted[^"]*">The winning meme was deleted\.<\/p>/);
+		expect(body).not.toContain('Gone meme');
 		expect(body).not.toContain('href="/meme/');
 	});
 
@@ -103,7 +105,7 @@ describe('awards page', () => {
 	});
 
 	it('links Show older only when more winners remain', () => {
-		const sections = [{ month: '2026-09', item: feedItem(2), title: 'Meme 2' }];
+		const sections = [{ month: '2026-09', item: feedItem(2) }];
 		const more = renderPage({ sections, hasMore: true, nextBefore: '2026-09' }).body;
 		expect(more).toMatch(/<a[^>]*href="\/awards\?before=2026-09"[^>]*>\s*Show older/);
 		expect(renderPage({ sections }).body).not.toContain('Show older');

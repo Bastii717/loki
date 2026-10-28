@@ -111,7 +111,7 @@ export function notificationText(
 			// `YYYY-MM:<title snapshot>`; the title may contain colons
 			const [month, title] = splitHead(detail);
 			return {
-				text: `Your meme “${title}” is Meme of the Month for ${formatMonthLong(month)}.`,
+				text: `Your meme “${title || 'Untitled'}” is Meme of the Month for ${formatMonthLong(month)}.`,
 				excerpt: null
 			};
 		}

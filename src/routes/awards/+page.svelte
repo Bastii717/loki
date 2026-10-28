@@ -36,7 +36,7 @@
 			{#if section.item}
 				<MemeCard item={section.item} feedIds={[section.item.id]} />
 			{:else}
-				<p class="deleted">“{section.title}” (deleted)</p>
+				<p class="deleted">The winning meme was deleted.</p>
 			{/if}
 		</section>
 	{/each}

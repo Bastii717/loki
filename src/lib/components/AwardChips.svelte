@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import Trophy from 'lucide-svelte/icons/trophy';
-	import { formatMonthLong, formatMonthYear } from '../moderation-labels';
+	import { formatMonthYear } from '../moderation-labels';
 
 	/** One chip per Meme of the Month win, each linking to its month on the awards page. */
 	let { awards }: { awards: { month: string }[] } = $props();
@@ -13,7 +13,7 @@
 			<a
 				class="chip"
 				href="{resolve('/awards')}?from={award.month}#{award.month}"
-				aria-label="Meme of the Month, {formatMonthLong(award.month)}"
+				aria-label="Meme of the Month, {formatMonthYear(award.month)}"
 				><Trophy size={12} aria-hidden="true" /> {formatMonthYear(award.month)}</a
 			>
 		{/each}

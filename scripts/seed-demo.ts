@@ -84,7 +84,7 @@ const [
 ]);
 const { users, media, comments, quotes, reports, siteContent, favorites, notifications, awards } =
 	schema;
-const { AWARD_KIND, berlinMonth, monthStart } = awardsMod;
+const { AWARD_KIND, berlinMonth, findWinner, monthStart } = awardsMod;
 const { applyVote } = votesMod;
 const { addComment } = commentsMod;
 const { addQuote, voteQuote } = quotesMod;
@@ -517,39 +517,36 @@ async function seedExtras(byName: UserMap) {
 		}
 	}
 
-	await seedAward();
-	await seedNotifications(byName);
+	const winner = await seedAward();
+	await seedNotifications(byName, winner);
 }
 
-/** Last month's winner row, so the awards page, the trophy and the profile chips have data. */
+/**
+ * Last month's winner row, so the awards page, the trophy and the profile chips have data. The
+ * winner is the one the hourly job would pick, and findWinner only looks at memes posted in that
+ * month; with no such meme nothing is seeded.
+ */
 async function seedAward() {
-	const [winner] = await db
-		.select({
-			id: media.id,
-			uploaderId: media.uploaderId,
-			title: media.title,
-			score: media.score
-		})
-		.from(media)
-		.where(eq(media.title, WINNER_TITLE));
-	if (!winner) return;
+	const winner = await findWinner(LAST_MONTH);
+	if (!winner) return null;
 	const inserted = await db
 		.insert(awards)
 		.values({
 			kind: AWARD_KIND,
 			month: `${LAST_MONTH}-01`,
-			mediaId: winner.id,
+			mediaId: winner.mediaId,
 			uploaderId: winner.uploaderId,
 			title: winner.title,
 			score: winner.score
 		})
 		.onConflictDoNothing({ target: [awards.kind, awards.month] })
 		.returning({ id: awards.id });
-	if (inserted.length > 0) console.log(`Seeded the ${LAST_MONTH} award for #${winner.id}`);
+	if (inserted.length > 0) console.log(`Seeded the ${LAST_MONTH} award for #${winner.mediaId}`);
+	return winner;
 }
 
-/** Six notices for lena, one of them unread, so the bell shows 1 and the page shows both row kinds. */
-async function seedNotifications(byName: UserMap) {
+/** Up to six notices for lena, one of them unread, so the bell shows 1 and the page shows both row kinds. */
+async function seedNotifications(byName: UserMap, winner: Awaited<ReturnType<typeof seedAward>>) {
 	const lena = byName.get('lena')!;
 	const [{ n }] = await db
 		.select({ n: count() })
@@ -574,6 +571,7 @@ async function seedNotifications(byName: UserMap) {
 		.where(and(eq(comments.mediaId, review), eq(comments.authorId, byName.get('noah')!.id)));
 
 	const hours = (h: number) => new Date(Date.now() - h * 3_600_000);
+	const hoursSince = (Date.now() - monthStart(THIS_MONTH).getTime()) / 3_600_000;
 	const rows: {
 		kind: NotificationKind;
 		actor?: string;
@@ -631,16 +629,21 @@ async function seedNotifications(byName: UserMap) {
 			ageHours: 98,
 			read: true
 		},
-		{
-			// the hourly job notifies a winner right after the month ends
-			kind: 'award_won',
-			contentType: 'meme',
-			contentId: meeting,
-			mediaId: meeting,
-			detail: `${LAST_MONTH}:${WINNER_TITLE}`,
-			ageHours: Math.max(2, (Date.now() - monthStart(THIS_MONTH).getTime()) / 3_600_000 + 1),
-			read: true
-		}
+		// the hourly job notifies a winner right after the month ends; only lena has a notice here
+		...(winner && winner.uploaderId === lena.id
+			? [
+					{
+						kind: 'award_won' as const,
+						contentType: 'meme' as const,
+						contentId: winner.mediaId,
+						mediaId: winner.mediaId,
+						detail: `${LAST_MONTH}:${winner.title}`,
+						// about an hour into the new month, never before it
+						ageHours: Math.min(hoursSince, Math.max(hoursSince - 1, hoursSince / 2)),
+						read: true
+					}
+				]
+			: [])
 	];
 	await db.insert(notifications).values(
 		rows.map((r) => ({

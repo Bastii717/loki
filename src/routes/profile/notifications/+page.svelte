@@ -45,7 +45,8 @@
 				</label>
 			{/each}
 			<p class="hint">
-				Always on: moderation actions on your content, timeouts, and admin changes to your profile.
+				Always on: moderation actions on your content, timeouts, admin changes to your profile, and
+				Meme of the Month awards.
 			</p>
 		</section>
 

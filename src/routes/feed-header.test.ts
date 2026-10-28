@@ -25,7 +25,7 @@ describe('feed header', () => {
 			render(Page as never, { props: { data: { ...data, sort } } as never }).body;
 		const hof = html('hof');
 		expect(hof).toMatch(
-			/<a href="\/awards" class="awards-link[^"]*">[\s\S]*?lucide-trophy[\s\S]*?Meme of the Month →<\/a>/
+			/<a href="\/awards" class="awards-link[^"]*">[\s\S]*?lucide-trophy[\s\S]*?Meme of the Month <span aria-hidden="true">→<\/span><\/a>/
 		);
 		// the sort chip also carries a trophy; the line is the only link to /awards
 		expect(html('new')).not.toContain('href="/awards"');

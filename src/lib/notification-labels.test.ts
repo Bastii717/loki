@@ -169,6 +169,12 @@ describe('notificationText', () => {
 		});
 	});
 
+	it('award_won falls back to Untitled for an empty title', () => {
+		expect(notificationText(item({ kind: 'award_won', detail: '2026-10:' })).text).toBe(
+			'Your meme “Untitled” is Meme of the Month for October 2026.'
+		);
+	});
+
 	it('timeout_set formats the end and keeps colons in the reason', () => {
 		expect(
 			notificationText(
