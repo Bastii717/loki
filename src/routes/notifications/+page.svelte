@@ -16,11 +16,8 @@
 	let { data }: PageProps = $props();
 
 	const filters = ['all', 'activity', 'moderation'] as const;
-	const EMPTY = {
-		all: 'No notifications yet.',
-		activity: 'No activity notifications.',
-		moderation: 'No moderation notifications.'
-	};
+	const EMPTY_DEFAULT = 'Nothing here yet. When someone comments on your memes, you will know.';
+	const EMPTY_MODERATION = 'No moderation notices. Keep it that way.';
 
 	// The chips and the pager are plain links, so the page works without script and the URL is shareable.
 	const filterQuery = (f: (typeof filters)[number]) => (f === 'all' ? '' : `?filter=${f}`);
@@ -60,7 +57,7 @@
 	</nav>
 
 	{#if data.items.length === 0}
-		<p class="empty">{EMPTY[data.filter as keyof typeof EMPTY]}</p>
+		<p class="empty">{data.filter === 'moderation' ? EMPTY_MODERATION : EMPTY_DEFAULT}</p>
 	{:else}
 		<ul class="list">
 			{#each data.items as item (item.id)}
@@ -78,6 +75,7 @@
 								{/if}
 							</span>
 							<span class="body">
+								{#if !item.read}<span class="sr-only">Unread</span>{/if}
 								<span class="text">{text}</span>
 								{#if excerpt}<span class="excerpt">“{excerpt}”</span>{/if}
 								<span class="meta">
@@ -184,6 +182,7 @@
 
 	/* the whole row is the button, styled as a row */
 	.row button {
+		position: relative;
 		display: flex;
 		align-items: flex-start;
 		gap: 12px;
@@ -202,6 +201,15 @@
 	.row button:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: -2px;
+	}
+
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		white-space: nowrap;
 	}
 
 	.icon {

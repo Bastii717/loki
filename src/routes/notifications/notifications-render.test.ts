@@ -115,11 +115,22 @@ describe('notifications page', () => {
 		expect(none).not.toContain('Mark all as read');
 	});
 
-	it('has an empty state for no notices and one per filter', () => {
-		expect(html(data())).toContain('No notifications yet.');
-		expect(html(data({ filter: 'activity' }))).toContain('No activity notifications.');
-		expect(html(data({ filter: 'moderation' }))).toContain('No moderation notifications.');
-		expect(html(data({ items: [item()] }))).not.toContain('No notifications yet.');
+	it('has the spec empty states: one for All and Activity, one for Moderation', () => {
+		const DEFAULT = 'Nothing here yet. When someone comments on your memes, you will know.';
+		const MODERATION = 'No moderation notices. Keep it that way.';
+		expect(html(data())).toContain(DEFAULT);
+		expect(html(data({ filter: 'activity' }))).toContain(DEFAULT);
+		const moderation = html(data({ filter: 'moderation' }));
+		expect(moderation).toContain(MODERATION);
+		expect(moderation).not.toContain(DEFAULT);
+		expect(html(data({ items: [item()] }))).not.toContain(DEFAULT);
+	});
+
+	it('labels an unread row for screen readers and leaves a read row without the label', () => {
+		const [unread] = rows(html(data({ items: [item()], unread: 1 })));
+		expect(unread).toMatch(/<span class="sr-only[^"]*">Unread<\/span>/);
+		const [read] = rows(html(data({ items: [item({ read: true })] })));
+		expect(read).not.toContain('Unread');
 	});
 
 	it('renders the filter chips as links and marks the active one', () => {
