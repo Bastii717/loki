@@ -55,6 +55,18 @@ export async function deleteObjects(keys: string[]): Promise<void> {
 	}
 }
 
+/** Reads a whole object into memory; throws when the object does not exist. */
+export async function getObject(
+	key: string
+): Promise<{ body: Buffer; contentType: string | null }> {
+	const result = await s3Client().send(new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
+	if (!result.Body) throw new Error(`Object has no body: ${key}`);
+	return {
+		body: Buffer.from(await result.Body.transformToByteArray()),
+		contentType: result.ContentType ?? null
+	};
+}
+
 export function getPresignedUrl(key: string, ttlSeconds = 60): Promise<string> {
 	return getSignedUrl(s3Client(), new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }), {
 		expiresIn: ttlSeconds

@@ -298,6 +298,22 @@ describe('429 responses', () => {
 		expect(vote.status).toBe(200);
 	});
 
+	it('counts generator hand-overs (POST /create?/stash) against the upload limit', async () => {
+		const user = await testUser();
+		const token = await createSession(user.id);
+		for (let i = 0; i < 10; i++) {
+			const ok = await run('/create?/stash', token, new Response('ok'), 'POST').response;
+			expect(ok.status).toBe(200);
+		}
+		const res = await run('/create?/stash', token, new Response('ok'), 'POST').response;
+		expect(res.status).toBe(429);
+		// the shared bucket also blocks a meme upload; a GET of the editor is never counted
+		const upload = await run('/upload', token, new Response('ok'), 'POST').response;
+		expect(upload.status).toBe(429);
+		const page = await run('/create', token, new Response('ok'), 'GET').response;
+		expect(page.status).toBe(200);
+	});
+
 	it('shrinks Retry-After as the window slides', async () => {
 		vi.useFakeTimers({ toFake: ['Date'] });
 		try {

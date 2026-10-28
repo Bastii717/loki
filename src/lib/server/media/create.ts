@@ -23,6 +23,15 @@ export function normalizeTag(raw: string): string | null {
 	return TAG_PATTERN.test(tag) ? tag : null;
 }
 
+const INT4_MAX = 2147483647;
+
+/** A template id from form input: digits only, within the int4 range; undefined otherwise. */
+export function parseTemplateId(raw: FormDataEntryValue | null): number | undefined {
+	if (typeof raw !== 'string' || !/^\d+$/.test(raw)) return undefined;
+	const id = Number(raw);
+	return id >= 1 && id <= INT4_MAX ? id : undefined;
+}
+
 export type CreateMediaOptions = {
 	uploader: SessionUser;
 	file: Buffer;
@@ -30,6 +39,8 @@ export type CreateMediaOptions = {
 	tagNames: string[];
 	nsfw: boolean;
 	spoiler: boolean;
+	/** The library template the meme was made from; the caller validates it. */
+	templateId?: number | null;
 };
 
 /**
@@ -70,7 +81,8 @@ export async function createMedia(opts: CreateMediaOptions): Promise<{ id: numbe
 					width,
 					height,
 					nsfw: opts.nsfw,
-					spoiler: opts.spoiler
+					spoiler: opts.spoiler,
+					templateId: opts.templateId ?? null
 				})
 				.returning({ id: media.id });
 			if (tagNames.length > 0) {

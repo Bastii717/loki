@@ -39,6 +39,7 @@ import { load as usersPage } from './users/+page.server';
 import { load as timeoutsPage } from './timeouts/+page.server';
 import { actions as maintenanceActions, load as maintenancePage } from './maintenance/+page.server';
 import { actions as themeActions, load as themePage } from './theme/+page.server';
+import { actions as templateActions, load as templatesPage } from './templates/+page.server';
 
 /** Fixed far-future mute end, so the formatted date never depends on the run date. */
 const MUTED_UNTIL = new Date('2099-12-24T12:00:00Z');
@@ -175,6 +176,60 @@ const endpoints: Endpoint[] = [
 			method: 'POST',
 			session,
 			form: {}
+		})
+	},
+	{
+		name: 'templates load',
+		page: true,
+		adminOnly: true,
+		call: (_w, session) => ({ handler: templatesPage, path: '/moderation/templates', session })
+	},
+	{
+		name: 'templates add action',
+		page: true, // a page form action: anonymous requests are redirected to /login
+		adminOnly: true,
+		call: (_w, session) => ({
+			handler: templateActions.add,
+			path: '/moderation/templates?/add',
+			method: 'POST',
+			session,
+			form: { id: '1', name: 'Template' }
+		})
+	},
+	{
+		name: 'templates rename action',
+		page: true, // a page form action: anonymous requests are redirected to /login
+		adminOnly: true,
+		call: (_w, session) => ({
+			handler: templateActions.rename,
+			path: '/moderation/templates?/rename',
+			method: 'POST',
+			session,
+			form: { id: '1', name: 'Template' }
+		})
+	},
+	{
+		name: 'templates remove action',
+		page: true, // a page form action: anonymous requests are redirected to /login
+		adminOnly: true,
+		call: (_w, session) => ({
+			handler: templateActions.remove,
+			path: '/moderation/templates?/remove',
+			method: 'POST',
+			session,
+			form: { id: '1', name: 'Template' }
+		})
+	},
+	{
+		name: 'templates restore action',
+		page: true, // a page form action: anonymous requests are redirected to /login
+		adminOnly: true,
+		call: (_w, session) => ({
+			handler: templateActions.restore,
+			path: '/moderation/templates?/restore',
+			method: 'POST',
+			session,
+			form: { id: '1', name: 'Template' }
 		})
 	},
 	{

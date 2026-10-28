@@ -2,8 +2,9 @@ import { fail, redirect } from '@sveltejs/kit';
 import { env } from '../../lib/server/env';
 import { TimeoutActiveError } from '../../lib/server/moderation';
 import { timeoutFail } from '../../lib/server/moderation-http';
-import { UploadError, createMedia } from '../../lib/server/media/create';
+import { UploadError, createMedia, parseTemplateId } from '../../lib/server/media/create';
 import { peekShared } from '../../lib/server/share-stash';
+import { getTemplate } from '../../lib/server/templates';
 import type { Actions, PageServerLoad } from './$types';
 
 const TITLE_MAX = 150;
@@ -29,6 +30,10 @@ export const actions: Actions = {
 			return fail(400, { ...values, message: 'Pick a file first' });
 		}
 
+		// provenance from the generator hand-over; an unknown or removed template is ignored
+		const requested = parseTemplateId(form.get('templateId'));
+		const templateId = requested !== undefined && (await getTemplate(requested)) ? requested : null;
+
 		try {
 			await createMedia({
 				uploader: locals.user!,
@@ -36,7 +41,8 @@ export const actions: Actions = {
 				title,
 				tagNames,
 				nsfw,
-				spoiler
+				spoiler,
+				templateId
 			});
 		} catch (e) {
 			if (e instanceof TimeoutActiveError) return timeoutFail(e, values);
