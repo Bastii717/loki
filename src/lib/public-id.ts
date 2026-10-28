@@ -4,3 +4,10 @@ export const PUBLIC_ID_RE = /^[A-Za-z0-9]{12}$/;
 export function isPublicId(s: unknown): s is string {
 	return typeof s === 'string' && PUBLIC_ID_RE.test(s);
 }
+
+/** `/api/memes/<public id>/seen`: the seen-tracking endpoint (own rate bucket, exempt from the write lock). */
+export const SEEN_PATH_RE = /^\/api\/memes\/[A-Za-z0-9]{12}\/seen$/;
+
+export function isSeenPath(path: string): boolean {
+	return SEEN_PATH_RE.test(path);
+}

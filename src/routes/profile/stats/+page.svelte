@@ -36,9 +36,9 @@
 	);
 	const memeRows = $derived(
 		data.topVoted.map((m) => ({
-			label: m.title || `Meme ${m.id}`,
+			label: m.title || 'Untitled',
 			value: m.score,
-			href: `/meme/${m.id}`
+			pid: m.id
 		}))
 	);
 	const tagRows = $derived(data.topTags.map((t) => ({ label: `#${t.name}`, value: t.count })));
@@ -55,7 +55,7 @@
 
 {#snippet ranking(
 	title: string,
-	rows: { label: string; value: number; href?: string }[],
+	rows: { label: string; value: number; pid?: string }[],
 	unit: string
 )}
 	<section class="card">
@@ -67,8 +67,8 @@
 				{#each rows as row, i (i)}
 					<li>
 						<div class="meta">
-							{#if row.href}
-								<a class="label" href={resolve(row.href as '/')}>{row.label}</a>
+							{#if row.pid}
+								<a class="label" href={resolve('/meme/[pid]', { pid: row.pid })}>{row.label}</a>
 							{:else}
 								<span class="label">{row.label}</span>
 							{/if}

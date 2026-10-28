@@ -9,6 +9,7 @@ import { currentStatus } from './lib/server/maintenance';
 import { outagePage } from './lib/server/outage-page';
 import { seasonForRequest } from './lib/server/season-request';
 import { rateLimitRetryMs } from './lib/server/rate-limit';
+import { isSeenPath } from './lib/public-id';
 import { isWriteLockExempt, writeLockResponse } from './lib/server/write-lock';
 
 /** Runs once at server start so misconfiguration fails at boot, not on the first request. */
@@ -70,7 +71,6 @@ const isModerationPath = (path: string) =>
 	MODERATION_ROOTS.some((root) => path === root || path.startsWith(`${root}/`));
 const FORBIDDEN_MESSAGE = 'This area is for moderators and admins only.';
 
-const SEEN_PATH = /^\/api\/memes\/\d+\/seen$/;
 const WRITE_METHODS = new Set(['POST', 'PATCH', 'DELETE']);
 const RATE_LIMITED_MESSAGE = 'Slow down, Lord! Too many requests.';
 
@@ -80,7 +80,7 @@ function retryAfterSeconds(method: string, path: string, userId: number): number
 	const wait = (key: string, limit: number, windowMs: number) =>
 		Math.ceil(rateLimitRetryMs(`${key}:${userId}`, limit, windowMs) / 1000);
 	// Seen-tracking fires once per swiped slide; fast swiping must not eat the write budget.
-	if (method === 'POST' && SEEN_PATH.test(path)) return wait('seen', 300, 60_000);
+	if (method === 'POST' && isSeenPath(path)) return wait('seen', 300, 60_000);
 	const writes = wait('write', 60, 60_000);
 	if (writes > 0) return writes;
 	// avatar saves (up to 8 MB, two image decodes) and generator hand-overs (POST /create?/stash,

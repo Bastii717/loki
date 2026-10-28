@@ -48,7 +48,10 @@ import { load as moderationTemplatesLoad } from './routes/moderation/templates/+
 import { load as moderationTimeoutsLoad } from './routes/moderation/timeouts/+page.server';
 import { load as moderationUsersLoad } from './routes/moderation/users/+page.server';
 import { load as notificationsLoad } from './routes/notifications/+page.server';
+import { load as profileLoad } from './routes/profile/+page.server';
+import { load as profileFavoritesLoad } from './routes/profile/favorites/+page.server';
 import { load as profileMemesLoad } from './routes/profile/memes/+page.server';
+import { load as profileStatsLoad } from './routes/profile/stats/+page.server';
 import { load as quotesLoad } from './routes/quotes/+page.server';
 import { load as searchLoad } from './routes/search/+page.server';
 import { load as userLoad } from './routes/users/[pid]/+page.server';
@@ -278,6 +281,21 @@ describe('public ids never leak the internal ids', () => {
 		{
 			name: 'own memes',
 			run: () => runLoad(profileMemesLoad as Load, w.owner, '/profile/memes'),
+			expects: () => [w.meme.publicId]
+		},
+		{
+			name: 'profile',
+			run: () => runLoad(profileLoad as Load, w.owner, '/profile'),
+			expects: () => []
+		},
+		{
+			name: 'profile favorites',
+			run: () => runLoad(profileFavoritesLoad as Load, w.owner, '/profile/favorites'),
+			expects: () => []
+		},
+		{
+			name: 'profile stats',
+			run: () => runLoad(profileStatsLoad as Load, w.owner, '/profile/stats'),
 			expects: () => [w.meme.publicId]
 		},
 		{
@@ -542,16 +560,15 @@ describe('numeric ids answer 404 on every renamed route', () => {
 						{ method: 'DELETE', params: { pid: String(w.other.user.id) } }
 					)
 				).status
+		},
+		{
+			name: 'GET /api/feed?uploader=<n>',
+			status: async () => (await json(feedApi, w.owner, `/api/feed?uploader=${userN()}`)).status
 		}
 	];
 
 	it.each(cases.map((c) => [c.name, c] as const))('%s answers 404', async (_n, c) => {
 		expect(await c.status()).toBe(404);
-	});
-
-	it('GET /api/feed?uploader=<n> is rejected as an invalid public id (400)', async () => {
-		const { status } = await json(feedApi, w.owner, `/api/feed?uploader=${w.owner.user.id}`);
-		expect(status).toBe(400);
 	});
 
 	it('does not touch anything: the seeded rows are all still there', async () => {

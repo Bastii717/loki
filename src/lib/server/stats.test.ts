@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
 import { media, mediaTags, tags } from './db/schema';
@@ -75,7 +76,13 @@ describe('getStats', () => {
 		const scores = s.topVoted.map((x) => x.score);
 		expect(scores).toEqual([...scores].sort((a, b) => b - a));
 		expect(s.topVoted[0]).toMatchObject({ title: 'm5-0', score: 50 });
-		expect(s.topVoted[0].id).toBe(ids[ids.length - 1]);
+		const topId = ids[ids.length - 1];
+		const [top] = await db
+			.select({ publicId: media.publicId })
+			.from(media)
+			.where(eq(media.id, topId));
+		expect(s.topVoted[0].id).toBe(top.publicId);
+		expect(JSON.stringify(s.topVoted)).not.toMatch(new RegExp(`"id":${topId}[,}]`));
 
 		const tagRows = await db
 			.insert(tags)
