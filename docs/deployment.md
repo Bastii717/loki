@@ -38,7 +38,7 @@ Build the image yourself with `docker build -t ghcr.io/bastii717/loki:latest .`.
 | `REPORT_REVIEW_THRESHOLD` | no | Default 3 (integer >= 1). Content is hidden from members pending moderator review once MORE than this many distinct members (reporters with an active timeout do not count) have an open report on it; moderators and admins always see it. A moderator releasing a case makes the item permanently immune to auto-hiding. |
 | `BODY_SIZE_LIMIT` | yes in practice | adapter-node rejects larger request bodies (default 512K). Must be at least `MAX_UPLOAD_MB`, e.g. `60M`. |
 | `PROTOCOL_HEADER` | behind proxy | `x-forwarded-proto` |
-| `HOST_HEADER` | behind proxy | `x-forwarded-host` |
+| `HOST_HEADER` | behind proxy | `x-forwarded-host` (not needed behind cloudflared, which keeps the public hostname in `Host`) |
 | `ADDRESS_HEADER` | behind proxy | `x-forwarded-for` (client IP, used for rate limiting). Only set it when a trusted proxy overwrites that header. |
 | `TUNNEL_TOKEN` | tunnel only | Cloudflare Tunnel token for the `cloudflared` sidecar |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | minio fallback only | Root credentials of the optional `minio` service; reuse them as `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` |
@@ -75,7 +75,7 @@ The `backup` service in `docker-compose.yml` is commented out by default; uncomm
 
 1. Create the bucket in the **EU jurisdiction**: R2 > Create bucket > *Specify jurisdiction* > **European Union (EU)**. Leave it private. The jurisdiction (unlike a location hint) guarantees the data is stored and processed only in the EU, and it cannot be changed after creation. Create the backup bucket the same way.
 2. **Never attach a public custom domain, and never enable the `r2.dev` public URL, on this bucket.** Media is served only through short-lived presigned URLs issued by the app; a public bucket would expose every upload, including content that has been removed or blurred.
-3. Create an R2 API token with Object Read & Write limited to this bucket (select the EU jurisdiction when scoping it); use its keys as `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`.
+3. Create the key pair for the app: R2 object storage > **Overview** > under *Account Details* click **Manage** next to *API Tokens* > **Create Account API token** (an account token outlives the user who created it; a user token stops working when that user leaves the account). Name it, pick the permission **Object Read & Write**, scope it to this bucket only (select the EU jurisdiction in the bucket picker), create it. The result page shows the **Access Key ID** and the **Secret Access Key** once; copy both right away (the secret cannot be shown again, only replaced by a new token) into `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`. The account id for the endpoint below is on the same Overview page. Create two more tokens the same way for the backup job: **Object Read** on the media bucket (`S3_*` in `backup.env`) and **Object Read & Write** on the backup bucket (`BACKUP_S3_*`); the app's token must not cover the backup bucket.
 4. Set `S3_ENDPOINT=https://<account-id>.eu.r2.cloudflarestorage.com` (note the `.eu.`; EU buckets are not reachable through the default endpoint), `S3_REGION=auto`, `S3_FORCE_PATH_STYLE=false`.
 5. The app sets `requestChecksumCalculation`/`responseChecksumValidation` to `WHEN_REQUIRED` because R2 rejects the SDK's default CRC32 checksums.
 
@@ -84,16 +84,30 @@ To self-host storage instead, uncomment the `minio` block in `docker-compose.yml
 ## Publishing
 
 TLS terminates in front of the container; in both cases set `ORIGIN` to the public https URL,
-`PROTOCOL_HEADER=x-forwarded-proto` and `HOST_HEADER=x-forwarded-host`, and
+`PROTOCOL_HEADER=x-forwarded-proto` and, unless the proxy keeps the public hostname in `Host` (cloudflared does), `HOST_HEADER=x-forwarded-host`, and
 `BODY_SIZE_LIMIT` >= `MAX_UPLOAD_MB` (`docker-compose.yml` defaults it to `60M`). With nginx,
 `client_max_body_size` must match it, otherwise nginx answers 413 before the app sees the upload.
 
 ### Option A: Cloudflare Tunnel
 
+Either run the connector next to the app (A1) or point an existing connector on another machine at the app (A2). In both cases set in `.env`: `ORIGIN=https://loki.example.com`, `PROTOCOL_HEADER=x-forwarded-proto` (cloudflared sets it) and `ADDRESS_HEADER=cf-connecting-ip` (the real client IP for rate limiting; `x-forwarded-for` also works). `HOST_HEADER` can stay unset: cloudflared passes the public hostname through as the `Host` header, which is what the CSRF check compares against. Set `HOST_HEADER=x-forwarded-host` only if you override *HTTP Host Header* in the tunnel's origin settings. The OIDC redirect URI in Authentik must use the public origin (`https://loki.example.com/auth/callback`), and `OIDC_ISSUER` must be reachable from the app container.
+
+**A1: connector as a sidecar on the app host**
+
 1. Zero Trust > Networks > Tunnels: create a tunnel, copy its token into `TUNNEL_TOKEN` in `.env`.
 2. Add a public hostname pointing at `http://app:3000`.
 3. In `docker-compose.yml` uncomment the `cloudflared` service and remove the `ports:` entry of `app` so nothing is published on the host.
-4. `ADDRESS_HEADER`: cloudflared forwards the client IP in `x-forwarded-for` (`cf-connecting-ip` also works). Set `ADDRESS_HEADER=x-forwarded-for`.
+
+**A2: connector on another host**
+
+The connector only needs to reach the app over the network; it can serve any number of hostnames, so Loki is just one more public hostname on a tunnel you already run.
+
+1. On the app host, publish the port on the interface the connector host can reach instead of loopback, e.g. `ports: ['10.0.0.5:3000:3000']` in `docker-compose.yml` (`10.0.0.5` being the app host's address in the shared network). Leave the `cloudflared` block commented out.
+2. Allow only the connector host on that port (`ufw allow from 10.0.0.9 to any port 3000`, deny everything else). The hop from connector to app is plain HTTP; if the two hosts are not on the same trusted network, put a WireGuard or Tailscale link between them and publish on that interface.
+3. In the tunnel, add the public hostname `loki.example.com` with service type **HTTP** and URL `10.0.0.5:3000`.
+4. Check with `curl -sI https://loki.example.com/healthz` (200) and `/readyz` (200 once database and bucket are reachable).
+
+Optional for both variants: put a Cloudflare Access policy in front of the hostname (Zero Trust > Access > Applications); Loki still checks the Authentik groups afterwards.
 
 ### Option B: external nginx
 
