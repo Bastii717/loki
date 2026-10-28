@@ -52,7 +52,7 @@ Profiles: the profile editor, a detail view with role badges on the comments, an
 Notifications: the notices page with one unread and several read rows, and the preferences behind the gear link.
 
 <p align="center">
-  <img src="docs/screenshots/notifications-mobile.png" alt="Notifications page on a phone with filter chips, a mark-all-as-read button and five notices: one unread comment notice highlighted, the rest read, two moderation notices with an amber edge" width="30%">
+  <img src="docs/screenshots/notifications-mobile.png" alt="Notifications page on a phone with filter chips, a mark-all-as-read button and six notices: one unread comment notice highlighted, the rest read, two moderation notices with an amber edge and a Meme of the Month award" width="30%">
   <img src="docs/screenshots/profile-notifications-mobile.png" alt="Notification preferences on a phone with checkboxes for comments on my memes, thread comments and report outcomes, a note on the always-on notices and a Save button" width="30%">
 </p>
 
