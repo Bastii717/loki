@@ -1,8 +1,10 @@
+import { render } from 'svelte/server';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { resetDb, setupDb } from '../../lib/server/db/test-utils';
 import { userWithSession } from '../../lib/server/moderation-test-utils';
 import { setDisplayName, setMotto } from '../../lib/server/profile';
 import { load } from './+page.server';
+import Page from './+page.svelte';
 
 beforeAll(setupDb);
 beforeEach(resetDb);
@@ -27,5 +29,31 @@ describe('profile load', () => {
 			role: 'member'
 		});
 		expect(data.counts).toEqual({ memes: 0, favorites: 0, comments: 0 });
+	});
+});
+
+describe('profile page', () => {
+	it('links to the notification preferences right after Edit profile', () => {
+		const { body } = render(Page as never, {
+			props: {
+				data: {
+					profile: {
+						username: 'user1',
+						displayName: null,
+						motto: '',
+						avatarKey: null,
+						avatarThumbKey: null,
+						role: 'member'
+					},
+					counts: { memes: 0, favorites: 0, comments: 0 },
+					openCases: null
+				}
+			} as never
+		});
+		const hrefs = [...body.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]);
+		expect(hrefs.indexOf('/profile/notifications')).toBe(hrefs.indexOf('/profile/edit') + 1);
+		expect(body).toMatch(
+			/<a href="\/profile\/notifications"[^>]*>[\s\S]*?lucide-bell[\s\S]*?Notifications/
+		);
 	});
 });

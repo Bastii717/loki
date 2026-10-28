@@ -51,6 +51,12 @@ describe('notifications page', () => {
 		expect(out.body).toMatch(/<h1[^>]*>Notifications<\/h1>/);
 	});
 
+	it('links a gear to the notification preferences', () => {
+		expect(html(data())).toMatch(
+			/<a[^>]*href="\/profile\/notifications"[^>]*aria-label="Notification settings"[^>]*>[\s\S]*?lucide-settings/
+		);
+	});
+
 	it('shows an unread activity row with the activity icon and the actor avatar', () => {
 		const [row] = rows(html(data({ items: [item()], unread: 1 })));
 		expect(row).toMatch(/^<li[^>]*class="[^"]*\bunread\b/);

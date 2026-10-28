@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import CheckCheck from 'lucide-svelte/icons/check-check';
 	import MessageCircle from 'lucide-svelte/icons/message-circle';
+	import Settings from 'lucide-svelte/icons/settings';
 	import Shield from 'lucide-svelte/icons/shield';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import { formatDateTime } from '../../lib/moderation-labels';
@@ -41,6 +42,9 @@
 				</button>
 			</form>
 		{/if}
+		<a href={resolve('/profile/notifications')} class="gear" aria-label="Notification settings">
+			<Settings size={20} aria-hidden="true" />
+		</a>
 	</div>
 </header>
 
@@ -122,6 +126,15 @@
 		display: flex;
 		align-items: center;
 		gap: 4px;
+	}
+
+	.gear {
+		display: grid;
+		place-items: center;
+		width: 44px;
+		height: 44px;
+		border-radius: var(--radius-pill);
+		color: var(--text);
 	}
 
 	main {
