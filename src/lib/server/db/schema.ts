@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
 	boolean,
+	date,
 	doublePrecision,
 	index,
 	integer,
@@ -340,3 +341,24 @@ export const notificationPrefs = pgTable('notification_prefs', {
 	threadComments: boolean('thread_comments').notNull().default(true),
 	reportOutcomes: boolean('report_outcomes').notNull().default(true)
 });
+
+/**
+ * One row per evaluated month and award kind (`month` is the first day of the Berlin calendar
+ * month). A month without a winner has `mediaId` and `uploaderId` null and an empty `title`, so
+ * every past month is evaluated exactly once. Deleting the meme or the member nulls the link and
+ * keeps the title and score snapshot.
+ */
+export const awards = pgTable(
+	'awards',
+	{
+		id: serial('id').primaryKey(),
+		kind: text('kind').notNull().default('meme_of_the_month'),
+		month: date('month', { mode: 'string' }).notNull(),
+		mediaId: integer('media_id').references(() => media.id, { onDelete: 'set null' }),
+		uploaderId: integer('uploader_id').references(() => users.id, { onDelete: 'set null' }),
+		title: text('title').notNull(),
+		score: integer('score').notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [uniqueIndex('awards_kind_month_idx').on(t.kind, t.month)]
+);

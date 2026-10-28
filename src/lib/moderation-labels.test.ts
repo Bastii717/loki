@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatDateTime, formatMonthYear, modName } from './moderation-labels';
+import {
+	formatDate,
+	formatDateTime,
+	formatMonthLong,
+	formatMonthYear,
+	modName
+} from './moderation-labels';
 
 describe('date formatters', () => {
 	const instant = '2026-10-24T12:05:00Z';
@@ -20,6 +26,19 @@ describe('date formatters', () => {
 
 	it('abbreviates September as Sep', () => {
 		expect(formatMonthYear('2026-09-15T12:00:00Z')).toBe('Sep 2026');
+	});
+
+	it('accepts a YYYY-MM month for the short form', () => {
+		expect(formatMonthYear('2026-10')).toBe('Oct 2026');
+		expect(formatMonthYear('2026-09')).toBe('Sep 2026');
+	});
+
+	it('writes the month out in full, from YYYY-MM or an ISO date', () => {
+		expect(formatMonthLong('2026-10')).toBe('October 2026');
+		expect(formatMonthLong('2027-01')).toBe('January 2027');
+		expect(formatMonthLong('2026-09-15T12:00:00Z')).toBe('September 2026');
+		// 23:30 UTC on 31 Oct is already 1 Nov in Berlin
+		expect(formatMonthLong('2026-10-31T23:30:00Z')).toBe('November 2026');
 	});
 });
 
