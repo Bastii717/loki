@@ -182,6 +182,10 @@ Search needs no configuration. Migration 0010 runs `CREATE EXTENSION IF NOT EXIS
 
 Automatic: an hourly job awards each finished Berlin calendar month to its top-scored meme, and a winner is notified only when the month ended less than 31 days ago (so a first deployment does not notify for old months). Nothing to configure.
 
+### Meme generator
+
+Template images live under `templates/` in the bucket: a 1600 px WebP plus a 320 px thumbnail per template. Removing a template in the admin library is a soft delete: it disappears from the library and the editor, but its objects stay in the bucket so memes posted from it keep their provenance, and an admin can restore it. Template uploads share the `AVATAR_MAX_MB` cap with avatars. The editor streams template and meme images through the app, so the bucket needs no CORS configuration for it.
+
 ## Releases
 
 The `Docker` workflow builds the image for every pull request (without pushing) and publishes it on pushes to `main` and on release tags:

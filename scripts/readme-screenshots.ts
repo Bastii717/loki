@@ -268,6 +268,26 @@ async function shootPage(page: Page, path: string, name: string, ready: string):
 }
 
 /**
+ * The editor with the first library template and both captions typed in (nothing is posted).
+ * Waits until `Post it` is enabled (the image loaded) and gives the canvas a moment to draw.
+ */
+async function shootCreate(page: Page): Promise<void> {
+	await page.goto(`${BASE_URL}/create`);
+	await page.locator('a[href^="/create?template="]').first().click();
+	await page.getByLabel('Top text').fill('WHEN THE BUILD PASSES');
+	await page.getByLabel('Bottom text').fill('ON THE FIRST TRY');
+	await page.getByRole('button', { name: 'Post it' }).waitFor();
+	await page.waitForFunction(() =>
+		[...document.querySelectorAll('button')].some(
+			(b) => b.textContent?.includes('Post it') && !b.disabled
+		)
+	);
+	await page.evaluate(() => document.fonts.ready);
+	await page.waitForTimeout(500);
+	await save('create-mobile.png', await page.screenshot());
+}
+
+/**
  * The admin user list, scrolled to the seeded `lena` (the one demo account with a real avatar),
  * so the cards below her show a letter avatar, the admin's own badge and the rename tools.
  */
@@ -464,7 +484,7 @@ async function main(): Promise<void> {
 				{ mobile: true, account: ADMIN }
 			);
 		if (wants('maintenance-mobile')) await shootMaintenance(browser);
-		if (wantsAny('detail-badges-mobile', 'moderation-users-mobile'))
+		if (wantsAny('detail-badges-mobile', 'moderation-users-mobile', 'templates-admin-mobile'))
 			await withContext(
 				browser,
 				MOBILE,
@@ -473,6 +493,13 @@ async function main(): Promise<void> {
 						await shootDetailBadges(page, 'detail-badges-mobile.png');
 					if (wants('moderation-users-mobile'))
 						await shootUsers(page, 'moderation-users-mobile.png');
+					if (wants('templates-admin-mobile'))
+						await shootPage(
+							page,
+							'/moderation/templates',
+							'templates-admin-mobile.png',
+							'Add template'
+						);
 				},
 				{ mobile: true, account: ADMIN }
 			);
@@ -485,7 +512,8 @@ async function main(): Promise<void> {
 				'profile-notifications-mobile',
 				'search-mobile',
 				'member-mobile',
-				'awards-mobile'
+				'awards-mobile',
+				'create-mobile'
 			)
 		)
 			await withContext(
@@ -519,6 +547,7 @@ async function main(): Promise<void> {
 					if (wants('awards-mobile'))
 						// last month's winner from the seed, plus whoever leads the running month
 						await shootPage(page, '/awards', 'awards-mobile.png', 'Meme of the Month');
+					if (wants('create-mobile')) await shootCreate(page);
 				},
 				{ mobile: true, account: OWNER }
 			);

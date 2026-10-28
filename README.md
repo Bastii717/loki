@@ -22,6 +22,7 @@ Planned and being built. The whole app is English: UI, code and docs.
 - **Notifications**: a bell with activity (comments on your memes and threads) and moderation notices, with per-member preferences.
 - **Search**: find memes by title, tag or comment; look up people and see what they posted.
 - **Meme of the Month**: the top-scored meme of each month gets a trophy automatically; every winner stays on the awards page.
+- **Meme generator**: pick a library template or remix any meme, type top and bottom text, post. Rendered in the browser, uploaded like any other meme.
 - **PWA** with a share target, so memes can be sent straight from the share sheet.
 
 ## Screenshots
@@ -67,6 +68,13 @@ Meme of the Month: the awards page with the current leader and last month's winn
 
 <p align="center">
   <img src="docs/screenshots/awards-mobile.png" alt="Awards page on a phone with the meme currently leading the month and last month's winner under a month heading" width="30%">
+</p>
+
+Meme generator: the editor with a template and both captions, and the admin template library.
+
+<p align="center">
+  <img src="docs/screenshots/create-mobile.png" alt="The editor with a template and both captions" width="30%">
+  <img src="docs/screenshots/templates-admin-mobile.png" alt="The admin template library" width="30%">
 </p>
 
 Stats, Upload and Report: what the board is up to, how a meme gets onto it, and how one gets flagged.
