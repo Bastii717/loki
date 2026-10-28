@@ -89,3 +89,19 @@ describe('stashSharedFile', () => {
 		expect(peekShared(9)).toBeNull();
 	});
 });
+
+describe('stashSharedFile title truncation', () => {
+	it('never leaves a lone surrogate when an emoji straddles the 120 limit', async () => {
+		const png = await sharp({
+			create: { width: 2, height: 2, channels: 3, background: '#fff' }
+		})
+			.png()
+			.toBuffer();
+		const title = `${'a'.repeat(119)}😀tail`;
+		expect(await stashSharedFile(11, { name: 'a.png', data: png, title })).toBe(true);
+		const stored = peekShared(11)!.title!;
+		expect(stored.isWellFormed()).toBe(true);
+		expect(stored).toBe(`${'a'.repeat(119)}😀`);
+		expect(Array.from(stored)).toHaveLength(120);
+	});
+});

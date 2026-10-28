@@ -52,6 +52,9 @@
 	}
 
 	function setPreview(file: File | undefined) {
+		// any file picked, pasted or dropped by the user replaces the template PNG, so the template
+		// link goes; the hand-over sets it again after its own takeFile
+		templateId = '';
 		if (previewUrl) URL.revokeObjectURL(previewUrl);
 		if (!file) {
 			previewUrl = null;

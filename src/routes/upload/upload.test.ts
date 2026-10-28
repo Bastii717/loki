@@ -73,6 +73,8 @@ describe('upload page entry points', () => {
 	});
 
 	it('carries the hand-over template id in a hidden input (empty by default)', () => {
-		expect(body()).toMatch(/<input\b(?=[^>]*type="hidden")(?=[^>]*name="templateId")[^>]*>/);
+		const input = body().match(/<input\b(?=[^>]*type="hidden")(?=[^>]*name="templateId")[^>]*>/);
+		expect(input).not.toBeNull();
+		expect(input![0]).toMatch(/\bvalue=""/);
 	});
 });
