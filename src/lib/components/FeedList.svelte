@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import MemeCard from './MemeCard.svelte';
+	import { feedPageUrl } from '../feed-request';
 	import type { FeedItem } from '../server/feed';
 
 	/**
@@ -35,11 +35,8 @@
 		if (loading || !nextCursor) return;
 		loading = true;
 		failed = false;
-		const params = new SvelteURLSearchParams({ sort: 'new', cursor: nextCursor });
-		if (list === 'user') params.set('uploader', uploader ?? '');
-		else params.set('list', list);
 		try {
-			const res = await fetch(`/api/feed?${params}`);
+			const res = await fetch(feedPageUrl({ cursor: nextCursor, list, uploader }));
 			if (!res.ok) throw new Error(String(res.status));
 			const page: { items: FeedItem[]; nextCursor: string | null } = await res.json();
 			const known = new Set(items.map((i) => i.id));

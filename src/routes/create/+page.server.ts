@@ -34,8 +34,7 @@ async function visibleImageMeme(user: SessionUser, pid: string) {
 	const id = await resolveMediaId(pid);
 	if (id === null) return null;
 	const revealAll = canSeeUnderReview(user);
-	// TODO(public-ids slice A): switch to getFeedItemById
-	const item = await getFeedItem(user.id, id, revealAll);
+	const item = await getFeedItem(user.id, revealAll, pid);
 	if (!item || item.kind !== 'image' || (item.underReview && !revealAll)) return null;
 	return { item, id };
 }
@@ -84,11 +83,11 @@ export const load: PageServerLoad = async ({ locals, url }): Promise<CreateData>
 			mode: 'meme',
 			source: {
 				kind: 'meme',
-				id: memeParam,
+				id: item.id,
 				name: item.title || 'Untitled',
 				width: item.width ?? FALLBACK.width,
 				height: item.height ?? FALLBACK.height,
-				url: `/api/memes/${memeParam}/source`
+				url: `/api/memes/${item.id}/source`
 			}
 		};
 	}

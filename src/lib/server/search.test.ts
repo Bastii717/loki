@@ -3,7 +3,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { db } from './db';
 import { mediaTags, quotes, tags } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
-import { addOpenReports, insertComment, insertMeme, OVER_THRESHOLD } from './moderation-test-utils';
+import {
+	addOpenReports,
+	insertCommentRow,
+	insertMemeRow,
+	OVER_THRESHOLD
+} from './moderation-test-utils';
 import {
 	escapeLike,
 	excerptAround,
@@ -33,9 +38,35 @@ async function tagMeme(mediaId: number, name: string): Promise<void> {
 	await db.insert(mediaTags).values({ mediaId, tagId: row.id });
 }
 
-async function insertQuoteRow(text: string, author: string): Promise<number> {
-	const [row] = await db.insert(quotes).values({ text, author }).returning({ id: quotes.id });
+// Rows are addressed by internal id inside the tests; results carry public ids. Each insert helper
+// remembers the public id of what it created, `memePub(id)` and friends translate back.
+const publicIds = new Map<string, string>();
+const remember = (kind: string, row: { id: number; publicId: string }) => {
+	publicIds.set(`${kind}:${row.id}`, row.publicId);
 	return row.id;
+};
+const lookup = (kind: string, id: number) => publicIds.get(`${kind}:${id}`)!;
+const memePub = (id: number) => lookup('meme', id);
+const memePubs = (ids: number[]) => ids.map(memePub);
+const commentPub = (id: number) => lookup('comment', id);
+const commentPubs = (ids: number[]) => ids.map(commentPub);
+const quotePub = (id: number) => lookup('quote', id);
+const quotePubs = (ids: number[]) => ids.map(quotePub);
+
+async function insertMeme(uploaderId: number, title: string): Promise<number> {
+	return remember('meme', await insertMemeRow(uploaderId, title));
+}
+
+async function insertComment(authorId: number, mediaId: number, text: string): Promise<number> {
+	return remember('comment', await insertCommentRow(authorId, mediaId, text));
+}
+
+async function insertQuoteRow(text: string, author: string): Promise<number> {
+	const [row] = await db
+		.insert(quotes)
+		.values({ text, author })
+		.returning({ id: quotes.id, publicId: quotes.publicId });
+	return remember('quote', row);
 }
 
 /** A meme pushed over the report threshold (hidden for members). */
@@ -78,7 +109,9 @@ describe('pg_trgm', () => {
 
 		it('still finds a near-miss person', async () => {
 			const u = await testUser({ displayName: 'Jonathan' });
-			expect((await searchPeople(false, 'Jonathon', PAGE)).items.map((p) => p.id)).toEqual([u.id]);
+			expect((await searchPeople(false, 'Jonathon', PAGE)).items.map((p) => p.id)).toEqual([
+				u.publicId
+			]);
 		});
 	});
 
@@ -183,7 +216,7 @@ describe('searchMemes', () => {
 		const id = await insertMeme(u.id, 'Monday standup');
 		await insertMeme(u.id, 'Something else');
 		const { items, total } = await searchMemes(u.id, false, 'standu', PAGE);
-		expect(items.map((i) => i.id)).toEqual([id]);
+		expect(items.map((i) => i.id)).toEqual(memePubs([id]));
 		expect(total).toBe(1);
 	});
 
@@ -192,14 +225,14 @@ describe('searchMemes', () => {
 		const id = await insertMeme(u.id, 'Weekly meeting notes');
 		await insertMeme(u.id, 'Cat on a keyboard');
 		const { items } = await searchMemes(u.id, false, 'metting', PAGE);
-		expect(items.map((i) => i.id)).toEqual([id]);
+		expect(items.map((i) => i.id)).toEqual(memePubs([id]));
 	});
 
 	it('is case-insensitive', async () => {
 		const u = await testUser();
 		const id = await insertMeme(u.id, 'Monday STANDUP');
 		const { items } = await searchMemes(u.id, false, 'standup', PAGE);
-		expect(items.map((i) => i.id)).toEqual([id]);
+		expect(items.map((i) => i.id)).toEqual(memePubs([id]));
 	});
 
 	it('brings a meme in through a matching tag', async () => {
@@ -208,7 +241,7 @@ describe('searchMemes', () => {
 		await tagMeme(id, 'office');
 		await insertMeme(u.id, 'Another one');
 		const { items, total } = await searchMemes(u.id, false, 'offic', PAGE);
-		expect(items.map((i) => i.id)).toEqual([id]);
+		expect(items.map((i) => i.id)).toEqual(memePubs([id]));
 		expect(items[0].tags).toEqual(['office']);
 		expect(total).toBe(1);
 	});
@@ -219,7 +252,7 @@ describe('searchMemes', () => {
 		await tagMeme(id, 'office');
 		await tagMeme(id, 'office-fun');
 		const { items, total } = await searchMemes(u.id, false, 'office', PAGE);
-		expect(items.map((i) => i.id)).toEqual([id]);
+		expect(items.map((i) => i.id)).toEqual(memePubs([id]));
 		expect(total).toBe(1);
 	});
 
@@ -236,7 +269,7 @@ describe('searchMemes', () => {
 		const exact = await insertMeme(u.id, 'standup');
 		const partial = await insertMeme(u.id, 'standups');
 		const { items } = await searchMemes(u.id, false, 'standup', PAGE);
-		expect(items.map((i) => i.id)).toEqual([exact, partial]);
+		expect(items.map((i) => i.id)).toEqual(memePubs([exact, partial]));
 	});
 
 	it('orders equal matches newest first', async () => {
@@ -244,7 +277,7 @@ describe('searchMemes', () => {
 		const first = await insertMeme(u.id, 'standup');
 		const second = await insertMeme(u.id, 'standup');
 		const { items } = await searchMemes(u.id, false, 'standup', PAGE);
-		expect(items.map((i) => i.id)).toEqual([second, first]);
+		expect(items.map((i) => i.id)).toEqual(memePubs([second, first]));
 	});
 
 	it('matches % literally', async () => {
@@ -253,7 +286,7 @@ describe('searchMemes', () => {
 		await insertMeme(u.id, 'abc');
 		await insertMeme(u.id, 'axxc');
 		const { items } = await searchMemes(u.id, false, 'a%c', PAGE);
-		expect(items.map((i) => i.id)).toEqual([hit]);
+		expect(items.map((i) => i.id)).toEqual(memePubs([hit]));
 	});
 
 	it('matches _ literally', async () => {
@@ -261,7 +294,7 @@ describe('searchMemes', () => {
 		const hit = await insertMeme(u.id, 'a_c');
 		await insertMeme(u.id, 'abc');
 		const { items } = await searchMemes(u.id, false, 'a_c', PAGE);
-		expect(items.map((i) => i.id)).toEqual([hit]);
+		expect(items.map((i) => i.id)).toEqual(memePubs([hit]));
 	});
 
 	it('hides a meme under review from members, in items and in total', async () => {
@@ -269,12 +302,12 @@ describe('searchMemes', () => {
 		const visible = await insertMeme(u.id, 'Standup visible');
 		const hidden = await hiddenMeme(u.id, 'Standup hidden');
 		const member = await searchMemes(u.id, false, 'standup', PAGE);
-		expect(member.items.map((i) => i.id)).toEqual([visible]);
+		expect(member.items.map((i) => i.id)).toEqual(memePubs([visible]));
 		expect(member.total).toBe(1);
 		const mod = await searchMemes(u.id, true, 'standup', PAGE);
-		expect(mod.items.map((i) => i.id).sort()).toEqual([visible, hidden].sort());
+		expect(mod.items.map((i) => i.id).sort()).toEqual(memePubs([visible, hidden]).sort());
 		expect(mod.total).toBe(2);
-		expect(mod.items.find((i) => i.id === hidden)?.underReview).toBe(true);
+		expect(mod.items.find((i) => i.id === memePub(hidden))?.underReview).toBe(true);
 	});
 
 	it('never returns an item under review to a member, whichever of two matches is hidden', async () => {
@@ -282,7 +315,7 @@ describe('searchMemes', () => {
 		const stays = await insertMeme(u.id, 'Standup one');
 		await hiddenMeme(u.id, 'Standup two');
 		const { items, total } = await searchMemes(u.id, false, 'standup', PAGE);
-		expect(items.map((i) => i.id)).toEqual([stays]);
+		expect(items.map((i) => i.id)).toEqual(memePubs([stays]));
 		expect(items.every((i) => !i.underReview)).toBe(true);
 		expect(total).toBe(1);
 	});
@@ -294,7 +327,7 @@ describe('searchMemes', () => {
 		const member = await searchMemes(u.id, false, 'secrettag', PAGE);
 		expect(member).toEqual({ items: [], total: 0 });
 		const mod = await searchMemes(u.id, true, 'secrettag', PAGE);
-		expect(mod.items.map((i) => i.id)).toEqual([hidden]);
+		expect(mod.items.map((i) => i.id)).toEqual(memePubs([hidden]));
 	});
 
 	it('pages with limit and offset in ranked order', async () => {
@@ -305,9 +338,9 @@ describe('searchMemes', () => {
 		const p1 = await searchMemes(u.id, false, 'standup', { limit: 2, offset: 0 });
 		const p2 = await searchMemes(u.id, false, 'standup', { limit: 2, offset: 2 });
 		const p3 = await searchMemes(u.id, false, 'standup', { limit: 2, offset: 4 });
-		expect(p1.items.map((i) => i.id)).toEqual(newestFirst.slice(0, 2));
-		expect(p2.items.map((i) => i.id)).toEqual(newestFirst.slice(2, 4));
-		expect(p3.items.map((i) => i.id)).toEqual(newestFirst.slice(4));
+		expect(p1.items.map((i) => i.id)).toEqual(memePubs(newestFirst.slice(0, 2)));
+		expect(p2.items.map((i) => i.id)).toEqual(memePubs(newestFirst.slice(2, 4)));
+		expect(p3.items.map((i) => i.id)).toEqual(memePubs(newestFirst.slice(4)));
 		expect(p1.total).toBe(5);
 		expect(p3.total).toBe(5);
 	});
@@ -408,9 +441,9 @@ describe('searchPeople', () => {
 		const b = await testUser({ username: 'lenny' });
 		const { items, total } = await searchPeople(false, 'len', PAGE);
 		expect(total).toBe(2);
-		expect(items.map((i) => i.id).sort()).toEqual([a.id, b.id].sort());
-		expect(items.find((i) => i.id === a.id)?.name).toBe('Lena Fischer');
-		expect(items.find((i) => i.id === b.id)?.name).toBe('lenny');
+		expect(items.map((i) => i.id).sort()).toEqual([a.publicId, b.publicId].sort());
+		expect(items.find((i) => i.id === a.publicId)?.name).toBe('Lena Fischer');
+		expect(items.find((i) => i.id === b.publicId)?.name).toBe('lenny');
 	});
 
 	it('does not match a username that a display name hides, for members', async () => {
@@ -424,7 +457,7 @@ describe('searchPeople', () => {
 		expect(mod.total).toBe(1);
 		expect(mod.items).toEqual([
 			{
-				id: u.id,
+				id: u.publicId,
 				name: 'Lena',
 				username: 'secret.login',
 				role: 'moderator',
@@ -447,7 +480,7 @@ describe('searchPeople', () => {
 		await testUser({ displayName: 'Jonathan' });
 		const near = await testUser({ displayName: 'Jonas' });
 		const { items } = await searchPeople(false, 'jonas', PAGE);
-		expect(items[0].id).toBe(near.id);
+		expect(items[0].id).toBe(near.publicId);
 	});
 
 	it('matches % and _ literally', async () => {
@@ -455,8 +488,10 @@ describe('searchPeople', () => {
 		await testUser({ displayName: 'abc' });
 		const under = await testUser({ displayName: 'x_y' });
 		await testUser({ displayName: 'xzy' });
-		expect((await searchPeople(false, 'a%c', PAGE)).items.map((i) => i.id)).toEqual([hit.id]);
-		expect((await searchPeople(false, 'x_y', PAGE)).items.map((i) => i.id)).toEqual([under.id]);
+		expect((await searchPeople(false, 'a%c', PAGE)).items.map((i) => i.id)).toEqual([hit.publicId]);
+		expect((await searchPeople(false, 'x_y', PAGE)).items.map((i) => i.id)).toEqual([
+			under.publicId
+		]);
 		expect(await searchPeople(false, '%%', PAGE)).toEqual({ items: [], total: 0 });
 	});
 
@@ -481,11 +516,11 @@ describe('searchComments', () => {
 		expect(total).toBe(1);
 		expect(items).toHaveLength(1);
 		expect(items[0]).toMatchObject({
-			id,
-			mediaId: meme,
+			id: commentPub(id),
+			mediaId: memePub(meme),
 			mediaTitle: 'The meme',
 			author: 'Lena',
-			authorId: author.id,
+			authorId: author.publicId,
 			authorRole: 'moderator',
 			authorAvatar: null,
 			excerpt: 'Honestly the best standup ever'
@@ -508,7 +543,7 @@ describe('searchComments', () => {
 		const meme = await insertMeme(u.id, 'M');
 		const id = await insertComment(u.id, meme, 'We should have a weekly meeting about this');
 		const { items } = await searchComments(false, 'metting', PAGE);
-		expect(items.map((i) => i.id)).toEqual([id]);
+		expect(items.map((i) => i.id)).toEqual(commentPubs([id]));
 	});
 
 	it('hides a comment under review from members, in items and in total', async () => {
@@ -518,10 +553,10 @@ describe('searchComments', () => {
 		const hidden = await insertComment(u.id, meme, 'standup hidden');
 		await addOpenReports('comment', hidden, u.id, OVER_THRESHOLD);
 		const member = await searchComments(false, 'standup', PAGE);
-		expect(member.items.map((i) => i.id)).toEqual([shown]);
+		expect(member.items.map((i) => i.id)).toEqual(commentPubs([shown]));
 		expect(member.total).toBe(1);
 		const mod = await searchComments(true, 'standup', PAGE);
-		expect(mod.items.map((i) => i.id).sort()).toEqual([shown, hidden].sort());
+		expect(mod.items.map((i) => i.id).sort()).toEqual(commentPubs([shown, hidden]).sort());
 		expect(mod.total).toBe(2);
 	});
 
@@ -531,7 +566,7 @@ describe('searchComments', () => {
 		const id = await insertComment(u.id, meme, 'standup on the hidden one');
 		expect(await searchComments(false, 'standup', PAGE)).toEqual({ items: [], total: 0 });
 		const mod = await searchComments(true, 'standup', PAGE);
-		expect(mod.items.map((i) => i.id)).toEqual([id]);
+		expect(mod.items.map((i) => i.id)).toEqual(commentPubs([id]));
 		expect(mod.items[0].mediaTitle).toBe('Secret title');
 		expect(mod.total).toBe(1);
 	});
@@ -543,7 +578,7 @@ describe('searchComments', () => {
 		await insertComment(u.id, meme, 'abc');
 		await insertComment(u.id, meme, 'axxc');
 		const { items } = await searchComments(false, 'a%c', PAGE);
-		expect(items.map((i) => i.id)).toEqual([hit]);
+		expect(items.map((i) => i.id)).toEqual(commentPubs([hit]));
 	});
 
 	it('orders equal matches newest first and pages', async () => {
@@ -553,8 +588,8 @@ describe('searchComments', () => {
 		for (let i = 0; i < 3; i++) ids.push(await insertComment(u.id, meme, 'standup'));
 		const p1 = await searchComments(false, 'standup', { limit: 2, offset: 0 });
 		const p2 = await searchComments(false, 'standup', { limit: 2, offset: 2 });
-		expect(p1.items.map((i) => i.id)).toEqual([ids[2], ids[1]]);
-		expect(p2.items.map((i) => i.id)).toEqual([ids[0]]);
+		expect(p1.items.map((i) => i.id)).toEqual(commentPubs([ids[2], ids[1]]));
+		expect(p2.items.map((i) => i.id)).toEqual(commentPubs([ids[0]]));
 		expect(p1.total).toBe(3);
 	});
 });
@@ -567,7 +602,7 @@ describe('searchQuotes', () => {
 		expect(total).toBe(1);
 		expect(items).toHaveLength(1);
 		expect(items[0]).toMatchObject({
-			id,
+			id: quotePub(id),
 			text: 'Never trust a standup that ends on time',
 			author: 'Opa'
 		});
@@ -578,13 +613,13 @@ describe('searchQuotes', () => {
 		const id = await insertQuoteRow('Wise words', 'Grandpa Joe');
 		await insertQuoteRow('Other words', 'Somebody');
 		const { items } = await searchQuotes(false, 'grandpa', PAGE);
-		expect(items.map((i) => i.id)).toEqual([id]);
+		expect(items.map((i) => i.id)).toEqual(quotePubs([id]));
 	});
 
 	it('finds a typo inside a longer quote', async () => {
 		const id = await insertQuoteRow('We should have a weekly meeting about this', 'Opa');
 		const { items } = await searchQuotes(false, 'metting', PAGE);
-		expect(items.map((i) => i.id)).toEqual([id]);
+		expect(items.map((i) => i.id)).toEqual(quotePubs([id]));
 	});
 
 	it('hides a quote under review from members, in items and in total', async () => {
@@ -593,10 +628,10 @@ describe('searchQuotes', () => {
 		const hidden = await insertQuoteRow('standup hidden', 'Opa');
 		await addOpenReports('quote', hidden, u.id, OVER_THRESHOLD);
 		const member = await searchQuotes(false, 'standup', PAGE);
-		expect(member.items.map((i) => i.id)).toEqual([shown]);
+		expect(member.items.map((i) => i.id)).toEqual(quotePubs([shown]));
 		expect(member.total).toBe(1);
 		const mod = await searchQuotes(true, 'standup', PAGE);
-		expect(mod.items.map((i) => i.id).sort()).toEqual([shown, hidden].sort());
+		expect(mod.items.map((i) => i.id).sort()).toEqual(quotePubs([shown, hidden]).sort());
 		expect(mod.total).toBe(2);
 	});
 
@@ -605,7 +640,7 @@ describe('searchQuotes', () => {
 		await insertQuoteRow('abc', 'Opa');
 		await insertQuoteRow('axxc', 'Opa');
 		const { items } = await searchQuotes(false, 'a%c', PAGE);
-		expect(items.map((i) => i.id)).toEqual([hit]);
+		expect(items.map((i) => i.id)).toEqual(quotePubs([hit]));
 	});
 
 	it('pages with limit and offset', async () => {
@@ -613,8 +648,8 @@ describe('searchQuotes', () => {
 		for (let i = 0; i < 3; i++) ids.push(await insertQuoteRow('standup', 'Opa'));
 		const p1 = await searchQuotes(false, 'standup', { limit: 2, offset: 0 });
 		const p2 = await searchQuotes(false, 'standup', { limit: 2, offset: 2 });
-		expect(p1.items.map((i) => i.id)).toEqual([ids[2], ids[1]]);
-		expect(p2.items.map((i) => i.id)).toEqual([ids[0]]);
+		expect(p1.items.map((i) => i.id)).toEqual(quotePubs([ids[2], ids[1]]));
+		expect(p2.items.map((i) => i.id)).toEqual(quotePubs([ids[0]]));
 	});
 
 	it('caps total at 500', async () => {

@@ -15,9 +15,8 @@ import { POST as favoriteMeme } from './memes/[pid]/favorite/+server';
 import { POST as seenMeme } from './memes/[pid]/seen/+server';
 import { GET as memeSource } from './memes/[pid]/source/+server';
 import { POST as voteMeme } from './memes/[pid]/vote/+server';
-// TODO(public-ids slice B): the quote routes become [pid] and take the quote's public id
-import { DELETE as deleteQuote } from './quotes/[id]/+server';
-import { POST as voteQuote } from './quotes/[id]/vote/+server';
+import { DELETE as deleteQuote } from './quotes/[pid]/+server';
+import { POST as voteQuote } from './quotes/[pid]/vote/+server';
 
 // moderator/uploader deletion removes the bucket objects, so the bucket must exist (fresh CI MinIO)
 beforeAll(async () => {
@@ -68,8 +67,6 @@ async function world() {
 
 /** Well-formed, but nobody's public id. */
 const MISSING = 'AAAAAAAAAAAA';
-// TODO(public-ids slice B): quotes switch to MISSING as well
-const MISSING_QUOTE = '999999';
 
 describe('DELETE /api/comments/[pid]', () => {
 	it('forbids a member from deleting a foreign comment (403) and keeps it', async () => {
@@ -211,16 +208,15 @@ describe('DELETE/PATCH /api/memes/[pid]', () => {
 	});
 });
 
-// TODO(public-ids slice B): quotes by public id (`params: { pid: w.quotePid }`, `/api/quotes/${w.quotePid}`)
-describe('DELETE /api/quotes/[id]', () => {
+describe('DELETE /api/quotes/[pid]', () => {
 	it('forbids a member from deleting a quote (403), even their own', async () => {
 		const w = await world();
 		for (const session of [w.sessions.other, w.sessions.owner]) {
 			const { response } = await callRoute({
 				handler: deleteQuote,
-				path: `/api/quotes/${w.quoteId}`,
+				path: `/api/quotes/${w.quotePid}`,
 				method: 'DELETE',
-				params: { id: String(w.quoteId) },
+				params: { pid: w.quotePid },
 				session
 			});
 			expect(response.status).toBe(403);
@@ -232,9 +228,9 @@ describe('DELETE /api/quotes/[id]', () => {
 		const w = await world();
 		const { response } = await callRoute({
 			handler: deleteQuote,
-			path: `/api/quotes/${w.quoteId}`,
+			path: `/api/quotes/${w.quotePid}`,
 			method: 'DELETE',
-			params: { id: String(w.quoteId) },
+			params: { pid: w.quotePid },
 			session: w.sessions.mod
 		});
 		expect(response.status).toBe(204);
@@ -245,9 +241,9 @@ describe('DELETE /api/quotes/[id]', () => {
 		const w = await world();
 		const { response } = await callRoute({
 			handler: deleteQuote,
-			path: `/api/quotes/${MISSING_QUOTE}`,
+			path: `/api/quotes/${MISSING}`,
 			method: 'DELETE',
-			params: { id: MISSING_QUOTE },
+			params: { pid: MISSING },
 			session: w.sessions.mod
 		});
 		expect(response.status).toBe(404);
@@ -289,9 +285,9 @@ describe('vote endpoints', () => {
 		const w = await world();
 		const { response } = await callRoute({
 			handler: voteQuote,
-			path: `/api/quotes/${w.quoteId}/vote`,
+			path: `/api/quotes/${w.quotePid}/vote`,
 			method: 'POST',
-			params: { id: String(w.quoteId) },
+			params: { pid: w.quotePid },
 			body: { value: 5 },
 			session: w.sessions.other
 		});
@@ -367,7 +363,7 @@ describe('auth guard in front of the routes', () => {
 	});
 });
 
-describe('the renamed meme and comment routes only know public ids', () => {
+describe('the renamed meme, comment and quote routes only know public ids', () => {
 	const routes = [
 		{
 			name: 'DELETE /api/comments/[pid]',
@@ -376,6 +372,15 @@ describe('the renamed meme and comment routes only know public ids', () => {
 			method: 'DELETE'
 		},
 		{ name: 'DELETE /api/memes/[pid]', handler: deleteMeme, base: 'memes', method: 'DELETE' },
+		{ name: 'DELETE /api/quotes/[pid]', handler: deleteQuote, base: 'quotes', method: 'DELETE' },
+		{
+			name: 'POST /api/quotes/[pid]/vote',
+			handler: voteQuote,
+			base: 'quotes',
+			suffix: '/vote',
+			method: 'POST',
+			body: { value: 1 }
+		},
 		{
 			name: 'PATCH /api/memes/[pid]',
 			handler: patchMeme,
@@ -434,7 +439,8 @@ describe('the renamed meme and comment routes only know public ids', () => {
 		'$name answers 404 for 1, abc, an unknown id and the real internal id',
 		async (route) => {
 			const w = await world();
-			const real = route.base === 'comments' ? w.commentId : w.memeId;
+			const real =
+				route.base === 'comments' ? w.commentId : route.base === 'quotes' ? w.quoteId : w.memeId;
 			for (const pid of ['1', 'abc', 'AAAAAAAAAAA', 'AAAAAAAAAAAAA', String(real), MISSING]) {
 				const { response } = await callRoute({
 					handler: route.handler,
@@ -465,8 +471,16 @@ describe('the renamed meme and comment routes only know public ids', () => {
 			params: { pid: String(w.commentId) },
 			session: w.sessions.mod
 		});
+		await callRoute({
+			handler: deleteQuote,
+			path: `/api/quotes/${w.quoteId}`,
+			method: 'DELETE',
+			params: { pid: String(w.quoteId) },
+			session: w.sessions.mod
+		});
 		expect(await db.select().from(media).where(eq(media.id, w.memeId))).toHaveLength(1);
 		expect(await db.select().from(comments).where(eq(comments.id, w.commentId))).toHaveLength(1);
+		expect(await db.select().from(quotes).where(eq(quotes.id, w.quoteId))).toHaveLength(1);
 	});
 
 	it('the public id of the row works where its numeric id did not', async () => {

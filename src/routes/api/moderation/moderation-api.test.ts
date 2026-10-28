@@ -15,6 +15,7 @@ import {
 	addOpenReports,
 	insertComment,
 	insertMeme,
+	insertMemeRow,
 	insertQuote,
 	OVER_THRESHOLD,
 	userWithSession
@@ -22,7 +23,7 @@ import {
 import { resetRateLimits } from '../../../lib/server/rate-limit';
 import { ensureBucket } from '../../../lib/server/storage-test-utils';
 import { callRoute } from '../../../lib/server/test-request';
-import { load as memeLoad } from '../../meme/[id]/+page.server';
+import { load as memeLoad } from '../../meme/[pid]/+page.server';
 import { load as moderationQueue } from '../../moderation/+page.server';
 import { GET as feed } from '../feed/+server';
 import { POST as report } from '../report/+server';
@@ -49,7 +50,8 @@ async function world() {
 		userWithSession('admin'),
 		userWithSession('member')
 	]);
-	const memeId = await insertMeme(author.user.id, 'Gemeldetes Meme');
+	const meme = await insertMemeRow(author.user.id, 'Gemeldetes Meme');
+	const memeId = meme.id;
 	const commentId = await insertComment(author.user.id, memeId, 'Gemeldeter Kommentar');
 	const quoteId = await insertQuote(author.user.id, 'Gemeldetes Zitat');
 	const ids = { meme: memeId, comment: commentId, quote: quoteId };
@@ -65,7 +67,8 @@ async function world() {
 			.set({ excerpt: excerpts[type as ContentType] })
 			.where(and(eq(reports.contentType, type as ContentType), eq(reports.contentId, id)));
 	}
-	return { author, mod, admin, member, ids };
+	// clients (feed, report API, meme page) address the meme by its public id
+	return { author, mod, admin, member, ids, memePid: meme.publicId };
 }
 
 const act = (session: string, body: unknown) =>
@@ -441,9 +444,9 @@ describe('Review Focus 5: release grants immunity', () => {
 		const itemFor = async (session: string) => {
 			const { response } = await callRoute({ handler: feed, path: '/api/feed', session });
 			const { items } = (await response.json()) as {
-				items: { id: number; title: string; mediaUrl: string | null; underReview: boolean }[];
+				items: { id: string; title: string; mediaUrl: string | null; underReview: boolean }[];
 			};
-			return items.find((i) => i.id === w.ids.meme)!;
+			return items.find((i) => i.id === w.memePid)!;
 		};
 		expect(await itemFor(w.member.session)).toMatchObject({ mediaUrl: null, underReview: true });
 
@@ -466,7 +469,7 @@ describe('Review Focus 5: release grants immunity', () => {
 				path: '/api/report',
 				method: 'POST',
 				session: reporter.session,
-				body: { contentType: 'meme', contentId: w.ids.meme, category: 'spam' }
+				body: { contentType: 'meme', contentId: w.memePid, category: 'spam' }
 			});
 			expect(response.status).toBe(204);
 		}
@@ -477,7 +480,7 @@ describe('Review Focus 5: release grants immunity', () => {
 		expect(after.mediaUrl).not.toBeNull();
 		// the detail page shows it too
 		const detail = (await memeLoad({
-			params: { id: String(w.ids.meme) },
+			params: { pid: w.memePid },
 			locals: { user: w.member.user }
 		} as never)) as { item: { mediaUrl: string | null; underReview: boolean } };
 		expect(detail.item.underReview).toBe(false);
@@ -501,8 +504,8 @@ describe('Review Focus 5: release grants immunity', () => {
 			path: '/api/feed',
 			session: w.member.session
 		});
-		const { items } = (await response.json()) as { items: { id: number; underReview: boolean }[] };
-		expect(items.find((i) => i.id === w.ids.meme)?.underReview).toBe(true);
+		const { items } = (await response.json()) as { items: { id: string; underReview: boolean }[] };
+		expect(items.find((i) => i.id === w.memePid)?.underReview).toBe(true);
 	});
 });
 

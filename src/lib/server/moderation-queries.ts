@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, ilike, inArray, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from './db';
-import { comments, media, quotes, reports, timeouts, users } from './db/schema';
+import { comments, media, quotes, reports, templates, timeouts, users } from './db/schema';
 import {
 	underReviewSql,
 	type ContentType,
@@ -22,7 +22,8 @@ export const USER_SEARCH_LIMIT = 10;
 type Role = (typeof users.$inferSelect)['role'];
 
 export interface CaseReport {
-	reporterId: number;
+	/** The reporter's public id. */
+	reporterId: string;
 	/** Username (stable identifier). */
 	reporter: string;
 	/** Display name when set, else the username. */
@@ -35,19 +36,27 @@ export interface CaseReport {
 export type CasePreview =
 	| {
 			type: 'meme';
+			/** The meme's public id (for the link to it). */
+			id: string;
 			title: string;
 			kind: 'image' | 'gif' | 'video';
 			thumbUrl: string;
 			nsfw: boolean;
 			spoiler: boolean;
 	  }
-	| { type: 'comment'; text: string; mediaId: number }
+	| { type: 'comment'; text: string; /** The meme's public id. */ mediaId: string }
 	| { type: 'quote'; text: string; author: string };
 
 interface CaseBase {
 	contentType: ContentType;
+	/**
+	 * The internal content id. The one internal id the moderation views hand to a client: it round-trips
+	 * through `POST /api/moderation/case` (server-provided, moderators only, spec ruling). Done cases
+	 * (read-only) drop it before the page; everything shown or linked uses public ids.
+	 */
 	contentId: number;
-	authorId: number;
+	/** The author's public id. */
+	authorId: string;
 	/** Username (stable identifier). */
 	author: string;
 	/** Display name when set, else the username. */
@@ -69,6 +78,8 @@ export interface OpenCase extends CaseBase {
 }
 
 export interface DoneCase extends CaseBase {
+	/** Row id of the decision's first report: a stable list key (not a content or user id). */
+	id: number;
 	outcome: ReportOutcome;
 	resolvedAt: string;
 	resolvedBy: string;
@@ -89,8 +100,15 @@ function countCategories(rows: { category: ReportCategory }[]): CaseBase['catego
 		.sort((a, b) => b.count - a.count);
 }
 
+interface AuthorInfo {
+	publicId: string;
+	username: string;
+	display: string;
+	role: Role;
+}
+
 async function authorsById(ids: number[]) {
-	if (ids.length === 0) return new Map<number, { username: string; display: string; role: Role }>();
+	if (ids.length === 0) return new Map<number, AuthorInfo>();
 	const rows = await db
 		.select({
 			id: users.id,
@@ -104,7 +122,12 @@ async function authorsById(ids: number[]) {
 	return new Map(
 		rows.map((r) => [
 			r.id,
-			{ username: r.username, display: r.displayName ?? r.username, role: r.role }
+			{
+				publicId: r.publicId,
+				username: r.username,
+				display: r.displayName ?? r.username,
+				role: r.role
+			}
 		])
 	);
 }
@@ -117,7 +140,7 @@ async function reportRows(ids: number[]) {
 			id: reports.id,
 			contentType: reports.contentType,
 			contentId: reports.contentId,
-			reporterId: reports.reporterId,
+			reporterPublicId: reporter.publicId,
 			reporter: reporter.username,
 			reporterDisplay: sql<string>`coalesce(${reporter.displayName}, ${reporter.username})`,
 			authorId: reports.authorId,
@@ -139,7 +162,7 @@ async function reportRows(ids: number[]) {
 type ReportRow = Awaited<ReturnType<typeof reportRows>>[number];
 
 const toCaseReport = (r: ReportRow): CaseReport => ({
-	reporterId: r.reporterId,
+	reporterId: r.reporterPublicId,
 	reporter: r.reporter,
 	reporterDisplay: r.reporterDisplay,
 	category: r.category,
@@ -169,6 +192,7 @@ async function previews(cases: { contentType: ContentType; contentId: number }[]
 			: db
 					.select({
 						id: media.id,
+						publicId: media.publicId,
 						title: media.title,
 						kind: media.kind,
 						thumbKey: media.thumbKey,
@@ -184,10 +208,11 @@ async function previews(cases: { contentType: ContentType; contentId: number }[]
 					.select({
 						id: comments.id,
 						text: comments.text,
-						mediaId: comments.mediaId,
+						mediaPublicId: media.publicId,
 						underReview: underReviewSql('comment', comments.id, comments.reviewedAt)
 					})
 					.from(comments)
+					.innerJoin(media, eq(media.id, comments.mediaId))
 					.where(inArray(comments.id, commentIds)),
 		quoteIds.length === 0
 			? []
@@ -208,6 +233,7 @@ async function previews(cases: { contentType: ContentType; contentId: number }[]
 			underReview: m.underReview,
 			preview: {
 				type: 'meme',
+				id: m.publicId,
 				title: m.title,
 				kind: m.kind,
 				thumbUrl: `/media/${m.thumbKey}`,
@@ -219,7 +245,7 @@ async function previews(cases: { contentType: ContentType; contentId: number }[]
 	for (const c of commentRows) {
 		out.set(keyOf('comment', c.id), {
 			underReview: c.underReview,
-			preview: { type: 'comment', text: c.text, mediaId: c.mediaId }
+			preview: { type: 'comment', text: c.text, mediaId: c.mediaPublicId }
 		});
 	}
 	for (const q of quoteRows) {
@@ -269,7 +295,7 @@ export async function listOpenCases(
 		return {
 			contentType: g.contentType,
 			contentId: g.contentId,
-			authorId: first.authorId,
+			authorId: author?.publicId ?? '',
 			author: author?.username ?? '',
 			authorDisplay: author?.display ?? '',
 			authorRole: author?.role ?? 'member',
@@ -284,11 +310,11 @@ export async function listOpenCases(
 	return { cases, nextCursor };
 }
 
-/** The open case of one content item, or null when it has no open reports (anymore). */
+/** The open case of one content item (server-side: `authorId` is the internal id), or null when it has no open reports (anymore). */
 export async function getOpenCase(
 	contentType: ContentType,
 	contentId: number
-): Promise<Pick<OpenCase, 'authorId' | 'author' | 'excerpt'> | null> {
+): Promise<{ authorId: number; author: string; excerpt: string } | null> {
 	const [row] = await db
 		.select({ authorId: reports.authorId, author: users.username, excerpt: reports.excerpt })
 		.from(reports)
@@ -367,13 +393,14 @@ export async function listDoneCases(
 		return {
 			contentType: g.content_type,
 			contentId: g.content_id,
-			authorId: first.authorId,
+			authorId: author?.publicId ?? '',
 			author: author?.username ?? '',
 			authorDisplay: author?.display ?? '',
 			authorRole: author?.role ?? 'member',
 			excerpt: first.excerpt,
 			reports: mine.map(toCaseReport),
 			categories: countCategories(mine),
+			id: g.first_id,
 			outcome: first.outcome!,
 			resolvedAt: first.resolvedAt!.toISOString(),
 			resolvedBy: first.resolvedBy ?? ''
@@ -585,4 +612,33 @@ export async function namesById(
 			}
 		])
 	);
+}
+
+const TARGET_TABLES = {
+	user: users,
+	meme: media,
+	comment: comments,
+	quote: quotes,
+	template: templates
+} as const;
+
+/**
+ * Public ids for audit-log targets, keyed `<targetType>:<internal id>`. Only user, meme, comment, quote
+ * and template targets have one; a target that no longer exists (deleted content) or has no public id
+ * (site content, maintenance, season settings) is absent.
+ */
+export async function targetPublicIds(
+	targets: { targetType: string; targetId: number }[]
+): Promise<Map<string, string>> {
+	const out = new Map<string, string>();
+	for (const [type, table] of Object.entries(TARGET_TABLES)) {
+		const ids = [...new Set(targets.filter((t) => t.targetType === type).map((t) => t.targetId))];
+		if (ids.length === 0) continue;
+		const rows = await db
+			.select({ id: table.id, publicId: table.publicId })
+			.from(table)
+			.where(inArray(table.id, ids));
+		for (const r of rows) out.set(`${type}:${r.id}`, r.publicId);
+	}
+	return out;
 }

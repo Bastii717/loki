@@ -22,7 +22,7 @@
 	let {
 		item,
 		viewer
-	}: { item: OpenCase; viewer: { id: number; role: 'moderator' | 'admin' | 'member' } } = $props();
+	}: { item: OpenCase; viewer: { id: string; role: 'moderator' | 'admin' | 'member' } } = $props();
 
 	let mode = $state<'delete' | 'timeout' | null>(null);
 	let busy = $state(false);
@@ -40,7 +40,7 @@
 	const gone = $derived(item.preview === null);
 	const openHref = $derived(
 		item.preview?.type === 'meme'
-			? `/meme/${item.contentId}`
+			? `/meme/${item.preview.id}`
 			: item.preview?.type === 'comment'
 				? `/meme/${item.preview.mediaId}`
 				: item.preview?.type === 'quote'

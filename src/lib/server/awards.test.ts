@@ -47,6 +47,12 @@ async function meme(
 	return row.id;
 }
 
+/** The public id of a meme row. */
+async function publicOf(id: number): Promise<string> {
+	const [row] = await db.select({ publicId: media.publicId }).from(media).where(eq(media.id, id));
+	return row.publicId;
+}
+
 async function awardRows() {
 	return db.select().from(awards).orderBy(awards.month);
 }
@@ -106,6 +112,7 @@ describe('findWinner', () => {
 		await meme(user.id, '2026-10-12T10:00:00Z', 5);
 		expect(await findWinner('2026-10')).toEqual({
 			mediaId: top,
+			mediaPublicId: await publicOf(top),
 			uploaderId: user.id,
 			title: 'Top',
 			score: 7
@@ -187,7 +194,13 @@ describe('awardDueMonths', () => {
 		expect(result).toEqual([
 			{
 				month: '2026-10',
-				winner: { mediaId: id, uploaderId: winner.id, title: 'The one: with a colon', score: 6 }
+				winner: {
+					mediaId: id,
+					mediaPublicId: await publicOf(id),
+					uploaderId: winner.id,
+					title: 'The one: with a colon',
+					score: 6
+				}
 			}
 		]);
 		const [row] = await awardRows();
@@ -392,6 +405,7 @@ describe('listAwards', () => {
 		expect(rows[0]).toEqual({
 			month: '2026-10',
 			mediaId: ids['2026-10'],
+			mediaPublicId: await publicOf(ids['2026-10']),
 			uploaderId: user.id,
 			title: 'Title 2026-10',
 			score: 7
@@ -418,7 +432,14 @@ describe('listAwards', () => {
 		await award('2026-09');
 		const { rows } = await listAwards({ limit: 10 });
 		expect(rows).toEqual([
-			{ month: '2026-08', mediaId: null, uploaderId: user.id, title: '', score: 2 }
+			{
+				month: '2026-08',
+				mediaId: null,
+				mediaPublicId: null,
+				uploaderId: user.id,
+				title: '',
+				score: 2
+			}
 		]);
 	});
 
@@ -477,6 +498,7 @@ describe('leadingNow', () => {
 		expect(await leadingNow(NOW)).toEqual({
 			month: '2026-11',
 			mediaId: id,
+			mediaPublicId: await publicOf(id),
 			uploaderId: user.id,
 			title: 'Leader',
 			score: 3

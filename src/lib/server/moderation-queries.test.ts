@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import type { SessionUser } from './auth/session';
 import { db } from './db';
-import { comments, media, quotes, reports, timeouts } from './db/schema';
+import { comments, media, quotes, reports, templates, timeouts } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import { createReport, resolveReports, setTimeout_ } from './moderation';
 import {
@@ -15,7 +15,8 @@ import {
 	listUserOverview,
 	QUEUE_PAGE_SIZE,
 	searchUsers,
-	namesById
+	namesById,
+	targetPublicIds
 } from './moderation-queries';
 import { addOpenReports, OVER_THRESHOLD } from './moderation-test-utils';
 
@@ -44,6 +45,12 @@ async function meme(uploaderId: number, title = 'Titel') {
 		})
 		.returning({ id: media.id });
 	return row.id;
+}
+
+/** The public id of a meme row. */
+async function memePublicId(id: number): Promise<string> {
+	const [row] = await db.select({ publicId: media.publicId }).from(media).where(eq(media.id, id));
+	return row.publicId;
 }
 
 async function comment(authorId: number, mediaId: number, text = 'Kommentartext') {
@@ -78,13 +85,26 @@ describe('listOpenCases', () => {
 		expect(c).toMatchObject({
 			contentType: 'meme',
 			contentId: memeId,
-			authorId: author.id,
+			// the author and the meme are addressed by public id; contentId is the moderation round-trip id
+			authorId: author.publicId,
 			author: author.username,
 			authorRole: 'member',
 			excerpt: 'Mein Meme',
 			underReview: false,
-			preview: { type: 'meme', title: 'Mein Meme', kind: 'gif', thumbUrl: '/media/memes/t.webp' }
+			preview: {
+				type: 'meme',
+				id: await memePublicId(memeId),
+				title: 'Mein Meme',
+				kind: 'gif',
+				thumbUrl: '/media/memes/t.webp'
+			}
 		});
+		expect(c.reports.map((r) => r.reporterId).sort()).toEqual(
+			[r1.publicId, r2.publicId, r3.publicId].sort()
+		);
+		expect(JSON.stringify({ ...c, contentId: undefined })).not.toMatch(
+			/"(authorId|reporterId|mediaId|id)":\d/
+		);
 		expect(c.categories).toEqual([
 			{ category: 'spam', count: 2 },
 			{ category: 'hurtful', count: 1 }
@@ -144,7 +164,7 @@ describe('listOpenCases', () => {
 		expect(byType.comment.preview).toEqual({
 			type: 'comment',
 			text: 'Kommentartext',
-			mediaId: memeId
+			mediaId: await memePublicId(memeId)
 		});
 		expect(byType.comment.underReview).toBe(true);
 		expect(byType.quote.preview).toEqual({ type: 'quote', text: 'Zitattext', author: 'Opa' });
@@ -225,7 +245,13 @@ describe('listDoneCases', () => {
 			[b, 'actioned', 1],
 			[a, 'dismissed', 2]
 		]);
-		expect(cases[0]).toMatchObject({ resolvedBy: mod.username, author: author.username });
+		expect(cases[0]).toMatchObject({
+			resolvedBy: mod.username,
+			author: author.username,
+			authorId: author.publicId
+		});
+		// the decision's first report row id: a list key, distinct per decision
+		expect(new Set(cases.map((c) => c.id)).size).toBe(3);
 	});
 
 	it('paginates with an opaque cursor and survives a garbage cursor', async () => {
@@ -440,5 +466,43 @@ describe('searchUsers / namesById', () => {
 		});
 		expect(map.has(99999)).toBe(false);
 		expect((await namesById([])).size).toBe(0);
+	});
+});
+
+describe('targetPublicIds', () => {
+	it('maps user, meme, comment, quote and template targets to public ids and skips the rest', async () => {
+		const u = await testUser();
+		const memeId = await meme(u.id);
+		const commentId = await comment(u.id, memeId);
+		const quoteId = await quote(u.id);
+		const [tpl] = await db
+			.insert(templates)
+			.values({ name: 'T', objectKey: 'k', thumbKey: 'kt', width: 1, height: 1, createdBy: u.id })
+			.returning({ id: templates.id, publicId: templates.publicId });
+		const [c] = await db
+			.select({ publicId: comments.publicId })
+			.from(comments)
+			.where(eq(comments.id, commentId));
+		const [q] = await db
+			.select({ publicId: quotes.publicId })
+			.from(quotes)
+			.where(eq(quotes.id, quoteId));
+		const map = await targetPublicIds([
+			{ targetType: 'user', targetId: u.id },
+			{ targetType: 'meme', targetId: memeId },
+			{ targetType: 'comment', targetId: commentId },
+			{ targetType: 'quote', targetId: quoteId },
+			{ targetType: 'template', targetId: tpl.id },
+			{ targetType: 'meme', targetId: 99999 },
+			{ targetType: 'site_content', targetId: 0 }
+		]);
+		expect(Object.fromEntries(map)).toEqual({
+			[`user:${u.id}`]: u.publicId,
+			[`meme:${memeId}`]: await memePublicId(memeId),
+			[`comment:${commentId}`]: c.publicId,
+			[`quote:${quoteId}`]: q.publicId,
+			[`template:${tpl.id}`]: tpl.publicId
+		});
+		expect((await targetPublicIds([])).size).toBe(0);
 	});
 });

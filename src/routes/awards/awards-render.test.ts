@@ -6,8 +6,11 @@ import Page from './+page.svelte';
 // MemeCard reads the SvelteKit page state; a bare render has no render context.
 vi.mock('$app/state', () => ({ page: { state: {} } }));
 
+/** A 12-character public id for fixture number `n`. */
+const pid = (n: number) => `m${String(n).padStart(11, '0')}`;
+
 const feedItem = (id: number, over: Partial<FeedItem> = {}): FeedItem => ({
-	id,
+	id: pid(id),
 	title: `Meme ${id}`,
 	kind: 'image',
 	thumbUrl: `/media/memes/${id}/thumb.webp`,
@@ -23,7 +26,7 @@ const feedItem = (id: number, over: Partial<FeedItem> = {}): FeedItem => ({
 	viewCount: 0,
 	blurred: null,
 	uploader: 'dev',
-	uploaderId: 7,
+	uploaderId: 'u00000000007',
 	uploaderRole: 'member',
 	uploaderAvatar: null,
 	mine: false,
@@ -63,8 +66,8 @@ describe('awards page', () => {
 		});
 		expect(body).toMatch(/<section[^>]*id="2026-10"[^>]*>\s*<h2[^>]*>October 2026<\/h2>/);
 		expect(body).toMatch(/<section[^>]*id="2026-09"[^>]*>\s*<h2[^>]*>September 2026<\/h2>/);
-		expect(body).toContain('href="/meme/3"');
-		expect(body).toContain('href="/meme/2"');
+		expect(body).toContain(`href="/meme/${pid(3)}"`);
+		expect(body).toContain(`href="/meme/${pid(2)}"`);
 		expect(body.indexOf('id="2026-10"')).toBeLessThan(body.indexOf('id="2026-09"'));
 		expect(body).not.toContain('No winners yet');
 	});
@@ -84,7 +87,7 @@ describe('awards page', () => {
 			renderPage({ leading: { month: '2026-10', item: feedItem(9), score } }).body;
 		const many = lead(4);
 		expect(many).toMatch(/<h2[^>]*>Leading right now<\/h2>/);
-		expect(many).toContain('href="/meme/9"');
+		expect(many).toContain(`href="/meme/${pid(9)}"`);
 		expect(many).toContain('Leads October 2026 with 4 points');
 		expect(lead(1)).toContain('Leads October 2026 with 1 point<');
 		expect(renderPage().body).not.toContain('Leading right now');

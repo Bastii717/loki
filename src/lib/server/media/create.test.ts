@@ -98,7 +98,7 @@ describe('createMedia', () => {
 			nsfw: true,
 			spoiler: false
 		});
-		expect(row.objectKey).toMatch(new RegExp(`^memes/u${user.id}/.+\\.png$`));
+		expect(row.objectKey).toMatch(/^memes\/[0-9a-f-]{36}\.png$/);
 		expect(row.thumbKey).toMatch(/\.webp$/);
 		expect(await exists(row.objectKey)).toBe(true);
 		expect(await exists(row.thumbKey)).toBe(true);

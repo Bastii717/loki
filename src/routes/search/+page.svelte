@@ -136,7 +136,7 @@
 				<ul class="rows">
 					{#each sections.people.items as person (person.id)}
 						<li>
-							<a href={resolve('/users/[id]', { id: String(person.id) })} class="row person">
+							<a href={resolve('/users/[pid]', { pid: person.id })} class="row person">
 								<Avatar thumbKey={person.avatarThumbKey} name={person.name} size={32} />
 								<span class="name">{person.name}</span>
 								<RoleBadge role={person.role} />
@@ -157,12 +157,12 @@
 						<li class="row comment">
 							<span class="author">
 								<Avatar thumbKey={comment.authorAvatar} name={comment.author} size={24} />
-								<a href={resolve('/users/[id]', { id: String(comment.authorId) })} class="name"
+								<a href={resolve('/users/[pid]', { pid: comment.authorId })} class="name"
 									>{comment.author}</a
 								>
 								<RoleBadge role={comment.authorRole} />
 							</span>
-							<a href={resolve('/meme/[id]', { id: String(comment.mediaId) })} class="body">
+							<a href={resolve('/meme/[pid]', { pid: comment.mediaId })} class="body">
 								<span class="excerpt"
 									>{#if hit}{hit.before}<mark>{hit.match}</mark
 										>{hit.after}{:else}{comment.excerpt}{/if}</span

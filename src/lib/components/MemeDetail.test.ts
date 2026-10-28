@@ -142,6 +142,25 @@ describe('MemeDetail name links', () => {
 	});
 });
 
+describe('MemeDetail own comments', () => {
+	const reports = (body: string) => body.match(/aria-label="Report"/g)?.length ?? 0;
+
+	it('offers delete but no report on a comment whose authorId is the viewer public id', () => {
+		// mine: true keeps the meme's own report control out of the count
+		const body = html(feedItem({ mine: true }), [
+			comment({ id: 'Cmt1Abc12345', authorId: VIEWER, author: 'Me Myself' })
+		]);
+		expect(body).toContain('aria-label="Delete comment by Me Myself"');
+		expect(reports(body)).toBe(0);
+	});
+
+	it('offers report but no delete on a foreign comment', () => {
+		const body = html(feedItem({ mine: true }), [comment({ author: 'Mo Derator' })]);
+		expect(body).not.toContain('aria-label="Delete comment by Mo Derator"');
+		expect(reports(body)).toBe(1);
+	});
+});
+
 describe('MemeDetail award badge', () => {
 	it('shows the badge in the header under the title and uploader line', () => {
 		const body = html(feedItem({ awardMonth: '2026-10' }), []);

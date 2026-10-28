@@ -13,8 +13,10 @@ import {
 import {
 	addOpenReports,
 	insertComment,
-	insertMeme,
+	insertCommentRow,
+	insertMemeRow,
 	insertQuote,
+	insertQuoteRow,
 	timeOut,
 	userWithSession
 } from '../../lib/server/moderation-test-utils';
@@ -22,14 +24,14 @@ import { notify } from '../../lib/server/notifications';
 import { resetRateLimits } from '../../lib/server/rate-limit';
 import { ensureBucket } from '../../lib/server/storage-test-utils';
 import { callRoute } from '../../lib/server/test-request';
-import { DELETE as deleteComment } from '../api/comments/[id]/+server';
-import { DELETE as deleteMeme, PATCH as patchMeme } from '../api/memes/[id]/+server';
+import { DELETE as deleteComment } from '../api/comments/[pid]/+server';
+import { DELETE as deleteMeme, PATCH as patchMeme } from '../api/memes/[pid]/+server';
 import { POST as caseAction } from '../api/moderation/case/+server';
 import { POST as setTimeoutRoute } from '../api/moderation/timeouts/+server';
 import { DELETE as liftTimeoutRoute } from '../api/moderation/timeouts/[pid]/+server';
 import { GET as searchUsers } from '../api/moderation/users/+server';
 import { POST as userProfile } from '../api/moderation/users/[pid]/profile/+server';
-import { DELETE as deleteQuote } from '../api/quotes/[id]/+server';
+import { DELETE as deleteQuote } from '../api/quotes/[pid]/+server';
 import { load as rootLayout } from '../+layout.server';
 import { load as moderationLayout } from './+layout.server';
 import { load as queue } from './+page.server';
@@ -67,11 +69,11 @@ async function world() {
 		userWithSession('moderator'),
 		userWithSession('admin')
 	]);
-	const memeId = await insertMeme(victim.user.id, 'Fall');
+	const { id: memeId, publicId: memePid } = await insertMemeRow(victim.user.id, 'Fall');
 	await addOpenReports('meme', memeId, victim.user.id, 2);
 	await timeOut(lockedMod.user.id, admin.user.id, MUTED_UNTIL);
 	await timeOut(lockedAdmin.user.id, admin.user.id, MUTED_UNTIL);
-	return { member, mod, admin, victim, lockedMod, lockedAdmin, memeId };
+	return { member, mod, admin, victim, lockedMod, lockedAdmin, memeId, memePid };
 }
 
 interface Endpoint {
@@ -414,37 +416,37 @@ describe('timed-out moderators lose their moderation rights', () => {
 
 	it('direct moderation on foreign content is blocked too: flags, deletes of meme, comment and quote', async () => {
 		const w = await world();
-		const commentId = await insertComment(w.victim.user.id, w.memeId);
-		const quoteId = await insertQuote(w.victim.user.id);
+		const comment = await insertCommentRow(w.victim.user.id, w.memeId);
+		const quote = await insertQuoteRow(w.victim.user.id);
 		const session = w.lockedMod.session;
 		const calls = [
 			callRoute({
 				handler: patchMeme,
-				path: `/api/memes/${w.memeId}`,
+				path: `/api/memes/${w.memePid}`,
 				method: 'PATCH',
-				params: { id: String(w.memeId) },
+				params: { pid: w.memePid },
 				body: { nsfw: true },
 				session
 			}),
 			callRoute({
 				handler: deleteMeme,
-				path: `/api/memes/${w.memeId}`,
+				path: `/api/memes/${w.memePid}`,
 				method: 'DELETE',
-				params: { id: String(w.memeId) },
+				params: { pid: w.memePid },
 				session
 			}),
 			callRoute({
 				handler: deleteComment,
-				path: `/api/comments/${commentId}`,
+				path: `/api/comments/${comment.publicId}`,
 				method: 'DELETE',
-				params: { id: String(commentId) },
+				params: { pid: comment.publicId },
 				session
 			}),
 			callRoute({
 				handler: deleteQuote,
-				path: `/api/quotes/${quoteId}`,
+				path: `/api/quotes/${quote.publicId}`,
 				method: 'DELETE',
-				params: { id: String(quoteId) },
+				params: { pid: quote.publicId },
 				session
 			})
 		];

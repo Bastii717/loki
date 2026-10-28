@@ -47,6 +47,12 @@ async function award(
 	await db.insert(awards).values({ month: `${month}-01`, title: '', score: 0, ...values });
 }
 
+/** The public id of a meme row (feed items carry it, never the internal id). */
+async function publicOf(id: number): Promise<string> {
+	const [row] = await db.select({ publicId: media.publicId }).from(media).where(eq(media.id, id));
+	return row.publicId;
+}
+
 async function winner(uploaderId: number, month: string, title = `Title ${month}`) {
 	const id = await insertMeme(uploaderId, title);
 	await award(month, { mediaId: id, uploaderId, title, score: 5 });
@@ -68,10 +74,12 @@ describe('awards page load', () => {
 		const sep = await winner(author.user.id, '2026-09');
 		const data = await loadFor(viewer);
 		expect(data.sections.map((s) => [s.month, s.item?.id])).toEqual([
-			['2026-10', oct],
-			['2026-09', sep],
-			['2026-08', aug]
+			['2026-10', await publicOf(oct)],
+			['2026-09', await publicOf(sep)],
+			['2026-08', await publicOf(aug)]
 		]);
+		// no internal id anywhere in the payload
+		expect(JSON.stringify(data)).not.toMatch(/"(id|uploaderId|mediaId)":\d/);
 		expect(data.sections[0].item).toMatchObject({ title: 'Title 2026-10', awardMonth: '2026-10' });
 		expect(data.hasMore).toBe(false);
 		expect(data.nextBefore).toBeNull();
@@ -165,7 +173,7 @@ describe('awards page load', () => {
 			.where(eq(media.id, id));
 		const data = await loadFor(viewer);
 		expect(data.leading).toMatchObject({ month: '2026-10', score: 3 });
-		expect(data.leading?.item).toMatchObject({ id, title: 'Running hot' });
+		expect(data.leading?.item).toMatchObject({ id: await publicOf(id), title: 'Running hot' });
 	});
 
 	it('shows the leader on the first page only', async () => {
@@ -204,10 +212,18 @@ describe('awards page load', () => {
 
 		const asMember = await loadFor(viewer);
 		expect(asMember.sections).toHaveLength(1);
-		expect(asMember.sections[0].item).toMatchObject({ id, underReview: true, title: '' });
+		expect(asMember.sections[0].item).toMatchObject({
+			id: await publicOf(id),
+			underReview: true,
+			title: ''
+		});
 		expect(JSON.stringify(asMember)).not.toContain('Secret winner');
 
 		const asMod = await loadFor(mod);
-		expect(asMod.sections[0].item).toMatchObject({ id, underReview: true, title: 'Secret winner' });
+		expect(asMod.sections[0].item).toMatchObject({
+			id: await publicOf(id),
+			underReview: true,
+			title: 'Secret winner'
+		});
 	});
 });

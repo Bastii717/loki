@@ -130,14 +130,14 @@ export async function searchMemes(
 		)) ${revealAll ? sql`` : sql`AND NOT ${underReviewSql('meme', sql`m.id`, sql`m.reviewed_at`)}`}`;
 
 	const { rows, total } = await withThresholds(async (q) => {
-		const rows = await q.execute<{ id: number }>(sql`
-				SELECT m.id FROM ${from} WHERE ${where}
+		const rows = await q.execute<{ public_id: string }>(sql`
+				SELECT m.public_id FROM ${from} WHERE ${where}
 				ORDER BY word_similarity(${text}, m.title) DESC, m.created_at DESC, m.id DESC
 				${limitOffset(page, FEED_MAX)}
 			`);
 		return { rows, total: await cappedCount(q, from, where) };
 	});
-	const ids = rows.map((r) => r.id);
+	const ids = rows.map((r) => r.public_id);
 	if (ids.length === 0) return { items: [], total };
 
 	// hideUnderReview: a meme reported over the threshold between ranking and hydration drops out
@@ -196,7 +196,8 @@ export async function searchTags(
 // --- people ----------------------------------------------------------------------------------
 
 export interface PersonHit {
-	id: number;
+	/** The member's public id. */
+	id: string;
 	/** What the board shows: the display name, else the username. */
 	name: string;
 	/** Only filled for moderators and admins. */
@@ -225,13 +226,13 @@ export async function searchPeople(
 
 	const { rows, total } = await withThresholds(async (q) => {
 		const rows = await q.execute<{
-			id: number;
+			public_id: string;
 			name: string;
 			username: string;
 			role: Role;
 			avatar_thumb_key: string | null;
 		}>(sql`
-			SELECT u.id, ${name} AS name, u.username, u.role, u.avatar_thumb_key
+			SELECT u.public_id, ${name} AS name, u.username, u.role, u.avatar_thumb_key
 			FROM ${from} WHERE ${where}
 			ORDER BY ${rank} DESC, ${name} ASC, u.id ASC
 			${limitOffset(page)}
@@ -240,7 +241,7 @@ export async function searchPeople(
 	});
 	return {
 		items: rows.map((r) => ({
-			id: r.id,
+			id: r.public_id,
 			name: r.name,
 			username: revealAll ? r.username : null,
 			role: r.role,
@@ -253,12 +254,13 @@ export async function searchPeople(
 // --- comments --------------------------------------------------------------------------------
 
 export interface CommentHit {
-	id: number;
-	mediaId: number;
+	/** Public ids throughout: comment, meme and author. */
+	id: string;
+	mediaId: string;
 	/** The meme's real title: a comment on a meme under review is not listed for members at all. */
 	mediaTitle: string;
 	author: string;
-	authorId: number;
+	authorId: string;
 	authorRole: PersonHit['role'];
 	authorAvatar: string | null;
 	excerpt: string;
@@ -281,18 +283,18 @@ export async function searchComments(
 
 	const { rows, total } = await withThresholds(async (q) => {
 		const rows = await q.execute<{
-			id: number;
-			media_id: number;
+			public_id: string;
+			media_public_id: string;
 			media_title: string;
 			author: string;
-			author_id: number;
+			author_public_id: string;
 			author_role: Role;
 			author_avatar: string | null;
 			text: string;
 			created_at: Date | string;
 		}>(sql`
-				SELECT c.id, c.media_id, m.title AS media_title,
-					COALESCE(u.display_name, u.username) AS author, u.id AS author_id,
+				SELECT c.public_id, m.public_id AS media_public_id, m.title AS media_title,
+					COALESCE(u.display_name, u.username) AS author, u.public_id AS author_public_id,
 					u.role AS author_role, u.avatar_thumb_key AS author_avatar,
 					c.text, c.created_at
 				FROM ${from} WHERE ${where}
@@ -303,11 +305,11 @@ export async function searchComments(
 	});
 	return {
 		items: rows.map((r) => ({
-			id: r.id,
-			mediaId: r.media_id,
+			id: r.public_id,
+			mediaId: r.media_public_id,
 			mediaTitle: r.media_title,
 			author: r.author,
-			authorId: r.author_id,
+			authorId: r.author_public_id,
 			authorRole: r.author_role,
 			authorAvatar: r.author_avatar,
 			excerpt: excerptAround(r.text, text, 160),
@@ -320,7 +322,8 @@ export async function searchComments(
 // --- quotes ----------------------------------------------------------------------------------
 
 export interface QuoteHit {
-	id: number;
+	/** The quote's public id. */
+	id: string;
 	text: string;
 	author: string;
 	createdAt: string;
@@ -339,12 +342,12 @@ export async function searchQuotes(
 
 	const { rows, total } = await withThresholds(async (q) => {
 		const rows = await q.execute<{
-			id: number;
+			public_id: string;
 			text: string;
 			author: string;
 			created_at: Date | string;
 		}>(sql`
-				SELECT q.id, q.text, q.author, q.created_at
+				SELECT q.public_id, q.text, q.author, q.created_at
 				FROM ${from} WHERE ${where}
 				ORDER BY GREATEST(word_similarity(${text}, q.text), word_similarity(${text}, q.author)) DESC,
 					q.created_at DESC, q.id DESC
@@ -354,7 +357,7 @@ export async function searchQuotes(
 	});
 	return {
 		items: rows.map((r) => ({
-			id: r.id,
+			id: r.public_id,
 			text: r.text,
 			author: r.author,
 			createdAt: toIso(r.created_at)

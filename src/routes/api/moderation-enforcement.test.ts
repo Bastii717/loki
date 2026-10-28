@@ -31,8 +31,7 @@ import { DELETE as deleteMeme, PATCH as patchMeme } from './memes/[pid]/+server'
 import { POST as favoriteMeme } from './memes/[pid]/favorite/+server';
 import { POST as seenMeme } from './memes/[pid]/seen/+server';
 import { POST as voteMeme } from './memes/[pid]/vote/+server';
-// TODO(public-ids slice B): the quote vote route becomes [pid] and takes the quote's public id
-import { POST as voteQuote } from './quotes/[id]/vote/+server';
+import { POST as voteQuote } from './quotes/[pid]/vote/+server';
 import { POST as report } from './report/+server';
 import { GET as suggestTags } from './tags/suggest/+server';
 
@@ -93,8 +92,7 @@ async function timedOutWorld() {
 		// comment items carry public ids
 		foreignCommentPid: foreignComment.id,
 		ownCommentPid: ownComment.id,
-		// TODO(public-ids slice B): quotes by public id (foreignQuote.publicId)
-		foreignQuoteId: foreignQuote.id
+		foreignQuotePid: foreignQuote.publicId
 	};
 }
 type World = Awaited<ReturnType<typeof timedOutWorld>>;
@@ -132,9 +130,9 @@ const blocked: [string, (w: World) => Call][] = [
 		'POST quote vote',
 		(w) => ({
 			handler: voteQuote,
-			path: `/api/quotes/${w.foreignQuoteId}/vote`,
+			path: `/api/quotes/${w.foreignQuotePid}/vote`,
 			method: 'POST',
-			params: { id: String(w.foreignQuoteId) },
+			params: { pid: w.foreignQuotePid },
 			body: { value: 1 }
 		})
 	],

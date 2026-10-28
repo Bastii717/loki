@@ -142,7 +142,8 @@ export interface NotificationItem {
 	kind: NotificationKind;
 	actor: { name: string; avatarThumbKey: string | null } | null;
 	contentType: ContentType | null;
-	mediaId: number | null;
+	/** The meme's public id. (`id` above is the notification's own row id, not a content or user id.) */
+	mediaId: string | null;
 	/** The meme's title; null when the notice has no meme. */
 	title: string | null;
 	detail: string;
@@ -187,7 +188,7 @@ export async function listNotifications(
 			actorAvatarThumbKey: users.avatarThumbKey,
 			hasActor: users.id,
 			contentType: notifications.contentType,
-			mediaId: notifications.mediaId,
+			mediaPublicId: media.publicId,
 			title: media.title,
 			titleHidden: underReviewSql('meme', media.id, media.reviewedAt),
 			detail: notifications.detail,
@@ -216,7 +217,7 @@ export async function listNotifications(
 				? null
 				: { name: r.actorName, avatarThumbKey: r.actorAvatarThumbKey },
 		contentType: r.contentType,
-		mediaId: r.mediaId,
+		mediaId: r.mediaPublicId,
 		// never text the recipient could not see on the meme's page
 		title: r.titleHidden ? null : r.title,
 		detail: r.detail,
@@ -237,9 +238,10 @@ export async function openNotification(userId: number, id: number): Promise<stri
 			kind: notifications.kind,
 			contentType: notifications.contentType,
 			contentId: notifications.contentId,
-			mediaId: notifications.mediaId
+			mediaPublicId: media.publicId
 		})
 		.from(notifications)
+		.leftJoin(media, eq(media.id, notifications.mediaId))
 		.where(and(eq(notifications.id, id), eq(notifications.userId, userId)));
 	if (!row) return null;
 
@@ -251,8 +253,10 @@ export async function openNotification(userId: number, id: number): Promise<stri
 	const kind = row.kind as NotificationKind;
 	if (PROFILE_KINDS.includes(kind)) return '/profile/edit';
 	if (kind === 'timeout_set') return '/rules';
-	if (kind === 'award_won') return row.mediaId !== null ? `/meme/${row.mediaId}` : '/awards';
-	if (row.mediaId !== null) return `/meme/${row.mediaId}`;
+	if (kind === 'award_won') {
+		return row.mediaPublicId !== null ? `/meme/${row.mediaPublicId}` : '/awards';
+	}
+	if (row.mediaPublicId !== null) return `/meme/${row.mediaPublicId}`;
 	if (row.contentType === 'quote' && row.contentId !== null) {
 		const [quote] = await db
 			.select({ id: quotes.id })

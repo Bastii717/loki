@@ -8,6 +8,7 @@ import {
 	addOpenReports,
 	insertComment,
 	insertMeme,
+	insertMemeRow,
 	insertQuote,
 	OVER_THRESHOLD,
 	userWithSession
@@ -365,7 +366,7 @@ describe('listNotifications', () => {
 	it('maps the fields, with the actor name, avatar and meme title', async () => {
 		const user = await testUser();
 		const actor = await testUser({ username: 'lena', avatarThumbKey: 'avatars/lena-t.webp' });
-		const mediaId = await insertMeme(user.id, 'Cat');
+		const { id: mediaId, publicId } = await insertMemeRow(user.id, 'Cat');
 		const id = await seed(user.id, {
 			kind: 'comment',
 			actorId: actor.id,
@@ -383,7 +384,8 @@ describe('listNotifications', () => {
 				kind: 'comment',
 				actor: { name: 'lena', avatarThumbKey: 'avatars/lena-t.webp' },
 				contentType: 'comment',
-				mediaId,
+				// the meme's public id, never the internal one
+				mediaId: publicId,
 				title: 'Cat',
 				detail: 'Hi',
 				count: 2,
@@ -508,9 +510,9 @@ describe('listNotifications', () => {
 describe('openNotification', () => {
 	it('leads to the meme while mediaId is set, and marks the notice read', async () => {
 		const user = await testUser();
-		const mediaId = await insertMeme(user.id);
+		const { id: mediaId, publicId } = await insertMemeRow(user.id);
 		const id = await seed(user.id, { kind: 'comment', mediaId });
-		expect(await openNotification(user.id, id)).toBe(`/meme/${mediaId}`);
+		expect(await openNotification(user.id, id)).toBe(`/meme/${publicId}`);
 		expect(await countUnread(user.id)).toBe(0);
 		const [row] = await rows();
 		expect(row.readAt).not.toBeNull();
@@ -566,7 +568,7 @@ describe('openNotification', () => {
 
 	it('leads award_won to the winning meme, or to /awards without one', async () => {
 		const user = await testUser();
-		const memeId = await insertMeme(user.id);
+		const { id: memeId, publicId } = await insertMemeRow(user.id);
 		const withMeme = await seed(user.id, {
 			kind: 'award_won',
 			contentType: 'meme',
@@ -574,7 +576,7 @@ describe('openNotification', () => {
 			mediaId: memeId,
 			detail: '2026-10:Title'
 		});
-		expect(await openNotification(user.id, withMeme)).toBe(`/meme/${memeId}`);
+		expect(await openNotification(user.id, withMeme)).toBe(`/meme/${publicId}`);
 		const without = await seed(user.id, { kind: 'award_won', detail: '2026-10:Title' });
 		expect(await openNotification(user.id, without)).toBe('/awards');
 	});

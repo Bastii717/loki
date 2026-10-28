@@ -5,6 +5,10 @@ import type { Actions, PageServerLoad } from './$types';
 /** Largest id a `serial` column holds; anything above can never match and must not reach the query. */
 const MAX_ID = 2_147_483_647;
 
+// Notification ids are plain row ids of the member's own inbox (neither content nor user ids), so they
+// stay numeric in the payload, the `open` form and the `before` cursor. Everything that points at a
+// meme in a notice is its public id.
+
 /** A positive integer id from user input, else undefined. */
 function parseId(raw: string | null): number | undefined {
 	if (raw === null || !/^\d+$/.test(raw)) return undefined;

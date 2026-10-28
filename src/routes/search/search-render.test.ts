@@ -3,8 +3,11 @@ import { describe, expect, it } from 'vitest';
 import type { FeedItem } from '../../lib/server/feed';
 import Page from './+page.svelte';
 
+/** A 12-character public id for fixture number `n` of a kind (m: meme, u: user, c: comment). */
+const pid = (kind: string, n: number) => `${kind}${String(n).padStart(11, '0')}`;
+
 const feedItem = (id: number, title = `Meme ${id}`): FeedItem => ({
-	id,
+	id: pid('m', id),
 	title,
 	kind: 'image',
 	thumbUrl: `/media/memes/${id}/thumb.webp`,
@@ -20,7 +23,7 @@ const feedItem = (id: number, title = `Meme ${id}`): FeedItem => ({
 	viewCount: 0,
 	blurred: null,
 	uploader: 'dev',
-	uploaderId: 7,
+	uploaderId: pid('u', 7),
 	uploaderRole: 'member',
 	uploaderAvatar: null,
 	mine: false,
@@ -32,7 +35,7 @@ const feedItem = (id: number, title = `Meme ${id}`): FeedItem => ({
 const memes = (n: number) => Array.from({ length: n }, (_, i) => feedItem(i + 1));
 
 const person = (id: number, name: string, role = 'member') => ({
-	id,
+	id: pid('u', id),
 	name,
 	username: null,
 	role,
@@ -40,11 +43,11 @@ const person = (id: number, name: string, role = 'member') => ({
 });
 
 const comment = (over: Record<string, unknown> = {}) => ({
-	id: 1,
-	mediaId: 7,
+	id: pid('c', 1),
+	mediaId: pid('m', 7),
 	mediaTitle: 'Monday cat',
 	author: 'Jonas',
-	authorId: 3,
+	authorId: pid('u', 3),
 	authorRole: 'member',
 	authorAvatar: null,
 	excerpt: 'The weekly standup was long',
@@ -249,7 +252,7 @@ describe('search page', () => {
 		it('renders memes as meme cards', () => {
 			const body = html(ran({ memes: { items: [feedItem(4, 'Monday cat')], total: 1 } }));
 			expect(body).toContain('Monday cat');
-			expect(body).toContain('href="/meme/4"');
+			expect(body).toContain(`href="/meme/${pid('m', 4)}"`);
 		});
 	});
 
@@ -335,18 +338,18 @@ describe('search page', () => {
 				ran({ people: { items: [person(2, 'Lena K'), person(9, 'Mo', 'moderator')], total: 2 } })
 			);
 			const [lena] = links(body, 'Lena K');
-			expect(lena).toContain('href="/users/2"');
+			expect(lena).toContain(`href="/users/${pid('u', 2)}"`);
 			expect(lena).toContain('>L</span>'); // avatar letter
 			expect(lena).not.toContain('aria-label="Moderator"');
 			const [mo] = links(body, 'Mo');
-			expect(mo).toContain('href="/users/9"');
+			expect(mo).toContain(`href="/users/${pid('u', 9)}"`);
 			expect(mo).toContain('aria-label="Moderator"');
 		});
 
 		it('link a comment to its meme and wrap the match in <mark>', () => {
 			const body = marks(html(ran({ comments: { items: [comment()], total: 1 } })));
 			const [row] = links(body, 'weekly');
-			expect(row).toContain('href="/meme/7"');
+			expect(row).toContain(`href="/meme/${pid('m', 7)}"`);
 			expect(row).toContain('The weekly <mark>standup</mark> was long');
 			expect(row).toContain('Monday cat');
 			expect(row).toMatch(/<time datetime="2026-10-28T10:00:00.000Z">/);
@@ -355,10 +358,10 @@ describe('search page', () => {
 		it('link a comment author to the member page, apart from the link to the meme', () => {
 			const body = marks(html(ran({ comments: { items: [comment()], total: 1 } })));
 			const [author] = links(body, 'Jonas');
-			expect(author).toMatch(/^<a [^>]*href="\/users\/3"/);
+			expect(author).toMatch(new RegExp(`^<a [^>]*href="/users/${pid('u', 3)}"`));
 			expect(author.replace(/<[^>]*>/g, '').trim()).toBe('Jonas');
 			const [excerpt] = links(body, 'weekly');
-			expect(excerpt).toMatch(/^<a [^>]*href="\/meme\/7"/);
+			expect(excerpt).toMatch(new RegExp(`^<a [^>]*href="/meme/${pid('m', 7)}"`));
 			expect(excerpt).not.toContain('Jonas');
 			// the row is a <li> holding both links; an <a> never sits inside another <a>
 			const row = body.match(/<li class="[^"]*row[^"]*">[\s\S]*?<\/li>/)![0];

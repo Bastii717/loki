@@ -6,7 +6,9 @@ import { resetDb, setupDb } from '../../lib/server/db/test-utils';
 import {
 	addOpenReports,
 	insertComment,
+	insertCommentRow,
 	insertMeme,
+	insertMemeRow,
 	OVER_THRESHOLD,
 	userWithSession
 } from '../../lib/server/moderation-test-utils';
@@ -77,6 +79,30 @@ describe('search page load', () => {
 		const member = await userWithSession();
 		const data = await loadFor(member, '?q=a');
 		expect(data).toMatchObject({ q: 'a', text: '', tooShort: true, sections: {} });
+	});
+
+	it('carries public ids only: memes, people and comments, no numeric id in the payload', async () => {
+		const member = await userWithSession();
+		const meme = await insertMemeRow(member.user.id, 'Standup notes');
+		const comment = await insertCommentRow(member.user.id, meme.id, 'standup was long');
+		await db.execute(
+			sql`UPDATE users SET display_name = 'Standup Sam' WHERE id = ${member.user.id}`
+		);
+		const data = await loadFor(member, '?q=standup');
+		const sections = data.sections as unknown as {
+			memes: { items: { id: string; uploaderId: string | null }[] };
+			people: { items: { id: string }[] };
+			comments: { items: { id: string; mediaId: string; authorId: string }[] };
+		};
+		expect(sections.memes.items.map((i) => i.id)).toEqual([meme.publicId]);
+		expect(sections.memes.items[0].uploaderId).toBe(member.publicId);
+		expect(sections.people.items.map((i) => i.id)).toEqual([member.publicId]);
+		expect(sections.comments.items[0]).toMatchObject({
+			id: comment.publicId,
+			mediaId: meme.publicId,
+			authorId: member.publicId
+		});
+		expect(JSON.stringify(data)).not.toMatch(/"(id|mediaId|authorId|uploaderId)":\d/);
 	});
 
 	it('flags a bare prefix as too short', async () => {
@@ -184,8 +210,8 @@ describe('search page load', () => {
 		const data = await loadFor(other, '?q=%40lena&type=quotes');
 		expect(data).toMatchObject({ scope: 'people', type: 'people', text: 'lena' });
 		expect(sectionKeys(data)).toEqual(['people']);
-		expect((data.sections.people as { items: { id: number }[] }).items.map((p) => p.id)).toEqual([
-			lena.user.id
+		expect((data.sections.people as { items: { id: string }[] }).items.map((p) => p.id)).toEqual([
+			lena.publicId
 		]);
 	});
 
@@ -195,12 +221,12 @@ describe('search page load', () => {
 		const lena = await userWithSession();
 		await db.execute(sql`UPDATE users SET display_name = 'Lena K' WHERE id = ${lena.user.id}`);
 		const people = (data: Data) =>
-			(data.sections.people as { items: { id: number; username: string | null }[] }).items;
+			(data.sections.people as { items: { id: string; username: string | null }[] }).items;
 		const asMember = people(await loadFor(member, '?q=lena&type=people'));
-		expect(asMember).toEqual([expect.objectContaining({ id: lena.user.id, username: null })]);
+		expect(asMember).toEqual([expect.objectContaining({ id: lena.publicId, username: null })]);
 		const asModerator = people(await loadFor(moderator, '?q=lena&type=people'));
 		expect(asModerator).toEqual([
-			expect.objectContaining({ id: lena.user.id, username: lena.user.username })
+			expect.objectContaining({ id: lena.publicId, username: lena.user.username })
 		]);
 	});
 
