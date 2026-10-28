@@ -507,6 +507,7 @@ describe('maintenance write guard', () => {
 			'/auth/callback',
 			'/api/memes/1/seen',
 			'/share',
+			'/notifications',
 			'/moderation/maintenance',
 			'/moderation/maintenance?/off'
 		]) {
@@ -525,7 +526,9 @@ describe('maintenance write guard', () => {
 			'/logout/x',
 			'/login/x',
 			'/auth/callback/x',
-			'/share/x'
+			'/share/x',
+			'/notifications/x',
+			'/profile/notifications'
 		]) {
 			const res = await run(path, session, new Response('ok'), 'POST').response;
 			expect(res.status, path).toBe(503);

@@ -476,7 +476,15 @@ async function main(): Promise<void> {
 				},
 				{ mobile: true, account: ADMIN }
 			);
-		if (wantsAny('profile-mobile', 'profile-edit-mobile', 'stats-mobile'))
+		if (
+			wantsAny(
+				'profile-mobile',
+				'profile-edit-mobile',
+				'stats-mobile',
+				'notifications-mobile',
+				'profile-notifications-mobile'
+			)
+		)
 			await withContext(
 				browser,
 				MOBILE,
@@ -487,6 +495,15 @@ async function main(): Promise<void> {
 						await shootPage(page, '/profile/edit', 'profile-edit-mobile.png', 'Save');
 					if (wants('stats-mobile'))
 						await shootPage(page, '/profile/stats', 'stats-mobile.png', 'Stats');
+					if (wants('notifications-mobile'))
+						await shootPage(page, '/notifications', 'notifications-mobile.png', 'Notifications');
+					if (wants('profile-notifications-mobile'))
+						await shootPage(
+							page,
+							'/profile/notifications',
+							'profile-notifications-mobile.png',
+							'Save'
+						);
 				},
 				{ mobile: true, account: OWNER }
 			);

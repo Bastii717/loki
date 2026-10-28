@@ -114,6 +114,10 @@ export async function setFlags(
 	]
 		.filter(Boolean)
 		.join(', ');
+	// the blurs this call newly put on: what the uploader is told
+	const switchedOn: ('nsfw' | 'spoiler')[] = [];
+	if (set.nsfw === true && !row.nsfw) switchedOn.push('nsfw');
+	if (set.spoiler === true && !row.spoiler) switchedOn.push('spoiler');
 	await db.transaction(async (tx) => {
 		await tx.update(media).set(set).where(eq(media.id, mediaId));
 		if (forced || (foreign && changed)) {
@@ -123,7 +127,9 @@ export async function setFlags(
 				mediaId,
 				forced ? AUDIT_ACTIONS.flagsForced : AUDIT_ACTIONS.flagsChanged,
 				`${what}, `,
-				tx
+				tx,
+				undefined,
+				switchedOn
 			);
 		}
 	});

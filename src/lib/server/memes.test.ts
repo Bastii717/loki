@@ -2,13 +2,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { HeadObjectCommand } from '@aws-sdk/client-s3';
 import { db } from './db';
-import { comments, favorites, media, votes } from './db/schema';
+import { comments, favorites, media, notifications, votes } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import { env } from './env';
 import { getFeedPage } from './feed';
 import { deleteMedia, MediaPermissionError, setFlags, toggleFavorite } from './memes';
 import { TimeoutActiveError } from './moderation';
-import { timeOut } from './moderation-test-utils';
+import { addOpenReports, timeOut } from './moderation-test-utils';
 import { mediaKey, putObject, s3Client } from './storage';
 import { ensureBucket } from './storage-test-utils';
 import { MediaNotFoundError } from './votes';
@@ -153,6 +153,137 @@ describe('setFlags', () => {
 		await expect(setFlags(mod, m.id, { nsfw: true })).rejects.toBeInstanceOf(TimeoutActiveError);
 		const [row] = await db.select().from(media).where(eq(media.id, m.id));
 		expect(row.nsfw).toBe(false);
+	});
+});
+
+describe('notices', () => {
+	const noticesOf = (userId: number) =>
+		db
+			.select()
+			.from(notifications)
+			.where(eq(notifications.userId, userId))
+			.orderBy(notifications.id);
+
+	it('a moderator forcing the NSFW blur tells the uploader, and closes reports as actioned', async () => {
+		const owner = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const m = await addMedia(owner.id, { title: 'Titel' });
+		const [reporter] = await addOpenReports('meme', m.id, owner.id, 1);
+		await setFlags(mod, m.id, { nsfw: true });
+		const [notice] = await noticesOf(owner.id);
+		expect(notice).toMatchObject({
+			kind: 'content_flagged',
+			actorId: null,
+			contentType: 'meme',
+			contentId: m.id,
+			mediaId: m.id,
+			detail: 'nsfw:Titel'
+		});
+		expect(await noticesOf(owner.id)).toHaveLength(1);
+		const [outcome] = await noticesOf(reporter);
+		expect(outcome).toMatchObject({ kind: 'report_resolved', detail: 'actioned:x' });
+	});
+
+	it('names both flags when both are switched on', async () => {
+		const owner = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const m = await addMedia(owner.id, { title: 'Titel' });
+		await setFlags(mod, m.id, { nsfw: true, spoiler: true });
+		const [notice] = await noticesOf(owner.id);
+		expect(notice.detail).toBe('nsfw,spoiler:Titel');
+	});
+
+	it('names only the flags this call switched on', async () => {
+		const owner = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const m = await addMedia(owner.id, { title: 'Titel', nsfw: true });
+		await setFlags(mod, m.id, { nsfw: true, spoiler: true });
+		const [notice] = await noticesOf(owner.id);
+		expect(notice.detail).toBe('spoiler:Titel');
+	});
+
+	it('writes nothing when the flag was on already', async () => {
+		const owner = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const m = await addMedia(owner.id, { nsfw: true });
+		await setFlags(mod, m.id, { nsfw: true });
+		expect(await noticesOf(owner.id)).toHaveLength(0);
+	});
+
+	it('writes nothing when a moderator only switches a flag off', async () => {
+		const owner = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const m = await addMedia(owner.id, { nsfw: true });
+		await setFlags(mod, m.id, { nsfw: false });
+		expect(await db.select().from(notifications)).toHaveLength(0);
+	});
+
+	it('writes nothing for the uploader flagging their own meme', async () => {
+		const owner = await testUser();
+		const m = await addMedia(owner.id);
+		await setFlags(owner, m.id, { nsfw: true, spoiler: true });
+		expect(await db.select().from(notifications)).toHaveLength(0);
+	});
+
+	it('the uploader deleting a reported meme tells the reporters "removed" without a meme link', async () => {
+		const owner = await testUser();
+		const m = await addMedia(owner.id);
+		const reporters = await addOpenReports('meme', m.id, owner.id, 2);
+		await deleteMedia(owner, m.id);
+		for (const r of reporters) {
+			const rows = await noticesOf(r);
+			expect(rows).toHaveLength(1);
+			expect(rows[0]).toMatchObject({
+				kind: 'report_resolved',
+				contentType: 'meme',
+				contentId: m.id,
+				mediaId: null,
+				detail: 'removed:x'
+			});
+		}
+		expect(await noticesOf(owner.id)).toHaveLength(0);
+	});
+
+	it('a moderator deleting a meme with reported comments tells comment reporters "removed", meme reporters "actioned" and the uploader once', async () => {
+		const owner = await testUser();
+		const commenter = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const m = await addMedia(owner.id, { title: 'Titel' });
+		const [c] = await db
+			.insert(comments)
+			.values({ mediaId: m.id, authorId: commenter.id, text: 'hi' })
+			.returning({ id: comments.id });
+		const [commentReporter] = await addOpenReports('comment', c.id, commenter.id, 1);
+		const [memeReporter] = await addOpenReports('meme', m.id, owner.id, 1);
+		await deleteMedia(mod, m.id);
+
+		const forCommentReporter = await noticesOf(commentReporter);
+		expect(forCommentReporter).toHaveLength(1);
+		expect(forCommentReporter[0]).toMatchObject({
+			kind: 'report_resolved',
+			contentType: 'comment',
+			contentId: c.id,
+			mediaId: null,
+			detail: 'removed:x'
+		});
+		const forMemeReporter = await noticesOf(memeReporter);
+		expect(forMemeReporter).toHaveLength(1);
+		expect(forMemeReporter[0]).toMatchObject({
+			kind: 'report_resolved',
+			contentType: 'meme',
+			mediaId: null,
+			detail: 'actioned:x'
+		});
+		const forOwner = await noticesOf(owner.id);
+		expect(forOwner).toHaveLength(1);
+		expect(forOwner[0]).toMatchObject({
+			kind: 'content_deleted',
+			contentType: 'meme',
+			mediaId: null,
+			detail: 'Titel'
+		});
+		// the commenter's comment was collateral damage, not a moderation decision on them
+		expect(await noticesOf(commenter.id)).toHaveLength(0);
 	});
 });
 

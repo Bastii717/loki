@@ -7,6 +7,7 @@ import { users } from './db/schema';
 import { env } from './env';
 import { sniffMedia } from './media/process';
 import { assertNotTimedOut, audit, AUDIT_ACTIONS } from './moderation';
+import { notify } from './notifications';
 import { ProfileInputError } from './profile';
 import { deleteObjects, putObject } from './storage';
 
@@ -151,6 +152,7 @@ export async function removeAvatar(actor: SessionUser, userId: number): Promise<
 			`by=${self ? 'self' : 'admin'}`,
 			tx
 		);
+		await notify(tx, { userId, kind: 'avatar_removed', actorId: actor.id });
 		return keys;
 	});
 	await deleteQuietly(removed);

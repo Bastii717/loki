@@ -52,7 +52,9 @@ const PAIRS: Pair[] = [
 		bg: '--accent-soft',
 		min: 4.5
 	},
-	{ label: 'accent on surface', fg: '--accent', bg: '--surface', min: 3 }
+	{ label: 'accent on surface', fg: '--accent', bg: '--surface', min: 3 },
+	// The moderation notices use --warn for their icon and left edge: non-text, so 3.
+	{ label: 'warn on surface', fg: '--warn', bg: '--surface', min: 3 }
 ];
 
 interface Palette {

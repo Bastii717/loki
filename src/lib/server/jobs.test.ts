@@ -1,9 +1,10 @@
 import { eq } from 'drizzle-orm';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from './db';
 import { media } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
-import { hotScoreJobShouldRun, recomputeHotScores } from './jobs';
+import { hotScoreJobShouldRun, recomputeHotScores, runSweep, startJobs } from './jobs';
+import * as notificationsModule from './notifications';
 import { configureReadiness, resetReadiness, setMigrated } from './readiness';
 
 beforeAll(setupDb);
@@ -64,5 +65,59 @@ describe('hotScoreJobShouldRun', () => {
 		setMigrated(true);
 		configure(false);
 		expect(await hotScoreJobShouldRun()).toBe(false);
+	});
+});
+
+describe('notification sweep job', () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		resetReadiness();
+		setMigrated(true);
+	});
+
+	const configure = (dbUp: boolean) =>
+		configureReadiness({ dbProbe: async () => dbUp, storageProbe: async () => false });
+
+	it('sweeps while the database is up and migrated', async () => {
+		const sweep = vi.spyOn(notificationsModule, 'sweepNotifications').mockResolvedValue(0);
+		setMigrated(true);
+		configure(true);
+		await runSweep();
+		expect(sweep).toHaveBeenCalledTimes(1);
+	});
+
+	it('skips while migrations have not succeeded', async () => {
+		const sweep = vi.spyOn(notificationsModule, 'sweepNotifications').mockResolvedValue(0);
+		setMigrated(false);
+		configure(true);
+		await runSweep();
+		expect(sweep).not.toHaveBeenCalled();
+	});
+
+	it('skips while the database is down', async () => {
+		const sweep = vi.spyOn(notificationsModule, 'sweepNotifications').mockResolvedValue(0);
+		setMigrated(true);
+		configure(false);
+		await runSweep();
+		expect(sweep).not.toHaveBeenCalled();
+	});
+
+	it('logs a failed sweep instead of throwing', async () => {
+		vi.spyOn(notificationsModule, 'sweepNotifications').mockRejectedValue(new Error('boom'));
+		const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+		setMigrated(true);
+		configure(true);
+		await expect(runSweep()).resolves.toBeUndefined();
+		expect(log).toHaveBeenCalledWith('notification sweep failed', expect.any(Error));
+	});
+
+	it('startJobs runs the sweep once at start, and a second call changes nothing', async () => {
+		const sweep = vi.spyOn(notificationsModule, 'sweepNotifications').mockResolvedValue(0);
+		setMigrated(true);
+		configure(true);
+		startJobs();
+		startJobs();
+		await vi.waitFor(() => expect(sweep).toHaveBeenCalled());
+		expect(sweep).toHaveBeenCalledTimes(1);
 	});
 });

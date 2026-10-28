@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import Bell from 'lucide-svelte/icons/bell';
 	import BookOpen from 'lucide-svelte/icons/book-open';
 	import ChartColumn from 'lucide-svelte/icons/chart-column';
 	import ChevronRight from 'lucide-svelte/icons/chevron-right';
@@ -24,6 +25,7 @@
 	// Personal lists first, then the reference pages; Moderation is appended below for moderators.
 	const links = [
 		{ href: '/profile/edit', label: 'Edit profile', icon: UserPen },
+		{ href: '/profile/notifications', label: 'Notifications', icon: Bell },
 		{ href: '/profile/memes', label: 'My memes', icon: Images },
 		{ href: '/profile/favorites', label: 'Favorites', icon: Star },
 		{ href: '/profile/stats', label: 'Stats', icon: ChartColumn },

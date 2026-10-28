@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { AvatarError, avatarErrorMessage, avatarKeys, removeAvatar, setAvatar } from './avatar';
 import type { SessionUser } from './auth/session';
 import { db } from './db';
-import { auditLog, timeouts, users } from './db/schema';
+import { auditLog, notifications, timeouts, users } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import { env } from './env';
 import { TimeoutActiveError } from './moderation';
@@ -71,6 +71,10 @@ async function avatarRow(userId: number) {
 
 async function audits(action: string) {
 	return (await db.select().from(auditLog)).filter((a) => a.action === action);
+}
+
+async function noticesOf(userId: number) {
+	return db.select().from(notifications).where(eq(notifications.userId, userId));
 }
 
 async function fetchBuf(key: string): Promise<Buffer> {
@@ -363,5 +367,27 @@ describe('removeAvatar', () => {
 		await removeAvatar(asSession(user), user.id);
 		expect(await avatarRow(user.id)).toEqual({ avatarKey: null, avatarThumbKey: null });
 		expect(await exists(keys.avatarKey)).toBe(false);
+	});
+
+	it('tells the member when an admin removes the avatar', async () => {
+		const member = await testUser();
+		const admin = await testUser({ role: 'admin' });
+		await setAndTrack(asSession(member), png);
+		await removeAvatar(asSession(admin), member.id);
+		const rows = await noticesOf(member.id);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({ kind: 'avatar_removed', actorId: null, detail: '' });
+		expect(await noticesOf(admin.id)).toHaveLength(0);
+	});
+
+	it('writes no notice for a self removal, an admin removing their own, or no avatar', async () => {
+		const member = await testUser();
+		const admin = await testUser({ role: 'admin' });
+		await setAndTrack(asSession(member), png);
+		await removeAvatar(asSession(member), member.id);
+		await setAndTrack(asSession(admin), png);
+		await removeAvatar(asSession(admin), admin.id);
+		await removeAvatar(asSession(admin), member.id);
+		expect(await db.select().from(notifications)).toHaveLength(0);
 	});
 });

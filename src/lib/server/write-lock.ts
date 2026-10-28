@@ -6,11 +6,12 @@ const EXEMPT_PATHS = new Set([
 	'/login',
 	'/auth/callback',
 	'/share',
+	'/notifications',
 	'/moderation/maintenance'
 ]);
 const SEEN_PATH = /^\/api\/memes\/\d+\/seen$/;
 
-/** Paths that keep working while writes are locked: signing out and in, seen-tracking, the share target and the switch itself. */
+/** Paths that keep working while writes are locked: signing out and in, seen-tracking, the share target, the notifications page (opening a notice marks it read) and the switch itself. */
 export function isWriteLockExempt(path: string): boolean {
 	return EXEMPT_PATHS.has(path) || SEEN_PATH.test(path);
 }

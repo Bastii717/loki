@@ -1,12 +1,20 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import Bell from 'lucide-svelte/icons/bell';
 	import Compass from 'lucide-svelte/icons/compass';
 	import House from 'lucide-svelte/icons/house';
 	import Plus from 'lucide-svelte/icons/plus';
 	import Quote from 'lucide-svelte/icons/quote';
 	import User from 'lucide-svelte/icons/user';
-	/** `badge`: open moderation cases, only passed for moderators/admins; shown as a dot-count on Profile. */
-	let { pathname, badge = 0 }: { pathname: string; badge?: number } = $props();
+	/**
+	 * `badge`: open moderation cases, only passed for moderators/admins; shown as a dot-count on Profile.
+	 * `unread`: unread notifications, shown as a dot-count on Alerts.
+	 */
+	let {
+		pathname,
+		badge = 0,
+		unread = 0
+	}: { pathname: string; badge?: number; unread?: number } = $props();
 
 	const left = [
 		{ href: '/', label: 'Feed', icon: House },
@@ -14,6 +22,7 @@
 	];
 	const right = [
 		{ href: '/quotes', label: 'Quotes', icon: Quote },
+		{ href: '/notifications', label: 'Alerts', icon: Bell },
 		{ href: '/profile', label: 'Profile', icon: User }
 	];
 
@@ -43,6 +52,11 @@
 		>
 			<span class="icon">
 				<tab.icon size={22} aria-hidden="true" />
+				{#if tab.href === '/notifications' && unread > 0}
+					<span class="badge" role="img" aria-label="{unread} unread notifications"
+						>{unread > 9 ? '9+' : unread}</span
+					>
+				{/if}
 				{#if tab.href === '/profile' && badge > 0}
 					<span class="badge" role="img" aria-label="{badge} open reports"
 						>{badge > 9 ? '9+' : badge}</span
@@ -60,7 +74,7 @@
 		inset: auto 0 0 0;
 		z-index: 10;
 		display: grid;
-		grid-template-columns: 1fr 1fr 64px 1fr 1fr;
+		grid-template-columns: 1fr 1fr 64px 1fr 1fr 1fr;
 		align-items: center;
 		min-height: var(--tabbar-height);
 		padding-bottom: env(safe-area-inset-bottom);

@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { db } from './db';
+import { notifications, quotes } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import {
 	addQuote,
@@ -107,6 +110,72 @@ describe('deleteQuote', () => {
 	it('throws not-found for a missing quote', async () => {
 		const mod = await testUser({ role: 'moderator' });
 		await expect(deleteQuote(asSession(mod), 999999)).rejects.toBeInstanceOf(QuoteNotFoundError);
+	});
+});
+
+describe('deleteQuote notices', () => {
+	const noticesOf = (userId: number) =>
+		db
+			.select()
+			.from(notifications)
+			.where(eq(notifications.userId, userId))
+			.orderBy(notifications.id);
+
+	it('a moderator deleting a quote tells the submitter and each reporter', async () => {
+		const submitter = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const q = await addQuote(submitter.id, 'Wise words', 'Opa');
+		const [reporter] = await addOpenReports('quote', q.id, submitter.id, 1);
+		await deleteQuote(asSession(mod), q.id);
+		const [notice] = await noticesOf(submitter.id);
+		expect(notice).toMatchObject({
+			kind: 'content_deleted',
+			actorId: null,
+			contentType: 'quote',
+			contentId: q.id,
+			mediaId: null,
+			detail: 'Wise words'
+		});
+		const [outcome] = await noticesOf(reporter);
+		expect(outcome).toMatchObject({
+			kind: 'report_resolved',
+			contentType: 'quote',
+			mediaId: null,
+			detail: 'actioned:x'
+		});
+	});
+
+	it('a quote without a submitter notifies nobody', async () => {
+		const mod = await testUser({ role: 'moderator' });
+		const q = await addQuote(mod.id, 'Orphan', 'Opa');
+		await db.update(quotes).set({ submittedBy: null }).where(eq(quotes.id, q.id));
+		await deleteQuote(asSession(mod), q.id);
+		expect(await db.select().from(notifications)).toHaveLength(0);
+	});
+
+	it('a moderator deleting their own reported quote tells the reporters "removed"', async () => {
+		const mod = await testUser({ role: 'moderator' });
+		const q = await addQuote(mod.id, 'Mine', 'Opa');
+		const [reporter] = await addOpenReports('quote', q.id, mod.id, 1);
+		await deleteQuote(asSession(mod), q.id);
+		const [outcome] = await noticesOf(reporter);
+		expect(outcome).toMatchObject({ kind: 'report_resolved', detail: 'removed:x' });
+		expect(await noticesOf(mod.id)).toHaveLength(0);
+	});
+
+	it('dismissing reports on a quote under review releases it for the submitter', async () => {
+		const submitter = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const q = await addQuote(submitter.id, 'Wise words', 'Opa');
+		await addOpenReports('quote', q.id, submitter.id, OVER_THRESHOLD);
+		await resolveReports(asSession(mod), 'quote', q.id, 'dismissed');
+		const [notice] = await noticesOf(submitter.id);
+		expect(notice).toMatchObject({
+			kind: 'content_released',
+			contentType: 'quote',
+			mediaId: null,
+			detail: 'x' // the excerpt the report snapshotted (addOpenReports writes 'x')
+		});
 	});
 });
 

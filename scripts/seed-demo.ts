@@ -7,11 +7,12 @@
  * Goes through the real server modules (createMedia, applyVote, addComment), so
  * thumbnails and S3 objects are real. Refuses to touch anything that is not a private
  * address unless LOKI_SEED_FORCE=1 is set. Idempotent: every block (memes, quotes, report,
- * rules and FAQ, favorite) is skipped when its rows already exist.
+ * rules and FAQ, favorite, notifications) is skipped when its rows already exist.
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { and, count, eq, isNull } from 'drizzle-orm';
+import type { NotificationKind } from '../src/lib/server/notifications';
 
 const MIN_MEMES = 6;
 
@@ -77,7 +78,7 @@ const [
 	import('../src/lib/server/profile'),
 	import('../src/lib/server/avatar')
 ]);
-const { users, media, comments, quotes, reports, siteContent, favorites } = schema;
+const { users, media, comments, quotes, reports, siteContent, favorites, notifications } = schema;
 const { applyVote } = votesMod;
 const { addComment } = commentsMod;
 const { addQuote, voteQuote } = quotesMod;
@@ -446,6 +447,9 @@ async function seedMemes(byName: UserMap) {
 		console.log(`Seeded #${id} "${m.title}"`);
 	}
 
+	// The comments above notified their recipients as a side effect; the demo curates lena's inbox
+	// itself (seedNotifications), so those organic notices go.
+	await db.delete(notifications);
 	await jobs.recomputeHotScores();
 }
 
@@ -497,6 +501,110 @@ async function seedExtras(byName: UserMap) {
 			console.log(`Seeded a favorite on #${first.id}`);
 		}
 	}
+
+	await seedNotifications(byName);
+}
+
+/** Five notices for lena, one of them unread, so the bell shows 1 and the page shows both row kinds. */
+async function seedNotifications(byName: UserMap) {
+	const lena = byName.get('lena')!;
+	const [{ n }] = await db
+		.select({ n: count() })
+		.from(notifications)
+		.where(eq(notifications.userId, lena.id));
+	if (n > 0) return;
+
+	const mediaByTitle = new Map<string, number>();
+	for (const row of await db.select({ id: media.id, title: media.title }).from(media)) {
+		mediaByTitle.set(row.title, row.id);
+	}
+	const monday = mediaByTitle.get('Monday, 7:00 AM');
+	const meeting = mediaByTitle.get('A meeting that could have been an email');
+	const review = mediaByTitle.get('Code review says: LGTM');
+	if (!monday || !meeting || !review) {
+		console.log('Demo memes not found; not seeding notifications.');
+		return;
+	}
+	const [reported] = await db
+		.select({ id: comments.id, text: comments.text })
+		.from(comments)
+		.where(and(eq(comments.mediaId, review), eq(comments.authorId, byName.get('noah')!.id)));
+
+	const hours = (h: number) => new Date(Date.now() - h * 3_600_000);
+	const rows: {
+		kind: NotificationKind;
+		actor?: string;
+		contentType: 'meme' | 'comment';
+		contentId?: number;
+		mediaId: number;
+		detail: string;
+		count?: number;
+		ageHours: number;
+		read: boolean;
+	}[] = [
+		{
+			kind: 'comment',
+			actor: 'jonas',
+			contentType: 'comment',
+			mediaId: monday,
+			detail: 'This is me, every single Monday.',
+			count: 3,
+			ageHours: 5,
+			read: false
+		},
+		{
+			kind: 'thread_comment',
+			actor: 'noah',
+			contentType: 'comment',
+			mediaId: review,
+			detail: 'LGTM means Looks Great, Tests Missing around here.',
+			ageHours: 26,
+			read: true
+		},
+		{
+			kind: 'report_resolved',
+			contentType: 'comment',
+			contentId: reported?.id,
+			mediaId: review,
+			detail: `actioned:${reported?.text ?? ''}`,
+			ageHours: 52,
+			read: true
+		},
+		{
+			kind: 'content_flagged',
+			contentType: 'meme',
+			contentId: meeting,
+			mediaId: meeting,
+			detail: 'nsfw:A meeting that could have been an email',
+			ageHours: 76,
+			read: true
+		},
+		{
+			kind: 'comment',
+			actor: 'mira',
+			contentType: 'comment',
+			mediaId: meeting,
+			detail: 'Two hours. No agenda.',
+			ageHours: 98,
+			read: true
+		}
+	];
+	await db.insert(notifications).values(
+		rows.map((r) => ({
+			userId: lena.id,
+			kind: r.kind,
+			actorId: r.actor ? byName.get(r.actor)!.id : null,
+			contentType: r.contentType,
+			contentId: r.contentId ?? null,
+			mediaId: r.mediaId,
+			detail: r.detail,
+			count: r.count ?? 1,
+			readAt: r.read ? hours(r.ageHours - 1) : null,
+			createdAt: hours(r.ageHours),
+			updatedAt: hours(r.ageHours)
+		}))
+	);
+	console.log(`Seeded ${rows.length} notifications for lena`);
 }
 
 try {

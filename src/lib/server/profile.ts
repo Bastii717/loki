@@ -5,6 +5,7 @@ import type { SessionUser } from './auth/session';
 import { db } from './db';
 import { users } from './db/schema';
 import { assertNotTimedOut, audit, AUDIT_ACTIONS } from './moderation';
+import { notify } from './notifications';
 
 export const DISPLAY_NAME_MIN = 2;
 export { DISPLAY_NAME_MAX, MOTTO_MAX };
@@ -133,6 +134,8 @@ export async function setDisplayName(
 				`from="${target.displayName ?? 'none'}" to="${name}" by=${self ? 'self' : 'admin'}`,
 				tx
 			);
+			// notify() writes nothing when the member renames themselves
+			await notify(tx, { userId, kind: 'name_changed', actorId: actor.id, detail: name });
 		});
 	} catch (e) {
 		// Only reachable when two members race for the same key (the pre-check above passed for both),
@@ -146,6 +149,14 @@ export async function setDisplayName(
 export async function resetDisplayName(actor: SessionUser, userId: number): Promise<void> {
 	if (actor.role !== 'admin') throw new ProfileInputError('Only admins can reset names.');
 	await db.transaction(async (tx) => {
+		const [member] = await tx
+			.select({ displayName: users.displayName })
+			.from(users)
+			.where(eq(users.id, userId))
+			.for('update');
+		if (!member) throw new ProfileInputError('Member not found.');
+		// nothing to reset: no change, no audit row, no notice
+		if (member.displayName === null) return;
 		const updated = await tx
 			.update(users)
 			.set({
@@ -158,6 +169,7 @@ export async function resetDisplayName(actor: SessionUser, userId: number): Prom
 			.returning({ id: users.id });
 		if (updated.length === 0) throw new ProfileInputError('Member not found.');
 		await audit(actor.id, AUDIT_ACTIONS.displayNameReset, 'user', userId, '', tx);
+		await notify(tx, { userId, kind: 'name_reset', actorId: actor.id });
 	});
 }
 
@@ -216,6 +228,7 @@ export async function clearMotto(actor: SessionUser, userId: number): Promise<vo
 			`by=${self ? 'self' : 'admin'}`,
 			tx
 		);
+		await notify(tx, { userId, kind: 'motto_cleared', actorId: actor.id });
 	});
 }
 
