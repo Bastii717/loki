@@ -17,6 +17,7 @@
 	--accent-soft-text: #a5acf7;
 	--up: #23a55a;
 	--down: #f23f43;
+	--warn: #f0b232;
 	--overlay: rgba(17, 18, 20, 0.55);
 
 	--radius: 12px;
@@ -40,6 +41,7 @@
 		--accent-soft-text: #4752c4;
 		--up: #1a8a47;
 		--down: #d12c30;
+		--warn: #9a6700;
 		--overlay: rgba(242, 243, 245, 0.6);
 	}
 }
@@ -56,6 +58,7 @@
 	--accent-soft-text: #4752c4;
 	--up: #1a8a47;
 	--down: #d12c30;
+	--warn: #9a6700;
 	--overlay: rgba(242, 243, 245, 0.6);
 }
 
