@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.5.0](https://github.com/Bastii717/loki/compare/v1.4.0...v1.5.0) (2026-10-29)
+
+
+### Features
+
+* random public ids for memes, members, comments, quotes and templates: every link, API path and page payload uses a 12-character id instead of the sequential database id, numeric ids answer 404, feed and Discover cursors no longer reveal ids, and new uploads use id-free object keys ([#41](https://github.com/Bastii717/loki/pull/41))
+
+
+### Operations
+
+* migration 0013 creates the trusted extension `pgcrypto` and backfills `public_id` on five tables at start; on a managed database where the application role may not create extensions, create `pgcrypto` once by hand first
+* old numeric links such as `/meme/42` stop working; existing files in the bucket keep their keys
+* no new environment variables
+
+
 ## [1.4.0](https://github.com/Bastii717/loki/compare/v1.3.0...v1.4.0) (2026-10-28)
 
 
