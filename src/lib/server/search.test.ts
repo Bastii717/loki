@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
 import { mediaTags, quotes, tags } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
@@ -55,6 +55,31 @@ describe('pg_trgm', () => {
 			return Number(row.v);
 		});
 		expect(shown).toBe(SIMILARITY_MIN);
+	});
+
+	describe('with a stricter default configured on every connection', () => {
+		/** Sets the session default of the similarity threshold on each pooled connection. */
+		const setDefault = (value: string) =>
+			Promise.all(
+				Array.from({ length: 10 }, () =>
+					db.execute(
+						sql`SELECT set_config('pg_trgm.similarity_threshold', ${value}, false), pg_sleep(0.2)`
+					)
+				)
+			);
+		beforeEach(() => setDefault('0.95'));
+		afterEach(() => setDefault(String(SIMILARITY_MIN)));
+
+		it('still finds a near-miss tag', async () => {
+			const u = await testUser();
+			await tagMeme(await insertMeme(u.id, 'A'), 'monday');
+			expect((await searchTags(false, 'mondey', 10)).map((t) => t.name)).toEqual(['monday']);
+		});
+
+		it('still finds a near-miss person', async () => {
+			const u = await testUser({ displayName: 'Jonathan' });
+			expect((await searchPeople(false, 'Jonathon', PAGE)).items.map((p) => p.id)).toEqual([u.id]);
+		});
 	});
 
 	it('scores a one-letter typo above WORD_SIMILARITY_MIN', async () => {
@@ -311,9 +336,30 @@ describe('searchTags', () => {
 		await tagMeme(hidden, 'onlyhidden');
 		expect(await searchTags(false, 'office', 10)).toEqual([{ name: 'office', count: 1 }]);
 		expect(await searchTags(true, 'office', 10)).toEqual([{ name: 'office', count: 2 }]);
-		// a tag carried only by a hidden meme is still listed, with count 0
-		expect(await searchTags(false, 'onlyhidden', 10)).toEqual([{ name: 'onlyhidden', count: 0 }]);
 		expect(await searchTags(true, 'onlyhidden', 10)).toEqual([{ name: 'onlyhidden', count: 1 }]);
+	});
+
+	it('leaves out a tag with no visible meme for members, but lists it for moderators', async () => {
+		const u = await testUser();
+		const hidden = await hiddenMeme(u.id, 'Hidden');
+		await tagMeme(hidden, 'onlyhidden');
+		await tagMeme(await insertMeme(u.id, 'Shown'), 'onlyshown');
+		await db.insert(tags).values({ name: 'unused' }); // a tag no meme carries
+		expect(await searchTags(false, 'only', 10)).toEqual([{ name: 'onlyshown', count: 1 }]);
+		expect(await searchTags(false, 'unused', 10)).toEqual([]);
+		expect(await searchTags(true, 'onlyhidden', 10)).toEqual([{ name: 'onlyhidden', count: 1 }]);
+		expect(await searchTags(true, 'unused', 10)).toEqual([{ name: 'unused', count: 0 }]);
+	});
+
+	it('keeps its own limit when hidden tags are filtered out', async () => {
+		const u = await testUser();
+		const hidden = await hiddenMeme(u.id, 'Hidden');
+		const shown = await insertMeme(u.id, 'Shown');
+		// 'tag0' sorts first but is hidden; the limit must still yield two visible tags
+		await tagMeme(hidden, 'tag0');
+		await tagMeme(shown, 'tag1');
+		await tagMeme(shown, 'tag2');
+		expect((await searchTags(false, 'tag', 2)).map((t) => t.name)).toEqual(['tag1', 'tag2']);
 	});
 
 	it('matches % and _ literally', async () => {

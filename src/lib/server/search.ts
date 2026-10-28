@@ -78,11 +78,16 @@ const matchShort = (text: string, col: SQL): SQL =>
 
 type Executor = Pick<typeof db, 'execute'>;
 
-/** Runs `fn` on a transaction whose `<%` operator uses WORD_SIMILARITY_MIN (the setting is local to it). */
-const withWordThreshold = <T>(fn: (q: Executor) => Promise<T>): Promise<T> =>
+/**
+ * Runs `fn` on a transaction that pins both trigram thresholds, so a database or role default
+ * cannot change what matches: `<%` uses WORD_SIMILARITY_MIN, `%` uses SIMILARITY_MIN (the settings
+ * are local to the transaction).
+ */
+const withThresholds = <T>(fn: (q: Executor) => Promise<T>): Promise<T> =>
 	db.transaction(async (tx) => {
 		await tx.execute(
-			sql`SELECT set_config('pg_trgm.word_similarity_threshold', ${String(WORD_SIMILARITY_MIN)}, true)`
+			sql`SELECT set_config('pg_trgm.word_similarity_threshold', ${String(WORD_SIMILARITY_MIN)}, true),
+				set_config('pg_trgm.similarity_threshold', ${String(SIMILARITY_MIN)}, true)`
 		);
 		return fn(tx);
 	});
@@ -117,7 +122,7 @@ export async function searchMemes(
 			WHERE mt.media_id = m.id AND ${matchShort(text, sql`t.name`)}
 		)) ${revealAll ? sql`` : sql`AND NOT ${underReviewSql('meme', sql`m.id`, sql`m.reviewed_at`)}`}`;
 
-	const { rows, total } = await withWordThreshold(async (q) => {
+	const { rows, total } = await withThresholds(async (q) => {
 		const rows = await q.execute<{ id: number }>(sql`
 				SELECT m.id FROM ${from} WHERE ${where}
 				ORDER BY word_similarity(${text}, m.title) DESC, m.created_at DESC, m.id DESC
@@ -141,24 +146,34 @@ export async function searchMemes(
 
 // --- tags ------------------------------------------------------------------------------------
 
-/** Tags matching the text with how many memes the viewer can see under each, best match first. */
+/**
+ * Tags matching the text with how many memes the viewer can see under each, best match first.
+ * Members only get tags with at least one visible meme (a tag carried only by hidden memes would
+ * reveal that they exist); moderators get every matching tag.
+ */
 export async function searchTags(
 	revealAll: boolean,
 	text: string,
 	limit: number
 ): Promise<{ name: string; count: number }[]> {
-	const rows = await db.execute<{ name: string; count: number }>(sql`
-		SELECT t.name,
-			(
-				SELECT count(*)::int FROM media_tags mt JOIN media m ON m.id = mt.media_id
-				WHERE mt.tag_id = t.id
-				${revealAll ? sql`` : sql`AND NOT ${underReviewSql('meme', sql`m.id`, sql`m.reviewed_at`)}`}
-			) AS count
-		FROM tags t
-		WHERE ${matchShort(text, sql`t.name`)}
-		ORDER BY similarity(${text}, t.name) DESC, t.name ASC
-		LIMIT ${Math.max(Math.trunc(limit), 1)}
-	`);
+	const rows = await withThresholds((q) =>
+		q.execute<{ name: string; count: number }>(sql`
+			SELECT name, count FROM (
+				SELECT t.name,
+					(
+						SELECT count(*)::int FROM media_tags mt JOIN media m ON m.id = mt.media_id
+						WHERE mt.tag_id = t.id
+						${revealAll ? sql`` : sql`AND NOT ${underReviewSql('meme', sql`m.id`, sql`m.reviewed_at`)}`}
+					) AS count,
+					similarity(${text}, t.name) AS score
+				FROM tags t
+				WHERE ${matchShort(text, sql`t.name`)}
+			) matched
+			${revealAll ? sql`` : sql`WHERE count > 0`}
+			ORDER BY score DESC, name ASC
+			LIMIT ${Math.max(Math.trunc(limit), 1)}
+		`)
+	);
 	return rows.map((r) => ({ name: r.name, count: r.count }));
 }
 
@@ -192,8 +207,8 @@ export async function searchPeople(
 		? sql`GREATEST(similarity(${text}, ${name}), similarity(${text}, u.username))`
 		: sql`similarity(${text}, ${name})`;
 
-	const [rows, total] = await Promise.all([
-		db.execute<{
+	const { rows, total } = await withThresholds(async (q) => {
+		const rows = await q.execute<{
 			id: number;
 			name: string;
 			username: string;
@@ -204,9 +219,9 @@ export async function searchPeople(
 			FROM ${from} WHERE ${where}
 			ORDER BY ${rank} DESC, ${name} ASC, u.id ASC
 			${limitOffset(page)}
-		`),
-		cappedCount(db, from, where)
-	]);
+		`);
+		return { rows, total: await cappedCount(q, from, where) };
+	});
 	return {
 		items: rows.map((r) => ({
 			id: r.id,
@@ -248,7 +263,7 @@ export async function searchComments(
 				AND NOT ${underReviewSql('meme', sql`m.id`, sql`m.reviewed_at`)}`
 	}`;
 
-	const { rows, total } = await withWordThreshold(async (q) => {
+	const { rows, total } = await withThresholds(async (q) => {
 		const rows = await q.execute<{
 			id: number;
 			media_id: number;
@@ -306,7 +321,7 @@ export async function searchQuotes(
 		revealAll ? sql`` : sql`AND NOT ${underReviewSql('quote', sql`q.id`, sql`q.reviewed_at`)}`
 	}`;
 
-	const { rows, total } = await withWordThreshold(async (q) => {
+	const { rows, total } = await withThresholds(async (q) => {
 		const rows = await q.execute<{
 			id: number;
 			text: string;
