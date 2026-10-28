@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { AWARD_KIND } from './awards';
 import { db } from './db';
 import { env } from './env';
 import { openReporterCountSelect, overThresholdSql, underReviewSql } from './moderation';
@@ -37,6 +38,8 @@ export interface FeedItem {
 	 * URLs (enforced here, not in the UI); moderators get the full item with this flag set.
 	 */
 	underReview: boolean;
+	/** `YYYY-MM` of the Meme of the Month award this meme holds; null without one and when hidden for the viewer. */
+	awardMonth: string | null;
 }
 
 export interface FeedOptions {
@@ -125,6 +128,7 @@ interface Row extends Record<string, unknown> {
 	user_vote: number;
 	user_favorite: boolean;
 	under_review: boolean;
+	award_month: string | null;
 }
 
 /**
@@ -202,7 +206,8 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 			fc.n AS favorite_count,
 			COALESCE(v.value, 0) AS user_vote,
 			(uf.user_id IS NOT NULL) AS user_favorite,
-			(m.reviewed_at IS NULL AND ${overThresholdSql(sql`rc.n`)}) AS under_review
+			(m.reviewed_at IS NULL AND ${overThresholdSql(sql`rc.n`)}) AS under_review,
+			aw.month AS award_month
 		FROM media m
 		JOIN users u ON u.id = m.uploader_id
 		LEFT JOIN LATERAL (
@@ -219,6 +224,13 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 		LEFT JOIN LATERAL (
 			${openReporterCountSelect('meme', sql`m.id`)}
 		) rc ON true
+		LEFT JOIN LATERAL (
+			SELECT to_char(a.month, 'YYYY-MM') AS month
+			FROM awards a
+			WHERE a.media_id = m.id AND a.kind = ${AWARD_KIND}
+			ORDER BY a.month DESC
+			LIMIT 1
+		) aw ON true
 		LEFT JOIN votes v ON v.media_id = m.id AND v.user_id = ${opts.viewerId}
 		LEFT JOIN favorites uf ON uf.media_id = m.id AND uf.user_id = ${opts.viewerId}
 		WHERE true ${after} ${tagFilter} ${idFilter} ${idsFilter} ${uploaderFilter} ${favoriteFilter} ${hideFilter}
@@ -255,7 +267,9 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 			uploaderAvatar: hide ? null : r.uploader_avatar,
 			mine: r.mine,
 			createdAt: new Date(r.created_at).toISOString(),
-			underReview: r.under_review
+			underReview: r.under_review,
+			// the badge would give away that a hidden meme won
+			awardMonth: hide ? null : r.award_month
 		};
 	});
 

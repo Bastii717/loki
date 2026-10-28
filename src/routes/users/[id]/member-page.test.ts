@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../../../lib/server/db';
-import { users } from '../../../lib/server/db/schema';
+import { awards, users } from '../../../lib/server/db/schema';
 import { resetDb, setupDb } from '../../../lib/server/db/test-utils';
 import {
 	addOpenReports,
@@ -29,6 +29,7 @@ interface Data {
 		memberSince: string;
 	};
 	memeCount: number;
+	awards: { month: string }[];
 	items: FeedItem[];
 	nextCursor: string | null;
 }
@@ -134,6 +135,18 @@ describe('member page load', () => {
 		expect(data.member.id).toBe(w.target.user.id);
 		// the viewer's own hidden meme is still hidden from them, like in every feed
 		expect(data.memeCount).toBe(2);
+	});
+
+	it("returns the months the member won, newest first, and not another member's", async () => {
+		const w = await world();
+		const win = (month: string, uploaderId: number) =>
+			db.insert(awards).values({ month: `${month}-01`, uploaderId, title: 'T', score: 3 });
+		await win('2026-08', w.target.user.id);
+		await win('2026-10', w.target.user.id);
+		await win('2026-09', w.other.user.id);
+		const data = await loadFor(w.viewer, w.target.user.id);
+		expect(data.awards).toEqual([{ month: '2026-10' }, { month: '2026-08' }]);
+		expect((await loadFor(w.viewer, w.mod.user.id)).awards).toEqual([]);
 	});
 
 	it('shows an empty list for a member without memes', async () => {

@@ -23,7 +23,7 @@ function item(overrides: Partial<TextInput> & Pick<TextInput, 'kind'>): TextInpu
 }
 
 describe('categories', () => {
-	it('derives the category from the kind for all twelve kinds', () => {
+	it('derives the category from the kind for all thirteen kinds', () => {
 		const expected: Record<NotificationItem['kind'], NotificationCategory> = {
 			comment: 'activity',
 			thread_comment: 'activity',
@@ -36,9 +36,10 @@ describe('categories', () => {
 			name_changed: 'moderation',
 			name_reset: 'moderation',
 			avatar_removed: 'moderation',
-			motto_cleared: 'moderation'
+			motto_cleared: 'moderation',
+			award_won: 'activity'
 		};
-		expect(NOTIFICATION_KINDS).toHaveLength(12);
+		expect(NOTIFICATION_KINDS).toHaveLength(13);
 		expect(NOTIFICATION_CATEGORY).toEqual(expected);
 	});
 
@@ -157,6 +158,21 @@ describe('notificationText', () => {
 				item({ kind: 'report_resolved', contentType: 'quote', detail: 'dismissed:x' })
 			).text
 		).toBe('Your report on a quote was reviewed: no action taken.');
+	});
+
+	it('award_won names the month and the title, which may contain colons', () => {
+		expect(
+			notificationText(item({ kind: 'award_won', detail: '2026-10:Re: the meeting: again' }))
+		).toEqual({
+			text: 'Your meme “Re: the meeting: again” is Meme of the Month for October 2026.',
+			excerpt: null
+		});
+	});
+
+	it('award_won falls back to Untitled for an empty title', () => {
+		expect(notificationText(item({ kind: 'award_won', detail: '2026-10:' })).text).toBe(
+			'Your meme “Untitled” is Meme of the Month for October 2026.'
+		);
 	});
 
 	it('timeout_set formats the end and keeps colons in the reason', () => {

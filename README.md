@@ -21,6 +21,7 @@ Planned and being built. The whole app is English: UI, code and docs.
 - **Profiles**: pick a display name (once every 30 days), an avatar and a motto; moderators and admins carry a badge.
 - **Notifications**: a bell with activity (comments on your memes and threads) and moderation notices, with per-member preferences.
 - **Search**: find memes by title, tag or comment; look up people and see what they posted.
+- **Meme of the Month**: the top-scored meme of each month gets a trophy automatically; every winner stays on the awards page.
 - **PWA** with a share target, so memes can be sent straight from the share sheet.
 
 ## Screenshots
@@ -51,7 +52,7 @@ Profiles: the profile editor, a detail view with role badges on the comments, an
 Notifications: the notices page with one unread and several read rows, and the preferences behind the gear link.
 
 <p align="center">
-  <img src="docs/screenshots/notifications-mobile.png" alt="Notifications page on a phone with filter chips, a mark-all-as-read button and five notices: one unread comment notice highlighted, the rest read, two moderation notices with an amber edge" width="30%">
+  <img src="docs/screenshots/notifications-mobile.png" alt="Notifications page on a phone with filter chips, a mark-all-as-read button and six notices: one unread comment notice highlighted, the rest read, two moderation notices with an amber edge and a Meme of the Month award" width="30%">
   <img src="docs/screenshots/profile-notifications-mobile.png" alt="Notification preferences on a phone with checkboxes for comments on my memes, thread comments and report outcomes, a note on the always-on notices and a Save button" width="30%">
 </p>
 
@@ -60,6 +61,12 @@ Search: memes, tags and quotes for one query, and a member page with their memes
 <p align="center">
   <img src="docs/screenshots/search-mobile.png" alt="Search page on a phone with a query, filter chips and result sections for memes, tags and quotes" width="30%">
   <img src="docs/screenshots/member-mobile.png" alt="Member page on a phone with an avatar, display name, member-since date, meme count and the member's memes" width="30%">
+</p>
+
+Meme of the Month: the awards page with the current leader and last month's winner.
+
+<p align="center">
+  <img src="docs/screenshots/awards-mobile.png" alt="Awards page on a phone with the meme currently leading the month and last month's winner under a month heading" width="30%">
 </p>
 
 Stats, Upload and Report: what the board is up to, how a meme gets onto it, and how one gets flagged.

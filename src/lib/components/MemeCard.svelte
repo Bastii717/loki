@@ -16,6 +16,7 @@
 	import { createVoter } from '../vote';
 	import type { FeedItem } from '../server/feed';
 	import Avatar from './Avatar.svelte';
+	import AwardBadge from './AwardBadge.svelte';
 	import ReportButton from './ReportButton.svelte';
 	import RoleBadge from './RoleBadge.svelte';
 	import UnderReviewBadge from './UnderReviewBadge.svelte';
@@ -181,6 +182,7 @@
 					{/each}
 				</ul>
 			{/if}
+			{#if item.awardMonth}<p class="award"><AwardBadge month={item.awardMonth} /></p>{/if}
 			<p class="meta">
 				{#if item.uploader}
 					<span class="by"
@@ -378,6 +380,10 @@
 		background: var(--accent-soft);
 		color: var(--accent-soft-text);
 		font-size: 12px;
+	}
+
+	.award {
+		margin: 6px 0 0;
 	}
 
 	.meta {

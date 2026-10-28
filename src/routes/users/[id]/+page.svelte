@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Avatar from '#lib/components/Avatar.svelte';
+	import AwardChips from '#lib/components/AwardChips.svelte';
 	import FeedList from '#lib/components/FeedList.svelte';
 	import RoleBadge from '#lib/components/RoleBadge.svelte';
 	import { formatMonthYear } from '../../../lib/moderation-labels';
@@ -30,7 +31,13 @@
 			<dt>Memes</dt>
 			<dd>{data.memeCount}</dd>
 		</div>
+		<div>
+			<dt>Awards</dt>
+			<dd>{data.awards.length}</dd>
+		</div>
 	</dl>
+
+	<AwardChips awards={data.awards} />
 
 	{#key member.id}
 		<FeedList
@@ -83,6 +90,9 @@
 	}
 
 	.counts {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: 8px;
 		margin: 16px 0;
 	}
 

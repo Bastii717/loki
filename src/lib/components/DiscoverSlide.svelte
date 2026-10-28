@@ -10,6 +10,7 @@
 	import { createVoter } from '../vote';
 	import type { FeedItem } from '../server/feed';
 	import Avatar from './Avatar.svelte';
+	import AwardBadge from './AwardBadge.svelte';
 	import ReportButton from './ReportButton.svelte';
 	import RoleBadge from './RoleBadge.svelte';
 	import UnderReviewBadge from './UnderReviewBadge.svelte';
@@ -96,6 +97,7 @@
 <div class="caption">
 	{#if note}<p class="note" role="alert">{note}</p>{/if}
 	<b>{withheld ? 'Under review' : item.title || 'Untitled'}</b>
+	{#if item.awardMonth}<div class="award"><AwardBadge month={item.awardMonth} /></div>{/if}
 	{#if item.uploader}
 		<span class="by"
 			>by <Avatar thumbKey={item.uploaderAvatar} name={item.uploader} size={20} />
@@ -209,6 +211,12 @@
 		border-radius: var(--radius);
 		background: rgb(0 0 0 / 0.65);
 		font-size: 13px;
+		text-shadow: none;
+	}
+
+	.caption .award {
+		align-self: flex-start;
+		margin-top: 4px;
 		text-shadow: none;
 	}
 

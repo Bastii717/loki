@@ -73,7 +73,7 @@ describe('commentExcerpt', () => {
 });
 
 describe('notify', () => {
-	it('lists the twelve kinds', () => {
+	it('lists the thirteen kinds', () => {
 		expect(NOTIFICATION_KINDS).toEqual([
 			'comment',
 			'thread_comment',
@@ -86,7 +86,8 @@ describe('notify', () => {
 			'name_changed',
 			'name_reset',
 			'avatar_removed',
-			'motto_cleared'
+			'motto_cleared',
+			'award_won'
 		]);
 	});
 
@@ -562,6 +563,21 @@ describe('openNotification', () => {
 			expect(await openNotification(user.id, id)).toBe('/profile/edit');
 		}
 	);
+
+	it('leads award_won to the winning meme, or to /awards without one', async () => {
+		const user = await testUser();
+		const memeId = await insertMeme(user.id);
+		const withMeme = await seed(user.id, {
+			kind: 'award_won',
+			contentType: 'meme',
+			contentId: memeId,
+			mediaId: memeId,
+			detail: '2026-10:Title'
+		});
+		expect(await openNotification(user.id, withMeme)).toBe(`/meme/${memeId}`);
+		const without = await seed(user.id, { kind: 'award_won', detail: '2026-10:Title' });
+		expect(await openNotification(user.id, without)).toBe('/awards');
+	});
 
 	it('leads timeout_set to /rules', async () => {
 		const user = await testUser();

@@ -1,4 +1,4 @@
-import { formatDateTime } from './moderation-labels';
+import { formatDateTime, formatMonthLong } from './moderation-labels';
 import type { NotificationItem, NotificationKind } from './server/notifications';
 
 /** English UI texts of the notifications (client-safe: types only from the server module). */
@@ -17,7 +17,8 @@ export const NOTIFICATION_CATEGORY: Record<NotificationKind, NotificationCategor
 	name_changed: 'moderation',
 	name_reset: 'moderation',
 	avatar_removed: 'moderation',
-	motto_cleared: 'moderation'
+	motto_cleared: 'moderation',
+	award_won: 'activity'
 };
 
 export const FILTER_LABELS = { all: 'All', activity: 'Activity', moderation: 'Moderation' };
@@ -106,5 +107,13 @@ export function notificationText(
 			return { text: 'An admin removed your avatar.', excerpt: null };
 		case 'motto_cleared':
 			return { text: 'An admin cleared your motto.', excerpt: null };
+		case 'award_won': {
+			// `YYYY-MM:<title snapshot>`; the title may contain colons
+			const [month, title] = splitHead(detail);
+			return {
+				text: `Your meme “${title || 'Untitled'}” is Meme of the Month for ${formatMonthLong(month)}.`,
+				excerpt: null
+			};
+		}
 	}
 }

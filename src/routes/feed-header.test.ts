@@ -19,4 +19,16 @@ describe('feed header', () => {
 		expect(link![0]).toContain('lucide-search');
 		expect(body.indexOf('aria-label="Search"')).toBeLessThan(body.indexOf('theme'));
 	});
+
+	it('links to the awards page above the list in the Hall of Fame only', () => {
+		const html = (sort: string) =>
+			render(Page as never, { props: { data: { ...data, sort } } as never }).body;
+		const hof = html('hof');
+		expect(hof).toMatch(
+			/<a href="\/awards" class="awards-link[^"]*">[\s\S]*?lucide-trophy[\s\S]*?Meme of the Month <span aria-hidden="true">→<\/span><\/a>/
+		);
+		// the sort chip also carries a trophy; the line is the only link to /awards
+		expect(html('new')).not.toContain('href="/awards"');
+		expect(html('hot')).not.toContain('href="/awards"');
+	});
 });

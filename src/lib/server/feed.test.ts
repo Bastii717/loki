@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
-import { comments, favorites, media, mediaTags, reports, tags, votes } from './db/schema';
+import { awards, comments, favorites, media, mediaTags, reports, tags, votes } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import { getFeedItem, getFeedPage } from './feed';
 import { getDiscoverBatch } from './discover';
@@ -286,6 +286,50 @@ describe('getFeedItem', () => {
 		const id = await addMedia(owner.id);
 		expect((await getFeedItem(owner.id, id))!.mine).toBe(true);
 		expect((await getFeedItem(other.id, id))!.mine).toBe(false);
+	});
+});
+
+describe('awardMonth', () => {
+	async function award(mediaId: number, month: string, kind = 'meme_of_the_month') {
+		await db.insert(awards).values({ kind, month: `${month}-01`, mediaId, title: 't', score: 3 });
+	}
+
+	it('is the award month for the winner and null for every other meme', async () => {
+		const u = await testUser();
+		const winner = await addMedia(u.id);
+		const other = await addMedia(u.id);
+		await award(winner, '2026-10');
+		const feed = await getFeedPage({ viewerId: u.id, sort: 'new' });
+		expect(feed.items.find((i) => i.id === winner)!.awardMonth).toBe('2026-10');
+		expect(feed.items.find((i) => i.id === other)!.awardMonth).toBeNull();
+		expect((await getFeedItem(u.id, winner))!.awardMonth).toBe('2026-10');
+	});
+
+	it('ignores other award kinds', async () => {
+		const u = await testUser();
+		const id = await addMedia(u.id);
+		await award(id, '2026-10', 'other_kind');
+		expect((await getFeedItem(u.id, id))!.awardMonth).toBeNull();
+	});
+
+	it('takes the newest month and returns one row when a meme holds two awards', async () => {
+		const u = await testUser();
+		const id = await addMedia(u.id);
+		await award(id, '2026-08');
+		await award(id, '2026-10');
+		const feed = await getFeedPage({ viewerId: u.id, sort: 'new' });
+		expect(feed.items.filter((i) => i.id === id)).toHaveLength(1);
+		expect(feed.items[0].awardMonth).toBe('2026-10');
+	});
+
+	it('is null when the meme is hidden for the viewer, set for a moderator', async () => {
+		const u = await testUser();
+		const id = await addMedia(u.id);
+		await award(id, '2026-10');
+		await addOpenReports('meme', id, u.id, OVER_THRESHOLD);
+		const viewer = await testUser();
+		expect((await getFeedItem(viewer.id, id))!.awardMonth).toBeNull();
+		expect((await getFeedItem(viewer.id, id, true))!.awardMonth).toBe('2026-10');
 	});
 });
 

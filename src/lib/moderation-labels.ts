@@ -68,6 +68,15 @@ const monthYear = new Intl.DateTimeFormat('en-US', {
 	year: 'numeric',
 	timeZone: 'Europe/Berlin'
 });
+const monthLong = new Intl.DateTimeFormat('en-US', {
+	month: 'long',
+	year: 'numeric',
+	timeZone: 'Europe/Berlin'
+});
+
+/** A `YYYY-MM` month as the 15th at noon UTC, which is that month in Berlin whatever the offset. */
+const monthDate = (value: string) =>
+	new Date(/^\d{4}-\d{2}$/.test(value) ? `${value}-15T12:00:00Z` : value);
 
 const timeOnly = new Intl.DateTimeFormat('en-GB', {
 	hour: '2-digit',
@@ -79,7 +88,9 @@ const timeOnly = new Intl.DateTimeFormat('en-GB', {
 export const formatDateTime = (iso: string) => dateTime.format(new Date(iso));
 export const formatDate = (iso: string) => dateOnly.format(new Date(iso));
 /** "Oct 2026" (en-US, so September is "Sep", not "Sept") */
-export const formatMonthYear = (iso: string) => monthYear.format(new Date(iso));
+export const formatMonthYear = (value: string) => monthYear.format(monthDate(value));
+/** "October 2026" from `YYYY-MM` or an ISO date */
+export const formatMonthLong = (value: string) => monthLong.format(monthDate(value));
 export const formatTime = (iso: string) => timeOnly.format(new Date(iso));
 
 /** "1 report" / "3 reports" */

@@ -22,6 +22,7 @@
 	import type { CommentItem } from '../server/comments';
 	import type { FeedItem } from '../server/feed';
 	import Avatar from './Avatar.svelte';
+	import AwardBadge from './AwardBadge.svelte';
 	import ReportButton from './ReportButton.svelte';
 	import RoleBadge from './RoleBadge.svelte';
 	import UnderReviewBadge from './UnderReviewBadge.svelte';
@@ -406,6 +407,7 @@
 						><MessageCircle size={14} aria-hidden="true" /> {commentCount}</span
 					>
 				</p>
+				{#if item.awardMonth}<p class="award-note"><AwardBadge month={item.awardMonth} /></p>{/if}
 			</div>
 			<button
 				type="button"
@@ -916,7 +918,8 @@
 		font-style: italic;
 	}
 
-	.review-note {
+	.review-note,
+	.award-note {
 		margin: 4px 0 0;
 	}
 </style>

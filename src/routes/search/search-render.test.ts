@@ -25,7 +25,8 @@ const feedItem = (id: number, title = `Meme ${id}`): FeedItem => ({
 	uploaderAvatar: null,
 	mine: false,
 	createdAt: '2026-10-28T10:00:00.000Z',
-	underReview: false
+	underReview: false,
+	awardMonth: null
 });
 
 const memes = (n: number) => Array.from({ length: n }, (_, i) => feedItem(i + 1));

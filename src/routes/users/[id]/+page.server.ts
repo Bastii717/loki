@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { and, eq, not, sql } from 'drizzle-orm';
+import { awardsOf } from '../../../lib/server/awards';
 import { db } from '../../../lib/server/db';
 import { media, users } from '../../../lib/server/db/schema';
 import { getFeedPage } from '../../../lib/server/feed';
@@ -21,7 +22,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		throw e;
 	});
 
-	const [[since], [count], page] = await Promise.all([
+	const [[since], [count], page, awards] = await Promise.all([
 		db.select({ createdAt: users.createdAt }).from(users).where(eq(users.id, id)),
 		// same rule as the list: members never count (or see) memes hidden for review
 		db
@@ -38,7 +39,8 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			revealAll,
 			sort: 'new',
 			filter: { uploaderId: id, hideUnderReview: !revealAll }
-		})
+		}),
+		awardsOf(id)
 	]);
 
 	return {
@@ -54,6 +56,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			memberSince: since.createdAt.toISOString()
 		},
 		memeCount: count.n,
+		awards,
 		items: page.items,
 		nextCursor: page.nextCursor
 	};

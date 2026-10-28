@@ -1,10 +1,12 @@
 import { sql } from 'drizzle-orm';
+import { awardDueMonths } from './awards';
 import { db } from './db';
 import { sweepNotifications } from './notifications';
 import { getReadiness } from './readiness';
 
 const INTERVAL_MS = 5 * 60 * 1000;
 const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+export const AWARD_INTERVAL_MS = 60 * 60 * 1000;
 
 /** Hacker-News style decay: score / (age in hours + 2) ^ 1.5. */
 export async function recomputeHotScores(): Promise<void> {
@@ -25,9 +27,15 @@ export async function runSweep(): Promise<void> {
 	await sweepNotifications().catch((e) => console.error('notification sweep failed', e));
 }
 
+/** Awards the finished months that have no award yet; same readiness guard as the other jobs. */
+export async function runAwards(): Promise<void> {
+	if (!(await hotScoreJobShouldRun())) return;
+	await awardDueMonths().catch((e) => console.error('award run failed', e));
+}
+
 let timers: ReturnType<typeof setInterval>[] | undefined;
 
-/** Starts the periodic jobs (hot scores every 5 minutes, the notification sweep daily); calling it again is a no-op. */
+/** Starts the periodic jobs (hot scores every 5 minutes, the awards hourly, the notification sweep daily); calling it again is a no-op. */
 export function startJobs(): void {
 	if (timers) return;
 	const runHotScores = async () => {
@@ -36,6 +44,11 @@ export function startJobs(): void {
 	};
 	void runHotScores();
 	void runSweep();
-	timers = [setInterval(runHotScores, INTERVAL_MS), setInterval(runSweep, SWEEP_INTERVAL_MS)];
+	void runAwards();
+	timers = [
+		setInterval(runHotScores, INTERVAL_MS),
+		setInterval(runSweep, SWEEP_INTERVAL_MS),
+		setInterval(runAwards, AWARD_INTERVAL_MS)
+	];
 	for (const timer of timers) timer.unref();
 }

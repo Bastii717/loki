@@ -16,7 +16,8 @@ export const NOTIFICATION_KINDS = [
 	'name_changed',
 	'name_reset',
 	'avatar_removed',
-	'motto_cleared'
+	'motto_cleared',
+	'award_won'
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -250,6 +251,7 @@ export async function openNotification(userId: number, id: number): Promise<stri
 	const kind = row.kind as NotificationKind;
 	if (PROFILE_KINDS.includes(kind)) return '/profile/edit';
 	if (kind === 'timeout_set') return '/rules';
+	if (kind === 'award_won') return row.mediaId !== null ? `/meme/${row.mediaId}` : '/awards';
 	if (row.mediaId !== null) return `/meme/${row.mediaId}`;
 	if (row.contentType === 'quote' && row.contentId !== null) {
 		const [quote] = await db

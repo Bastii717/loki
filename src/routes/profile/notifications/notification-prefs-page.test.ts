@@ -160,8 +160,9 @@ describe('preferences page', () => {
 	});
 
 	it('says what is always on', () => {
-		expect(html({ data: { prefs: ALL_ON }, form: null })).toContain(
-			'Always on: moderation actions on your content, timeouts, and admin changes to your profile.'
+		// the note wraps in the source, so compare with collapsed whitespace
+		expect(html({ data: { prefs: ALL_ON }, form: null }).replace(/\s+/g, ' ')).toContain(
+			'Always on: moderation actions on your content, timeouts, admin changes to your profile, and Meme of the Month awards.'
 		);
 	});
 
