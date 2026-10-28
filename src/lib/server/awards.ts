@@ -58,6 +58,8 @@ export function monthsBetween(first: string, lastExclusive: string): string[] {
 
 export interface Winner {
 	mediaId: number;
+	/** For pages and payloads: `mediaId` stays inside the server. */
+	mediaPublicId: string;
 	uploaderId: number;
 	title: string;
 	score: number;
@@ -74,6 +76,7 @@ export async function findWinner(month: string, tx: Executor = db): Promise<Winn
 	const [row] = await tx
 		.select({
 			mediaId: media.id,
+			mediaPublicId: media.publicId,
 			uploaderId: media.uploaderId,
 			title: media.title,
 			score: media.score
@@ -159,6 +162,8 @@ export async function awardDueMonths(
 export interface AwardRow {
 	month: string;
 	mediaId: number | null;
+	/** Null with `mediaId` (a deleted winner). */
+	mediaPublicId: string | null;
 	uploaderId: number | null;
 	title: string;
 	score: number;
@@ -189,11 +194,13 @@ export async function listAwards(opts: {
 		.select({
 			month: sql<string>`to_char(${awards.month}, 'YYYY-MM')`,
 			mediaId: awards.mediaId,
+			mediaPublicId: media.publicId,
 			uploaderId: awards.uploaderId,
 			title: awards.title,
 			score: awards.score
 		})
 		.from(awards)
+		.leftJoin(media, eq(media.id, awards.mediaId))
 		.where(and(...conditions))
 		.orderBy(desc(awards.month))
 		.limit(opts.limit + 1);

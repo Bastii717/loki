@@ -2,7 +2,11 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../../lib/server/db';
 import { notifications } from '../../lib/server/db/schema';
 import { resetDb, setupDb } from '../../lib/server/db/test-utils';
-import { insertMeme, insertQuote, userWithSession } from '../../lib/server/moderation-test-utils';
+import {
+	insertMemeRow,
+	insertQuote,
+	userWithSession
+} from '../../lib/server/moderation-test-utils';
 import { countUnread } from '../../lib/server/notifications';
 import { resetRateLimits } from '../../lib/server/rate-limit';
 import { callRoute } from '../../lib/server/test-request';
@@ -34,7 +38,7 @@ const loadFor = (member: Member, query = '') =>
 		// the root layout supplies the bell count
 		parent: async () => ({ unreadNotifications: await countUnread(member.user.id) })
 	} as never) as Promise<{
-		items: { id: number; kind: string }[];
+		items: { id: number; kind: string; mediaId: string | null }[];
 		hasMore: boolean;
 		filter: string;
 		unread: number;
@@ -81,6 +85,16 @@ describe('notifications page load', () => {
 		expect(data.items).toHaveLength(3);
 		expect(data.items.map((i) => i.id)).toContain(a);
 		expect(data.items.map((i) => i.id)).toContain(b);
+	});
+
+	it('carries the meme public id and no numeric mediaId in the page data', async () => {
+		const member = await userWithSession();
+		const { id: memeId, publicId } = await insertMemeRow(member.user.id);
+		await seed(member.user.id, { mediaId: memeId });
+		const data = await loadFor(member);
+		expect(data.items[0]).toMatchObject({ mediaId: publicId });
+		// notification ids are plain row ids; the meme reference must be the public id
+		expect(JSON.stringify(data)).not.toMatch(/"mediaId":\d/);
 	});
 
 	it('only shows the signed-in member their own notices', async () => {
@@ -136,11 +150,11 @@ describe('notifications page load', () => {
 describe('open action', () => {
 	it('marks the notice read and goes to the meme', async () => {
 		const member = await userWithSession();
-		const memeId = await insertMeme(member.user.id);
+		const { id: memeId, publicId } = await insertMemeRow(member.user.id);
 		const id = await seed(member.user.id, { mediaId: memeId });
 		const res = await open(member, String(id));
 		expect(res.response.status).toBe(303);
-		expect(res.response.headers.get('location')).toBe(`/meme/${memeId}`);
+		expect(res.response.headers.get('location')).toBe(`/meme/${publicId}`);
 		expect(await countUnread(member.user.id)).toBe(0);
 	});
 
@@ -205,16 +219,16 @@ describe('open action', () => {
 
 	it('still goes to the target when a filter is sent', async () => {
 		const member = await userWithSession();
-		const memeId = await insertMeme(member.user.id);
+		const { id: memeId, publicId } = await insertMemeRow(member.user.id);
 		const id = await seed(member.user.id, { mediaId: memeId });
 		const res = await open(member, String(id), 'activity');
-		expect(res.response.headers.get('location')).toBe(`/meme/${memeId}`);
+		expect(res.response.headers.get('location')).toBe(`/meme/${publicId}`);
 	});
 
 	it('does not open or mark a notice of someone else', async () => {
 		const member = await userWithSession();
 		const other = await userWithSession();
-		const memeId = await insertMeme(other.user.id);
+		const { id: memeId } = await insertMemeRow(other.user.id);
 		const id = await seed(other.user.id, { mediaId: memeId });
 		const res = await open(member, String(id));
 		expect(res.response.status).toBe(303);
@@ -235,12 +249,12 @@ describe('open action', () => {
 
 	it('keeps working while writes are locked for maintenance', async () => {
 		const member = await userWithSession();
-		const memeId = await insertMeme(member.user.id);
+		const { id: memeId, publicId } = await insertMemeRow(member.user.id);
 		const id = await seed(member.user.id, { mediaId: memeId });
 		await lockWrites();
 		const res = await open(member, String(id));
 		expect(res.response.status).toBe(303);
-		expect(res.response.headers.get('location')).toBe(`/meme/${memeId}`);
+		expect(res.response.headers.get('location')).toBe(`/meme/${publicId}`);
 		expect(await countUnread(member.user.id)).toBe(0);
 	});
 });

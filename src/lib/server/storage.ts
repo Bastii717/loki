@@ -73,7 +73,7 @@ export function getPresignedUrl(key: string, ttlSeconds = 60): Promise<string> {
 	});
 }
 
-/** Unguessable object key namespaced per uploader: memes/u{userId}/{uuid}.{ext} */
-export function mediaKey(userId: number, ext: string): string {
-	return `memes/u${userId}/${randomUUID()}.${ext}`;
+/** Unguessable object key without any user or sequence number in it: memes/{uuid}.{ext} */
+export function mediaKey(ext: string): string {
+	return `memes/${randomUUID()}.${ext}`;
 }

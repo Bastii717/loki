@@ -15,8 +15,7 @@ import {
 import { resetDb, setupDb, testUser } from '../../lib/server/db/test-utils';
 import { createMedia } from '../../lib/server/media/create';
 import { TimeoutActiveError } from '../../lib/server/moderation';
-import { timeOut } from '../../lib/server/moderation-test-utils';
-import { addQuote } from '../../lib/server/quotes';
+import { insertQuoteRow, timeOut } from '../../lib/server/moderation-test-utils';
 import { resetRateLimits } from '../../lib/server/rate-limit';
 import { ensureBucket } from '../../lib/server/storage-test-utils';
 import { callRoute, type RouteResult } from '../../lib/server/test-request';
@@ -26,13 +25,13 @@ import { actions as rulesActions } from '../rules/+page.server';
 import { actions as uploadActions } from '../upload/+page.server';
 import { GET as feed } from './feed/+server';
 import { GET as discover } from './discover/+server';
-import { DELETE as deleteComment } from './comments/[id]/+server';
-import { GET as getComments, POST as postComment } from './memes/[id]/comments/+server';
-import { DELETE as deleteMeme, PATCH as patchMeme } from './memes/[id]/+server';
-import { POST as favoriteMeme } from './memes/[id]/favorite/+server';
-import { POST as seenMeme } from './memes/[id]/seen/+server';
-import { POST as voteMeme } from './memes/[id]/vote/+server';
-import { POST as voteQuote } from './quotes/[id]/vote/+server';
+import { DELETE as deleteComment } from './comments/[pid]/+server';
+import { GET as getComments, POST as postComment } from './memes/[pid]/comments/+server';
+import { DELETE as deleteMeme, PATCH as patchMeme } from './memes/[pid]/+server';
+import { POST as favoriteMeme } from './memes/[pid]/favorite/+server';
+import { POST as seenMeme } from './memes/[pid]/seen/+server';
+import { POST as voteMeme } from './memes/[pid]/vote/+server';
+import { POST as voteQuote } from './quotes/[pid]/vote/+server';
 import { POST as report } from './report/+server';
 import { GET as suggestTags } from './tags/suggest/+server';
 
@@ -75,10 +74,10 @@ async function timedOutWorld() {
 				thumbKey: `${key}-b-t.webp`
 			}
 		])
-		.returning({ id: media.id });
+		.returning({ id: media.id, publicId: media.publicId });
 	const foreignComment = await addComment(author.id, foreign.id, 'Kommentar');
 	const ownComment = await addComment(victim.id, foreign.id, 'mein Kommentar');
-	const foreignQuote = await addQuote(author.id, 'Zitat', 'Opa');
+	const foreignQuote = await insertQuoteRow(author.id, 'Zitat');
 	// last: the fixtures above are written through modules that honour the timeout
 	await db
 		.insert(timeouts)
@@ -87,10 +86,13 @@ async function timedOutWorld() {
 		victim,
 		session: await createSession(victim.id),
 		foreignMemeId: foreign.id,
+		foreignMemePid: foreign.publicId,
 		ownMemeId: own.id,
-		foreignCommentId: foreignComment.id,
-		ownCommentId: ownComment.id,
-		foreignQuoteId: foreignQuote.id
+		ownMemePid: own.publicId,
+		// comment items carry public ids
+		foreignCommentPid: foreignComment.id,
+		ownCommentPid: ownComment.id,
+		foreignQuotePid: foreignQuote.publicId
 	};
 }
 type World = Awaited<ReturnType<typeof timedOutWorld>>;
@@ -108,9 +110,9 @@ const blocked: [string, (w: World) => Call][] = [
 		'POST comment',
 		(w) => ({
 			handler: postComment,
-			path: `/api/memes/${w.foreignMemeId}/comments`,
+			path: `/api/memes/${w.foreignMemePid}/comments`,
 			method: 'POST',
-			params: { id: String(w.foreignMemeId) },
+			params: { pid: w.foreignMemePid },
 			body: { text: 'hallo' }
 		})
 	],
@@ -118,9 +120,9 @@ const blocked: [string, (w: World) => Call][] = [
 		'POST meme vote',
 		(w) => ({
 			handler: voteMeme,
-			path: `/api/memes/${w.foreignMemeId}/vote`,
+			path: `/api/memes/${w.foreignMemePid}/vote`,
 			method: 'POST',
-			params: { id: String(w.foreignMemeId) },
+			params: { pid: w.foreignMemePid },
 			body: { value: 1 }
 		})
 	],
@@ -128,9 +130,9 @@ const blocked: [string, (w: World) => Call][] = [
 		'POST quote vote',
 		(w) => ({
 			handler: voteQuote,
-			path: `/api/quotes/${w.foreignQuoteId}/vote`,
+			path: `/api/quotes/${w.foreignQuotePid}/vote`,
 			method: 'POST',
-			params: { id: String(w.foreignQuoteId) },
+			params: { pid: w.foreignQuotePid },
 			body: { value: 1 }
 		})
 	],
@@ -138,18 +140,18 @@ const blocked: [string, (w: World) => Call][] = [
 		'POST favorite',
 		(w) => ({
 			handler: favoriteMeme,
-			path: `/api/memes/${w.foreignMemeId}/favorite`,
+			path: `/api/memes/${w.foreignMemePid}/favorite`,
 			method: 'POST',
-			params: { id: String(w.foreignMemeId) }
+			params: { pid: w.foreignMemePid }
 		})
 	],
 	[
 		'PATCH own flags',
 		(w) => ({
 			handler: patchMeme,
-			path: `/api/memes/${w.ownMemeId}`,
+			path: `/api/memes/${w.ownMemePid}`,
 			method: 'PATCH',
-			params: { id: String(w.ownMemeId) },
+			params: { pid: w.ownMemePid },
 			body: { nsfw: true }
 		})
 	],
@@ -159,7 +161,7 @@ const blocked: [string, (w: World) => Call][] = [
 			handler: report,
 			path: '/api/report',
 			method: 'POST',
-			body: { contentType: 'meme', contentId: w.foreignMemeId, category: 'spam' }
+			body: { contentType: 'meme', contentId: w.foreignMemePid, category: 'spam' }
 		})
 	]
 ];
@@ -169,9 +171,9 @@ const allowed: [string, (w: World) => Call, number][] = [
 		'POST seen (markSeen)',
 		(w) => ({
 			handler: seenMeme,
-			path: `/api/memes/${w.foreignMemeId}/seen`,
+			path: `/api/memes/${w.foreignMemePid}/seen`,
 			method: 'POST',
-			params: { id: String(w.foreignMemeId) }
+			params: { pid: w.foreignMemePid }
 		}),
 		200
 	],
@@ -179,9 +181,9 @@ const allowed: [string, (w: World) => Call, number][] = [
 		'DELETE own comment',
 		(w) => ({
 			handler: deleteComment,
-			path: `/api/comments/${w.ownCommentId}`,
+			path: `/api/comments/${w.ownCommentPid}`,
 			method: 'DELETE',
-			params: { id: String(w.ownCommentId) }
+			params: { pid: w.ownCommentPid }
 		}),
 		204
 	],
@@ -189,9 +191,9 @@ const allowed: [string, (w: World) => Call, number][] = [
 		'DELETE own meme',
 		(w) => ({
 			handler: deleteMeme,
-			path: `/api/memes/${w.ownMemeId}`,
+			path: `/api/memes/${w.ownMemePid}`,
 			method: 'DELETE',
-			params: { id: String(w.ownMemeId) }
+			params: { pid: w.ownMemePid }
 		}),
 		204
 	],
@@ -201,8 +203,8 @@ const allowed: [string, (w: World) => Call, number][] = [
 		'GET comments',
 		(w) => ({
 			handler: getComments,
-			path: `/api/memes/${w.foreignMemeId}/comments`,
-			params: { id: String(w.foreignMemeId) }
+			path: `/api/memes/${w.foreignMemePid}/comments`,
+			params: { pid: w.foreignMemePid }
 		}),
 		200
 	],

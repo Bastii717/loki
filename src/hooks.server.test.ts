@@ -148,6 +148,7 @@ describe('auth guard', () => {
 		expect(res.status).toBe(200);
 		expect(r.event.locals.user).toEqual({
 			id: user.id,
+			publicId: user.publicId,
 			username: user.username,
 			displayName: null,
 			role: 'admin'
@@ -216,7 +217,8 @@ describe('write rate limits', () => {
 		const user = await testUser();
 		const token = await createSession(user.id);
 		for (let i = 0; i < 100; i++) {
-			const res = await run('/api/memes/1/seen', token, new Response('ok'), 'POST').response;
+			const res = await run('/api/memes/AbCdEfGhIjKl/seen', token, new Response('ok'), 'POST')
+				.response;
 			expect(res.status).toBe(200);
 		}
 		// seen requests did not consume the regular write budget
@@ -229,10 +231,24 @@ describe('write rate limits', () => {
 		const token = await createSession(user.id);
 		let last = 200;
 		for (let i = 0; i < 301; i++) {
-			last = (await run('/api/memes/1/seen', token, new Response('ok'), 'POST').response).status;
+			last = (await run('/api/memes/AbCdEfGhIjKl/seen', token, new Response('ok'), 'POST').response)
+				.status;
 		}
 		expect(last).toBe(429);
 	});
+
+	it.each(['/api/memes/1/seen', '/api/memes/AbCdEfGhIjKl/seen/x', '/api/memes/x/seen'])(
+		'does not give %s the seen bucket (exact match)',
+		async (path) => {
+			const user = await testUser();
+			const token = await createSession(user.id);
+			let last = 200;
+			for (let i = 0; i < 61; i++) {
+				last = (await run(path, token, new Response('ok'), 'POST').response).status;
+			}
+			expect(last).toBe(429);
+		}
+	);
 
 	it('keeps the 60/min cap for other writes', async () => {
 		const user = await testUser();
@@ -522,7 +538,7 @@ describe('maintenance write guard', () => {
 			'/logout',
 			'/login',
 			'/auth/callback',
-			'/api/memes/1/seen',
+			'/api/memes/AbCdEfGhIjKl/seen',
 			'/share',
 			'/notifications',
 			'/moderation/maintenance',
@@ -538,7 +554,8 @@ describe('maintenance write guard', () => {
 		enable();
 		const { session } = await userWithSession('member');
 		for (const path of [
-			'/api/memes/1/seen/x',
+			'/api/memes/AbCdEfGhIjKl/seen/x',
+			'/api/memes/1/seen',
 			'/api/memes/x/seen',
 			'/logout/x',
 			'/login/x',

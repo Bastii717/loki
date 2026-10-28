@@ -3,6 +3,7 @@ import { db } from './db';
 import { awards, comments, favorites, media, mediaTags, reports, tags, votes } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import { getFeedItem, getFeedPage } from './feed';
+import { isPublicId } from './public-ids';
 import { getDiscoverBatch } from './discover';
 import { addOpenReports, OVER_THRESHOLD, timeOut } from './moderation-test-utils';
 import { env } from './env';
@@ -13,10 +14,15 @@ beforeEach(resetDb);
 afterAll(resetDb);
 
 let seq = 0;
+/** Internal id behind each inserted meme's public id (reports and other FKs still take the number). */
+const internal = new Map<string, number>();
+const inner = (pid: string) => internal.get(pid)!;
+
+/** Inserts a meme and returns its public id, the only id the feed exposes. */
 async function addMedia(
 	uploaderId: number,
 	over: Partial<typeof media.$inferInsert> = {}
-): Promise<number> {
+): Promise<string> {
 	seq += 1;
 	const [row] = await db
 		.insert(media)
@@ -30,14 +36,15 @@ async function addMedia(
 			height: 200,
 			...over
 		})
-		.returning({ id: media.id });
-	return row.id;
+		.returning({ id: media.id, publicId: media.publicId });
+	internal.set(row.publicId, row.id);
+	return row.publicId;
 }
 
 /** 25 memes, one second apart, oldest first. */
-async function seed25(uploaderId: number): Promise<number[]> {
+async function seed25(uploaderId: number): Promise<string[]> {
 	const base = Date.now() - 100_000;
-	const ids: number[] = [];
+	const ids: string[] = [];
 	for (let i = 0; i < 25; i++) {
 		ids.push(await addMedia(uploaderId, { createdAt: new Date(base + i * 1000) }));
 	}
@@ -73,7 +80,7 @@ describe('getFeedPage', () => {
 	it('keeps microsecond precision across near-identical timestamps', async () => {
 		const u = await testUser();
 		for (let i = 0; i < 6; i++) await addMedia(u.id); // default now(): microsecond apart
-		const seen: number[] = [];
+		const seen: string[] = [];
 		let cursor: string | undefined;
 		do {
 			const page = await getFeedPage({ viewerId: u.id, sort: 'new', limit: 2, cursor });
@@ -84,14 +91,16 @@ describe('getFeedPage', () => {
 		expect(new Set(seen).size).toBe(6);
 	});
 
-	it('breaks score ties by id and orders hof by score desc', async () => {
+	it('breaks score ties by public id and orders hof by score desc', async () => {
 		const u = await testUser();
 		const a = await addMedia(u.id, { score: 5 });
 		const b = await addMedia(u.id, { score: 9 });
 		const c = await addMedia(u.id, { score: 5 });
 		const d = await addMedia(u.id, { score: -1 });
 		const all = await getFeedPage({ viewerId: u.id, sort: 'hof' });
-		expect(all.items.map((i) => i.id)).toEqual([b, c, a, d]);
+		// a and c tie on score: the keyset tiebreak is the public id, descending
+		const tied = [a, c].sort().reverse();
+		expect(all.items.map((i) => i.id)).toEqual([b, ...tied, d]);
 		const first = await getFeedPage({ viewerId: u.id, sort: 'hof', limit: 2 });
 		const second = await getFeedPage({
 			viewerId: u.id,
@@ -99,7 +108,7 @@ describe('getFeedPage', () => {
 			limit: 2,
 			cursor: first.nextCursor!
 		});
-		expect([...first.items, ...second.items].map((i) => i.id)).toEqual([b, c, a, d]);
+		expect([...first.items, ...second.items].map((i) => i.id)).toEqual([b, ...tied, d]);
 	});
 
 	it('orders hot by hotScore desc and pages by it', async () => {
@@ -122,7 +131,7 @@ describe('getFeedPage', () => {
 		const a = await addMedia(u.id);
 		await addMedia(u.id);
 		const [t] = await db.insert(tags).values({ name: 'montag' }).returning();
-		await db.insert(mediaTags).values({ mediaId: a, tagId: t.id });
+		await db.insert(mediaTags).values({ mediaId: inner(a), tagId: t.id });
 		const page = await getFeedPage({ viewerId: u.id, sort: 'new', tag: 'montag' });
 		expect(page.items.map((i) => i.id)).toEqual([a]);
 		expect(page.items[0].tags).toEqual(['montag']);
@@ -150,24 +159,24 @@ describe('getFeedPage', () => {
 		const id = await addMedia(u.id, { title: 'Hallo', score: 2, viewCount: 7 });
 		const quiet = await addMedia(u.id);
 		await db.insert(votes).values([
-			{ userId: u.id, mediaId: id, value: -1 },
-			{ userId: other.id, mediaId: id, value: 1 }
+			{ userId: u.id, mediaId: inner(id), value: -1 },
+			{ userId: other.id, mediaId: inner(id), value: 1 }
 		]);
 		await db.insert(favorites).values([
-			{ userId: u.id, mediaId: id },
-			{ userId: other.id, mediaId: id }
+			{ userId: u.id, mediaId: inner(id) },
+			{ userId: other.id, mediaId: inner(id) }
 		]);
 		await db.insert(comments).values([
-			{ mediaId: id, authorId: other.id, text: 'a' },
-			{ mediaId: id, authorId: u.id, text: 'b' }
+			{ mediaId: inner(id), authorId: other.id, text: 'a' },
+			{ mediaId: inner(id), authorId: u.id, text: 'b' }
 		]);
 		const [t1, t2] = await db
 			.insert(tags)
 			.values([{ name: 'b' }, { name: 'a' }])
 			.returning();
 		await db.insert(mediaTags).values([
-			{ mediaId: id, tagId: t1.id },
-			{ mediaId: id, tagId: t2.id }
+			{ mediaId: inner(id), tagId: t1.id },
+			{ mediaId: inner(id), tagId: t2.id }
 		]);
 
 		const mine = (await getFeedPage({ viewerId: u.id, sort: 'new' })).items;
@@ -218,7 +227,59 @@ describe('getFeedPage', () => {
 			uploaderRole: 'member',
 			uploaderAvatar: null
 		});
-		expect(await getFeedItem(plain.id, a)).toMatchObject({ uploader: 'Ronja' });
+		expect(await getFeedItem(plain.id, false, a)).toMatchObject({ uploader: 'Ronja' });
+	});
+
+	it('exposes public ids only: id and uploaderId are 12-character strings, no internal id in the JSON', async () => {
+		const u = await testUser();
+		const pid = await addMedia(u.id);
+		const page = await getFeedPage({ viewerId: u.id, sort: 'new' });
+		expect(page.items[0].id).toBe(pid);
+		expect(page.items[0].uploaderId).toBe(u.publicId);
+		expect(isPublicId(page.items[0].id)).toBe(true);
+		const json = JSON.stringify(page);
+		expect(json).not.toMatch(new RegExp(`"id":${inner(pid)}[,}]`));
+		expect(json).not.toMatch(new RegExp(`"uploaderId":${u.id}[,}]`));
+	});
+
+	it('embeds the public id in the cursor and keeps the internal id out of it', async () => {
+		const user = await testUser();
+		await seed25(user.id);
+		for (const sort of ['new', 'hot', 'hof'] as const) {
+			const p1 = await getFeedPage({ viewerId: user.id, sort, limit: 2 });
+			const payload = JSON.parse(Buffer.from(p1.nextCursor!, 'base64url').toString('utf8'));
+			expect(payload.id).toBe(p1.items[1].id);
+			expect(isPublicId(payload.id)).toBe(true);
+		}
+	});
+
+	it('orders rows with an identical sort key by public id descending across pages', async () => {
+		const u = await testUser();
+		const at = new Date(Date.now() - 5000);
+		const pids: string[] = [];
+		for (let i = 0; i < 6; i++) pids.push(await addMedia(u.id, { createdAt: at }));
+		const got: string[] = [];
+		let cursor: string | undefined;
+		do {
+			const page = await getFeedPage({ viewerId: u.id, sort: 'new', limit: 2, cursor });
+			got.push(...page.items.map((i) => i.id));
+			cursor = page.nextCursor ?? undefined;
+		} while (cursor);
+		expect(got).toEqual([...pids].sort().reverse());
+	});
+
+	it('rejects a cursor whose tiebreak is not a public id', async () => {
+		const u = await testUser();
+		const forged = (c: unknown) => Buffer.from(JSON.stringify(c)).toString('base64url');
+		for (const bad of [
+			{ v: new Date().toISOString(), id: 5 },
+			{ v: new Date().toISOString(), id: 'short' },
+			{ v: new Date().toISOString(), id: "AAAAAAAAAAA'" }
+		]) {
+			await expect(
+				getFeedPage({ viewerId: u.id, sort: 'new', cursor: forged(bad) })
+			).rejects.toThrow(/cursor/i);
+		}
 	});
 
 	it('rejects a malformed cursor', async () => {
@@ -234,17 +295,17 @@ describe('uploaderId and the uploader filter', () => {
 		const u = await testUser();
 		const id = await addMedia(u.id);
 		const viewer = await testUser();
-		expect((await getFeedItem(viewer.id, id))!.uploaderId).toBe(u.id);
+		expect((await getFeedItem(viewer.id, false, id))!.uploaderId).toBe(u.publicId);
 	});
 
 	it('hideUnderReview drops hidden memes from the row set, so cursors stay valid', async () => {
 		const author = await testUser();
 		const base = Date.now() - 100_000;
-		const ids: number[] = [];
+		const ids: string[] = [];
 		for (let i = 0; i < 5; i++) {
 			ids.push(await addMedia(author.id, { createdAt: new Date(base + i * 1000) }));
 		}
-		await addOpenReports('meme', ids[3], author.id, OVER_THRESHOLD);
+		await addOpenReports('meme', inner(ids[3]), author.id, OVER_THRESHOLD);
 		const viewer = await testUser();
 		const filter = { uploaderId: author.id, hideUnderReview: true };
 		const p1 = await getFeedPage({ viewerId: viewer.id, sort: 'new', filter, limit: 2 });
@@ -268,30 +329,102 @@ describe('uploaderId and the uploader filter', () => {
 	});
 });
 
+describe('the ids option', () => {
+	it('takes public ids and returns the items in the requested order', async () => {
+		const u = await testUser();
+		const a = await addMedia(u.id);
+		const b = await addMedia(u.id);
+		const c = await addMedia(u.id);
+		await addMedia(u.id);
+		for (const order of [
+			[b, a, c],
+			[c, b, a],
+			[a, c]
+		]) {
+			const { items } = await getFeedPage({
+				viewerId: u.id,
+				sort: 'new',
+				ids: order,
+				limit: order.length
+			});
+			expect(items.map((i) => i.id)).toEqual(order);
+		}
+	});
+
+	it('skips unknown ids and an empty list returns nothing', async () => {
+		const u = await testUser();
+		const a = await addMedia(u.id);
+		const { items } = await getFeedPage({
+			viewerId: u.id,
+			sort: 'new',
+			ids: ['AAAAAAAAAAAA', a],
+			limit: 2
+		});
+		expect(items.map((i) => i.id)).toEqual([a]);
+		expect((await getFeedPage({ viewerId: u.id, sort: 'new', ids: [], limit: 1 })).items).toEqual(
+			[]
+		);
+	});
+
+	it('hides nothing extra and nothing less: under-review items stay masked, uploaderId null', async () => {
+		const author = await testUser();
+		const hidden = await addMedia(author.id, { title: 'secret title' });
+		const open = await addMedia(author.id, { title: 'open title' });
+		await addOpenReports('meme', inner(hidden), author.id, OVER_THRESHOLD);
+		const viewer = await testUser();
+		const { items } = await getFeedPage({
+			viewerId: viewer.id,
+			sort: 'new',
+			ids: [hidden, open],
+			limit: 2
+		});
+		expect(items.map((i) => i.id)).toEqual([hidden, open]);
+		expect(items[0]).toMatchObject({ underReview: true, title: '', uploaderId: null });
+		expect(items[1]).toMatchObject({ title: 'open title', uploaderId: author.publicId });
+		expect(JSON.stringify(items)).not.toContain('secret title');
+	});
+
+	it('a numeric string is not an id: nothing matches', async () => {
+		const u = await testUser();
+		const a = await addMedia(u.id);
+		const { items } = await getFeedPage({
+			viewerId: u.id,
+			sort: 'new',
+			ids: [String(inner(a))],
+			limit: 1
+		});
+		expect(items).toEqual([]);
+	});
+});
+
 describe('getFeedItem', () => {
 	it('returns the one meme with viewer-specific fields, or null', async () => {
 		const u = await testUser();
 		const a = await addMedia(u.id);
 		await addMedia(u.id);
-		await db.insert(votes).values({ userId: u.id, mediaId: a, value: 1 });
-		const item = await getFeedItem(u.id, a);
+		await db.insert(votes).values({ userId: u.id, mediaId: inner(a), value: 1 });
+		const item = await getFeedItem(u.id, false, a);
 		expect(item).toMatchObject({ id: a, userVote: 1, uploader: u.username });
 		expect(item!.mediaUrl).toMatch(/^\/media\//);
-		expect(await getFeedItem(u.id, 999999)).toBeNull();
+		expect(await getFeedItem(u.id, false, 'AAAAAAAAAAAA')).toBeNull();
+		// a numeric id is not a public id, so getFeedItem finds nothing for it
+		expect(await getFeedItem(u.id, false, String(inner(a)))).toBeNull();
 	});
 
 	it("flags the viewer's own memes as mine (report entry is never offered on them)", async () => {
 		const owner = await testUser();
 		const other = await testUser();
 		const id = await addMedia(owner.id);
-		expect((await getFeedItem(owner.id, id))!.mine).toBe(true);
-		expect((await getFeedItem(other.id, id))!.mine).toBe(false);
+		expect((await getFeedItem(owner.id, false, id))!.mine).toBe(true);
+		expect((await getFeedItem(other.id, false, id))!.mine).toBe(false);
 	});
 });
 
 describe('awardMonth', () => {
-	async function award(mediaId: number, month: string, kind = 'meme_of_the_month') {
-		await db.insert(awards).values({ kind, month: `${month}-01`, mediaId, title: 't', score: 3 });
+	async function award(mediaId: string, month: string, kind = 'meme_of_the_month') {
+		await db
+			.insert(awards)
+			.values({ kind, month: `${month}-01`, mediaId: inner(mediaId), title: 't', score: 3 });
 	}
 
 	it('is the award month for the winner and null for every other meme', async () => {
@@ -302,14 +435,14 @@ describe('awardMonth', () => {
 		const feed = await getFeedPage({ viewerId: u.id, sort: 'new' });
 		expect(feed.items.find((i) => i.id === winner)!.awardMonth).toBe('2026-10');
 		expect(feed.items.find((i) => i.id === other)!.awardMonth).toBeNull();
-		expect((await getFeedItem(u.id, winner))!.awardMonth).toBe('2026-10');
+		expect((await getFeedItem(u.id, false, winner))!.awardMonth).toBe('2026-10');
 	});
 
 	it('ignores other award kinds', async () => {
 		const u = await testUser();
 		const id = await addMedia(u.id);
 		await award(id, '2026-10', 'other_kind');
-		expect((await getFeedItem(u.id, id))!.awardMonth).toBeNull();
+		expect((await getFeedItem(u.id, false, id))!.awardMonth).toBeNull();
 	});
 
 	it('takes the newest month and returns one row when a meme holds two awards', async () => {
@@ -326,10 +459,10 @@ describe('awardMonth', () => {
 		const u = await testUser();
 		const id = await addMedia(u.id);
 		await award(id, '2026-10');
-		await addOpenReports('meme', id, u.id, OVER_THRESHOLD);
+		await addOpenReports('meme', inner(id), u.id, OVER_THRESHOLD);
 		const viewer = await testUser();
-		expect((await getFeedItem(viewer.id, id))!.awardMonth).toBeNull();
-		expect((await getFeedItem(viewer.id, id, true))!.awardMonth).toBe('2026-10');
+		expect((await getFeedItem(viewer.id, false, id))!.awardMonth).toBeNull();
+		expect((await getFeedItem(viewer.id, true, id))!.awardMonth).toBe('2026-10');
 	});
 });
 
@@ -342,14 +475,14 @@ describe('under review', () => {
 	) {
 		const author = await testUser(authorOverrides);
 		const id = await addMedia(author.id, { title: 'secret title' });
-		await addOpenReports('meme', id, author.id, reports);
+		await addOpenReports('meme', inner(id), author.id, reports);
 		return { author, id };
 	}
 
 	it('exactly at the threshold the meme stays fully visible', async () => {
 		const { id } = await reportedMeme(T);
 		const viewer = await testUser();
-		const item = (await getFeedItem(viewer.id, id))!;
+		const item = (await getFeedItem(viewer.id, false, id))!;
 		expect(item.underReview).toBe(false);
 		expect(item.title).toBe('secret title');
 		expect(item.thumbUrl).toMatch(/^\/media\/memes\/t/);
@@ -361,11 +494,11 @@ describe('under review', () => {
 			avatarThumbKey: 'avatars/u9/x-64.webp'
 		});
 		const [{ id: tagId }] = await db.insert(tags).values({ name: 'geheim' }).returning();
-		await db.insert(mediaTags).values({ mediaId: id, tagId });
+		await db.insert(mediaTags).values({ mediaId: inner(id), tagId });
 		const viewer = await testUser();
 
 		const feed = await getFeedPage({ viewerId: viewer.id, sort: 'new' });
-		const detail = await getFeedItem(viewer.id, id);
+		const detail = await getFeedItem(viewer.id, false, id);
 		const discover = await getDiscoverBatch(viewer.id);
 		for (const item of [feed.items[0], detail!, discover.items[0]]) {
 			expect(item.id).toBe(id);
@@ -385,7 +518,7 @@ describe('under review', () => {
 			expect(JSON.stringify(item)).not.toContain('memes/');
 		}
 		// the author is no special case
-		const own = await getFeedItem(author.id, id);
+		const own = await getFeedItem(author.id, false, id);
 		expect(own).toMatchObject({ underReview: true, thumbUrl: null, mediaUrl: null, title: '' });
 	});
 
@@ -395,14 +528,14 @@ describe('under review', () => {
 			avatarThumbKey: 'avatars/u9/x-64.webp'
 		});
 		const mod = await testUser({ role: 'moderator' });
-		const detail = (await getFeedItem(mod.id, id, true))!;
+		const detail = (await getFeedItem(mod.id, true, id))!;
 		expect(detail).toMatchObject({
 			underReview: true,
 			title: 'secret title',
 			uploader: author.username,
 			uploaderRole: 'moderator',
 			uploaderAvatar: 'avatars/u9/x-64.webp',
-			uploaderId: author.id
+			uploaderId: author.publicId
 		});
 		expect(detail.thumbUrl).toMatch(/^\/media\/memes\/t/);
 		expect(detail.mediaUrl).toMatch(/^\/media\/memes\/o/);
@@ -423,28 +556,28 @@ describe('under review', () => {
 	it('counts distinct reporters, not reports', async () => {
 		const author = await testUser();
 		const id = await addMedia(author.id);
-		const [reporter] = await addOpenReports('meme', id, author.id, 1);
+		const [reporter] = await addOpenReports('meme', inner(id), author.id, 1);
 		for (let i = 0; i < T + 2; i++) {
 			await db.insert(reports).values({
 				contentType: 'meme',
-				contentId: id,
+				contentId: inner(id),
 				reporterId: reporter,
 				authorId: author.id,
 				category: 'spam',
 				excerpt: 'x'
 			});
 		}
-		expect((await getFeedItem(author.id, id))!.underReview).toBe(false);
+		expect((await getFeedItem(author.id, false, id))!.underReview).toBe(false);
 	});
 
 	it('reporters with an active timeout do not count', async () => {
 		const author = await testUser();
 		const id = await addMedia(author.id);
-		const reporters = await addOpenReports('meme', id, author.id, OVER_THRESHOLD);
+		const reporters = await addOpenReports('meme', inner(id), author.id, OVER_THRESHOLD);
 		const viewer = await testUser();
-		expect((await getFeedItem(viewer.id, id))!.underReview).toBe(true);
+		expect((await getFeedItem(viewer.id, false, id))!.underReview).toBe(true);
 		await timeOut(reporters[0], viewer.id);
-		expect((await getFeedItem(viewer.id, id))!.underReview).toBe(false);
+		expect((await getFeedItem(viewer.id, false, id))!.underReview).toBe(false);
 	});
 
 	it('resolved reports do not count', async () => {
@@ -455,8 +588,8 @@ describe('under review', () => {
 			displayName: null,
 			role: 'moderator' as const
 		};
-		await resolveReports(mod, 'meme', id, 'actioned');
-		expect((await getFeedItem(mod.id, id))!.underReview).toBe(false);
+		await resolveReports(mod, 'meme', inner(id), 'actioned');
+		expect((await getFeedItem(mod.id, false, id))!.underReview).toBe(false);
 	});
 
 	it('a released meme (reviewedAt) stays visible however many new reports arrive', async () => {
@@ -467,10 +600,10 @@ describe('under review', () => {
 			displayName: null,
 			role: 'moderator' as const
 		};
-		await resolveReports(mod, 'meme', id, 'dismissed');
-		await addOpenReports('meme', id, author.id, OVER_THRESHOLD + 2);
+		await resolveReports(mod, 'meme', inner(id), 'dismissed');
+		await addOpenReports('meme', inner(id), author.id, OVER_THRESHOLD + 2);
 		const viewer = await testUser();
-		const item = (await getFeedItem(viewer.id, id))!;
+		const item = (await getFeedItem(viewer.id, false, id))!;
 		expect(item.underReview).toBe(false);
 		expect(item.mediaUrl).not.toBeNull();
 	});
@@ -479,8 +612,8 @@ describe('under review', () => {
 		const author = await testUser();
 		const id = await addMedia(author.id);
 		const other = await addMedia(author.id);
-		await addOpenReports('meme', other, author.id, OVER_THRESHOLD);
-		await addOpenReports('comment', id, author.id, OVER_THRESHOLD);
+		await addOpenReports('meme', inner(other), author.id, OVER_THRESHOLD);
+		await addOpenReports('comment', inner(id), author.id, OVER_THRESHOLD);
 		const items = (await getFeedPage({ viewerId: author.id, sort: 'new' })).items;
 		expect(items.find((i) => i.id === id)!.underReview).toBe(false);
 		expect(items.find((i) => i.id === other)!.underReview).toBe(true);
@@ -489,9 +622,9 @@ describe('under review', () => {
 	it('a tag filter never matches hidden memes for members (no tag oracle); mods still find them', async () => {
 		const { id } = await reportedMeme(OVER_THRESHOLD);
 		const [{ id: tagId }] = await db.insert(tags).values({ name: 'geheim' }).returning();
-		await db.insert(mediaTags).values({ mediaId: id, tagId });
+		await db.insert(mediaTags).values({ mediaId: inner(id), tagId });
 		const visible = await addMedia((await testUser()).id);
-		await db.insert(mediaTags).values({ mediaId: visible, tagId });
+		await db.insert(mediaTags).values({ mediaId: inner(visible), tagId });
 		const viewer = await testUser();
 
 		const member = await getFeedPage({ viewerId: viewer.id, sort: 'new', tag: 'geheim' });
@@ -516,12 +649,12 @@ describe('under review', () => {
 	it('a released meme is findable by tag again', async () => {
 		const { id } = await reportedMeme(OVER_THRESHOLD);
 		const [{ id: tagId }] = await db.insert(tags).values({ name: 'x' }).returning();
-		await db.insert(mediaTags).values({ mediaId: id, tagId });
+		await db.insert(mediaTags).values({ mediaId: inner(id), tagId });
 		const mod = await testUser({ role: 'moderator' });
 		await resolveReports(
 			{ id: mod.id, username: mod.username, displayName: null, role: 'moderator' },
 			'meme',
-			id,
+			inner(id),
 			'dismissed'
 		);
 		const viewer = await testUser();

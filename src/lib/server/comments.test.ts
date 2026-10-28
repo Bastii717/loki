@@ -17,6 +17,7 @@ import { addOpenReports, OVER_THRESHOLD, timeOut } from './moderation-test-utils
 import { env } from './env';
 import { resolveReports, TimeoutActiveError } from './moderation';
 import { setPrefs } from './notifications';
+import { isPublicId, publicIdOfMedia, resolveCommentId } from './public-ids';
 
 beforeAll(setupDb);
 beforeEach(resetDb);
@@ -36,6 +37,9 @@ async function addMedia(uploaderId: number): Promise<number> {
 	return row.id;
 }
 
+/** Internal id of a comment item (items carry the public id; the delete and report APIs take the number). */
+const cid = async (c: { id: string }) => (await resolveCommentId(c.id))!;
+
 describe('comments', () => {
 	it('adds trimmed comments and lists newest first with author data', async () => {
 		const u = await testUser();
@@ -45,7 +49,23 @@ describe('comments', () => {
 		await addComment(u.id, id, 'zweiter');
 		const list = await listComments(id);
 		expect(list.map((c) => c.text)).toEqual(['zweiter', 'erster']);
-		expect(list[0]).toMatchObject({ authorId: u.id, author: u.username });
+		expect(list[0]).toMatchObject({ authorId: u.publicId, author: u.username });
+	});
+
+	it('exposes public ids only: id, mediaId and authorId, no internal id in the JSON', async () => {
+		const u = await testUser();
+		const id = await addMedia(u.id);
+		const added = await addComment(u.id, id, 'hi');
+		const [listed] = await listComments(id);
+		for (const item of [added, listed]) {
+			expect(isPublicId(item.id)).toBe(true);
+			expect(item.mediaId).toBe(await publicIdOfMedia(id));
+			expect(item.authorId).toBe(u.publicId);
+			const json = JSON.stringify(item);
+			expect(json).not.toMatch(new RegExp(`"id":${await cid(item)}[,}]`));
+			expect(json).not.toMatch(new RegExp(`"mediaId":${id}[,}]`));
+			expect(json).not.toMatch(new RegExp(`"authorId":${u.id}[,}]`));
+		}
 	});
 
 	it('shows the display name when set, else the username, with role and avatar thumb', async () => {
@@ -61,12 +81,12 @@ describe('comments', () => {
 		expect(added).toMatchObject({ author: 'Ronja', authorRole: 'admin' });
 		await addComment(plain.id, id, 'von ohne');
 		const list = await listComments(id);
-		expect(list.find((c) => c.authorId === named.id)).toMatchObject({
+		expect(list.find((c) => c.authorId === named.publicId)).toMatchObject({
 			author: 'Ronja',
 			authorRole: 'admin',
 			authorAvatar: 'avatars/ronja-thumb.webp'
 		});
-		expect(list.find((c) => c.authorId === plain.id)).toMatchObject({
+		expect(list.find((c) => c.authorId === plain.publicId)).toMatchObject({
 			author: plain.username,
 			authorRole: 'member',
 			authorAvatar: null
@@ -92,7 +112,7 @@ describe('comments', () => {
 		const c = await addComment(u.id, id, 'weg');
 		await deleteComment(
 			{ id: u.id, username: u.username, displayName: null, role: 'member' },
-			c.id
+			await cid(c)
 		);
 		expect(await db.select().from(comments)).toHaveLength(0);
 	});
@@ -103,7 +123,10 @@ describe('comments', () => {
 		const id = await addMedia(a.id);
 		const c = await addComment(a.id, id, 'meins');
 		await expect(
-			deleteComment({ id: b.id, username: b.username, displayName: null, role: 'member' }, c.id)
+			deleteComment(
+				{ id: b.id, username: b.username, displayName: null, role: 'member' },
+				await cid(c)
+			)
 		).rejects.toBeInstanceOf(CommentPermissionError);
 		expect(await db.select().from(comments)).toHaveLength(1);
 	});
@@ -117,11 +140,11 @@ describe('comments', () => {
 		const c2 = await addComment(a.id, id, 'zwei');
 		await deleteComment(
 			{ id: mod.id, username: mod.username, displayName: null, role: 'moderator' },
-			c1.id
+			await cid(c1)
 		);
 		await deleteComment(
 			{ id: admin.id, username: admin.username, displayName: null, role: 'admin' },
-			c2.id
+			await cid(c2)
 		);
 		expect(await db.select().from(comments)).toHaveLength(0);
 	});
@@ -140,9 +163,11 @@ describe('comments', () => {
 			displayName: null,
 			role: 'moderator' as const
 		};
-		await expect(deleteComment(modUser, foreign.id)).rejects.toBeInstanceOf(TimeoutActiveError);
-		await deleteComment(modUser, own.id);
-		expect((await db.select().from(comments)).map((c) => c.id)).toEqual([foreign.id]);
+		await expect(deleteComment(modUser, await cid(foreign))).rejects.toBeInstanceOf(
+			TimeoutActiveError
+		);
+		await deleteComment(modUser, await cid(own));
+		expect((await db.select().from(comments)).map((c) => c.publicId)).toEqual([foreign.id]);
 	});
 
 	it('throws CommentNotFoundError for a missing comment', async () => {
@@ -191,7 +216,7 @@ describe('listComments under review', () => {
 		const mid = await addMedia(author.id);
 		const visible = await addComment(author.id, mid, 'harmlos');
 		const reported = await addComment(author.id, mid, 'boese');
-		await addOpenReports('comment', reported.id, author.id, reportCount);
+		await addOpenReports('comment', await cid(reported), author.id, reportCount);
 		return { author, mid, visible, reported };
 	}
 
@@ -231,10 +256,10 @@ describe('listComments under review', () => {
 		await resolveReports(
 			{ id: mod.id, username: mod.username, displayName: null, role: 'moderator' },
 			'comment',
-			reported.id,
+			await cid(reported),
 			'dismissed'
 		);
-		await addOpenReports('comment', reported.id, author.id, OVER_THRESHOLD);
+		await addOpenReports('comment', await cid(reported), author.id, OVER_THRESHOLD);
 		const list = await listComments(mid);
 		expect(list.find((c) => c.id === reported.id)).toMatchObject({
 			text: 'boese',

@@ -17,12 +17,15 @@
 	const firstQuery = $derived(data.action ? `?action=${encodeURIComponent(data.action)}` : '');
 	const filterQuery = $derived(data.action ? `&action=${encodeURIComponent(data.action)}` : '');
 
-	const target = (e: PageProps['data']['entries'][number]) =>
-		e.targetType === 'user'
-			? `User ${e.targetName ? modName(e.targetDisplay, e.targetName) : `#${e.targetId}`}`
-			: e.targetType === 'site_content'
-				? 'Site content'
-				: `${CONTENT_LABELS[e.targetType as keyof typeof CONTENT_LABELS] ?? e.targetType} #${e.targetId}`;
+	const target = (e: PageProps['data']['entries'][number]) => {
+		if (e.targetType === 'user') {
+			return `User ${e.targetName ? modName(e.targetDisplay, e.targetName) : (e.targetId ?? '(removed)')}`;
+		}
+		if (e.targetType === 'site_content') return 'Site content';
+		const label = CONTENT_LABELS[e.targetType as keyof typeof CONTENT_LABELS] ?? e.targetType;
+		// content ids are public ids; deleted content has none to show
+		return e.targetId ? `${label} ${e.targetId}` : label;
+	};
 </script>
 
 <svelte:head>

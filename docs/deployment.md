@@ -200,6 +200,10 @@ Automatic: an hourly job awards each finished Berlin calendar month to its top-s
 
 Template images live under `templates/` in the bucket: a 1600 px WebP plus a 320 px thumbnail per template. Removing a template in the admin library is a soft delete: it disappears from the library and the editor, but its objects stay in the bucket so memes posted from it keep their provenance, and an admin can restore it. Template uploads share the `AVATAR_MAX_MB` cap with avatars. The editor streams template and meme images through the app, so the bucket needs no CORS configuration for it. Each generated meme uses two units of the upload rate budget: the `/create` hand-over and the upload itself.
 
+### Public ids
+
+Memes, members, comments, quotes and templates are addressed by a random 12-character public id (`/meme/<id>`, `/users/<id>`, `/api/memes/<id>`, ...), never by their sequential database id. Migration 0013 runs `CREATE EXTENSION IF NOT EXISTS pgcrypto` (a trusted extension, so the application role may create it when it owns the database; on a managed database where it cannot, create `pgcrypto` once by hand before deploying, as for `pg_trgm` under Search; the generator calls `gen_random_bytes` unqualified, so the schema that holds the extension must be on the application role's `search_path`, which is the case for the default `public` schema). It then backfills a `public_id` on media, users, comments, quotes and templates while it runs, with a unique index per table; that is quick for any realistic size and needs no separate step. Old numeric links such as `/meme/42` answer 404, and nothing redirects them. New uploads use object keys without ids (`memes/<uuid>.<ext>`, `avatars/<uuid>-256.webp`); existing objects keep their keys and are still served, so nothing in the bucket is renamed or migrated.
+
 ## Releases
 
 The `Docker` workflow builds the image for every pull request (without pushing) and publishes it on pushes to `main` and on release tags:

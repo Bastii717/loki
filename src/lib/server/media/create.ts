@@ -1,9 +1,10 @@
-import { inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { SessionUser } from '../auth/session';
 import { db } from '../db';
-import { media, mediaTags, tags } from '../db/schema';
+import { media, mediaTags, tags, templates } from '../db/schema';
 import { env } from '../env';
 import { assertNotTimedOut } from '../moderation';
+import { isPublicId } from '../public-ids';
 import { deleteObjects, mediaKey, putObject } from '../storage';
 import { processMedia, sniffMedia } from './process';
 
@@ -23,13 +24,15 @@ export function normalizeTag(raw: string): string | null {
 	return TAG_PATTERN.test(tag) ? tag : null;
 }
 
-const INT4_MAX = 2147483647;
-
-/** A template id from form input: digits only, within the int4 range; undefined otherwise. */
-export function parseTemplateId(raw: FormDataEntryValue | null): number | undefined {
-	if (typeof raw !== 'string' || !/^\d+$/.test(raw)) return undefined;
-	const id = Number(raw);
-	return id >= 1 && id <= INT4_MAX ? id : undefined;
+/** The internal id of an active (not removed) template from a public id in form input; null when malformed, unknown or removed. */
+export async function parseTemplateId(raw: FormDataEntryValue | null): Promise<number | null> {
+	if (!isPublicId(raw)) return null;
+	const [row] = await db
+		.select({ id: templates.id })
+		.from(templates)
+		.where(and(eq(templates.publicId, raw), isNull(templates.removedAt)))
+		.limit(1);
+	return row?.id ?? null;
 }
 
 export type CreateMediaOptions = {
@@ -59,8 +62,8 @@ export async function createMedia(opts: CreateMediaOptions): Promise<{ id: numbe
 		...new Set(opts.tagNames.map(normalizeTag).filter((t): t is string => t !== null))
 	].slice(0, MAX_TAGS);
 
-	const objectKey = mediaKey(uploader.id, sniffed.ext);
-	const thumbKey = mediaKey(uploader.id, 'webp');
+	const objectKey = mediaKey(sniffed.ext);
+	const thumbKey = mediaKey('webp');
 	const uploaded: string[] = [];
 	try {
 		// register before awaiting: a PUT that fails midway may still have left the object behind

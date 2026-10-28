@@ -14,7 +14,8 @@
 		variant = 'plain'
 	}: {
 		contentType: ContentType;
-		contentId: number;
+		/** Public id of the meme, comment or quote. */
+		contentId: string;
 		mine: boolean;
 		/** `overlay`: round button on top of media; `plain`: inline icon button. */
 		variant?: 'plain' | 'overlay';

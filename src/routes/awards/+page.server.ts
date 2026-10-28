@@ -32,8 +32,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	]);
 
 	// one hydration for the page and the leader; a meme deleted meanwhile is simply not returned
-	const ids = [...rows.map((r) => r.mediaId), lead?.mediaId].filter((id) => id != null);
-	const byId = new Map<number, FeedItem>();
+	const ids = [...rows.map((r) => r.mediaPublicId), lead?.mediaPublicId].filter((id) => id != null);
+	const byId = new Map<string, FeedItem>();
 	if (ids.length > 0) {
 		const page = await getFeedPage({
 			viewerId: user.id,
@@ -48,9 +48,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	// no stored title goes to the page: a deleted winner shows a fixed note, a hidden one a placeholder
 	const sections = rows.map((row) => ({
 		month: row.month,
-		item: (row.mediaId !== null && byId.get(row.mediaId)) || null
+		item: (row.mediaPublicId !== null && byId.get(row.mediaPublicId)) || null
 	}));
-	const leadItem = lead ? (byId.get(lead.mediaId) ?? null) : null;
+	const leadItem = lead ? (byId.get(lead.mediaPublicId) ?? null) : null;
 	// a member never gets a placeholder for the leader: no card is better than a hidden one
 	const leading =
 		lead && leadItem && (revealAll || !leadItem.underReview)

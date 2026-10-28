@@ -1,6 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import type { SessionUser } from '../../../lib/server/auth/session';
 import { requireModerator } from '../../../lib/server/moderation-guard';
+import { isPublicId } from '../../../lib/server/public-ids';
 import {
 	addTemplate,
 	listTemplates,
@@ -23,11 +24,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 	};
 };
 
-/** A positive integer id from the form, or null. */
-function parseId(value: FormDataEntryValue | null): number | null {
-	if (typeof value !== 'string' || !/^\d+$/.test(value)) return null;
-	const id = Number(value);
-	return Number.isSafeInteger(id) && id > 0 ? id : null;
+/** A public template id from the form, or null. */
+function parseId(value: FormDataEntryValue | null): string | null {
+	return isPublicId(value) ? value : null;
 }
 
 /** Runs a module call and maps its rejection to a form failure; anything else is a real error. */
@@ -45,7 +44,7 @@ async function guarded(work: () => Promise<unknown>) {
 
 /** An action on one existing template, addressed by the `id` field. */
 const onTemplate =
-	(work: (actor: SessionUser, id: number, data: FormData) => Promise<unknown>) =>
+	(work: (actor: SessionUser, id: string, data: FormData) => Promise<unknown>) =>
 	async ({ locals, request }: { locals: App.Locals; request: Request }) => {
 		const actor = await requireModerator(locals.user, 'admin');
 		const data = await request.formData();

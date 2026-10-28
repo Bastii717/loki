@@ -5,12 +5,16 @@ import { env } from '../env';
 import { sessions, users } from '../db/schema';
 
 export type SessionUser = {
+	/** Internal id: server-side only; the client-facing identifier is `SignedInUser.publicId`. */
 	id: number;
 	username: string;
 	/** Self-chosen name shown instead of the username; null until the member picks one. */
 	displayName: string | null;
 	role: 'member' | 'moderator' | 'admin';
 };
+
+/** The session's user as `locals.user` carries it: the internal user plus the public id the client may see. */
+export type SignedInUser = SessionUser & { publicId: string };
 
 export const SESSION_COOKIE = 'loki_session';
 export const SESSION_COOKIE_OPTIONS = {
@@ -39,14 +43,14 @@ export async function createSession(userId: number): Promise<string> {
 }
 
 /** Returns the session's user, or null if unknown/expired. Renews sessions nearing expiry. */
-export async function validateSession(token: string): Promise<SessionUser | null> {
+export async function validateSession(token: string): Promise<SignedInUser | null> {
 	return (await resolveSession(token))?.user ?? null;
 }
 
 /** Like validateSession, but also reports whether the expiry was extended (cookie must be re-set). */
 export async function resolveSession(
 	token: string
-): Promise<{ user: SessionUser; renewed: boolean } | null> {
+): Promise<{ user: SignedInUser; renewed: boolean } | null> {
 	if (!token) return null;
 	const tokenHash = hashToken(token);
 	const [row] = await db
@@ -54,6 +58,7 @@ export async function resolveSession(
 			expiresAt: sessions.expiresAt,
 			createdAt: sessions.createdAt,
 			id: users.id,
+			publicId: users.publicId,
 			username: users.username,
 			displayName: users.displayName,
 			role: users.role
@@ -81,6 +86,7 @@ export async function resolveSession(
 	return {
 		user: {
 			id: row.id,
+			publicId: row.publicId,
 			username: row.username,
 			displayName: row.displayName,
 			role: row.role as SessionUser['role']

@@ -5,7 +5,13 @@ import type { TemplateRow } from '../../lib/server/templates';
 import Editor from './Editor.svelte';
 import Page from './+page.svelte';
 
-const tpl = (id: number, name: string): TemplateRow => ({
+// public ids: 12 characters from [A-Za-z0-9]
+const P3 = 'Tpl3aaaaaaaa';
+const P4 = 'Tpl4bbbbbbbb';
+const P5 = 'Tpl5cccccccc';
+const P9 = 'Tpl9dddddddd';
+
+const tpl = (id: string, name: string): TemplateRow => ({
 	id,
 	name,
 	objectKey: `templates/${id}.webp`,
@@ -25,23 +31,23 @@ const editorData = (kind: 'template' | 'meme') => ({
 	mode: kind,
 	source: {
 		kind,
-		id: 5,
+		id: P5,
 		name: 'Drake',
 		width: 640,
 		height: 480,
-		url: kind === 'template' ? '/api/templates/5/image' : '/api/memes/5/source'
+		url: kind === 'template' ? `/api/templates/${P5}/image` : `/api/memes/${P5}/source`
 	}
 });
 
 describe('create page: template grid', () => {
 	it('renders a two-column grid of template cards', () => {
-		const out = html(gridData([tpl(3, 'Drake'), tpl(4, 'Distracted boyfriend')]));
+		const out = html(gridData([tpl(P3, 'Drake'), tpl(P4, 'Distracted boyfriend')]));
 		expect(out).toContain('Pick a template');
 		expect(out).toMatch(/<ul class="[^"]*\bgrid\b/);
-		expect(out).toContain('href="/create?template=3"');
-		expect(out).toContain('href="/create?template=4"');
-		expect(out).toContain('src="/api/templates/3/thumb"');
-		expect(out).toMatch(/<img[^>]*src="\/api\/templates\/3\/thumb"[^>]*alt=""/);
+		expect(out).toContain(`href="/create?template=${P3}"`);
+		expect(out).toContain(`href="/create?template=${P4}"`);
+		expect(out).toContain(`src="/api/templates/${P3}/thumb"`);
+		expect(out).toMatch(new RegExp(`<img[^>]*src="/api/templates/${P3}/thumb"[^>]*alt=""`));
 		expect(out).toContain('width="640"');
 		expect(out).toContain('height="480"');
 		expect(out).toContain('Drake');
@@ -49,7 +55,7 @@ describe('create page: template grid', () => {
 	});
 
 	it('shows the remix hint below the grid', () => {
-		const out = html(gridData([tpl(3, 'Drake')]));
+		const out = html(gridData([tpl(P3, 'Drake')]));
 		expect(out).toMatch(/<p class="[^"]*\bhint\b[^"]*">Or open any meme and tap Remix\.<\/p>/);
 		expect(out.indexOf('</ul>')).toBeLessThan(out.indexOf('Or open any meme'));
 	});
@@ -151,7 +157,9 @@ describe('create page: editor', () => {
 
 	it('carries the template id for a template source', () => {
 		const out = html(editorData('template'));
-		expect(out).toMatch(/<input[^>]*type="hidden"[^>]*name="templateId"[^>]*value="5"/);
+		expect(out).toMatch(
+			new RegExp(`<input[^>]*type="hidden"[^>]*name="templateId"[^>]*value="${P5}"`)
+		);
 	});
 
 	it('carries no template id for a meme source', () => {
@@ -162,7 +170,9 @@ describe('create page: editor', () => {
 
 	it('carries the source meme id for a meme source, and only then', () => {
 		const out = html(editorData('meme'));
-		expect(out).toMatch(/<input[^>]*type="hidden"[^>]*name="sourceMemeId"[^>]*value="5"/);
+		expect(out).toMatch(
+			new RegExp(`<input[^>]*type="hidden"[^>]*name="sourceMemeId"[^>]*value="${P5}"`)
+		);
 		expect(html(editorData('template'))).not.toContain('name="sourceMemeId"');
 	});
 
@@ -180,7 +190,7 @@ describe('create page: editor', () => {
 });
 
 describe('create page: keyed editor', () => {
-	const withSource = (id: number, name: string) => ({
+	const withSource = (id: string, name: string) => ({
 		mode: 'template',
 		source: {
 			kind: 'template',
@@ -193,17 +203,17 @@ describe('create page: keyed editor', () => {
 	});
 
 	it('renders a different editor for each source', () => {
-		const a = html(withSource(5, 'Drake'));
-		const b = html(withSource(9, 'Distracted boyfriend'));
-		expect(a).toMatch(/name="templateId"[^>]*value="5"/);
-		expect(b).toMatch(/name="templateId"[^>]*value="9"/);
+		const a = html(withSource(P5, 'Drake'));
+		const b = html(withSource(P9, 'Distracted boyfriend'));
+		expect(a).toMatch(new RegExp(`name="templateId"[^>]*value="${P5}"`));
+		expect(b).toMatch(new RegExp(`name="templateId"[^>]*value="${P9}"`));
 		expect(a).toContain('aria-label="Preview of Drake"');
 		expect(b).toContain('aria-label="Preview of Distracted boyfriend"');
 		expect(a).not.toEqual(b);
 	});
 
 	it('renders no grid markup in editor mode', () => {
-		const out = html(withSource(5, 'Drake'));
+		const out = html(withSource(P5, 'Drake'));
 		expect(out).not.toMatch(/class="[^"]*\bgrid\b/);
 		expect(out).not.toContain('Pick a template');
 		expect(out).toContain('<canvas');

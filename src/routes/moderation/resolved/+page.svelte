@@ -29,7 +29,7 @@
 	</div>
 {:else}
 	<ul class="list">
-		{#each data.cases as c (c.contentType + ':' + c.contentId + ':' + c.resolvedAt)}
+		{#each data.cases as c (c.id)}
 			<li class="card">
 				<div class="head">
 					<span class="pill accent">{CONTENT_LABELS[c.contentType]}</span>

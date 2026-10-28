@@ -5,6 +5,7 @@ import type { SessionUser } from './auth/session';
 import { db } from './db';
 import { media, templates } from './db/schema';
 import { env } from './env';
+import { resolveTemplateId } from './public-ids';
 import { sniffMedia } from './media/process';
 import { audit, AUDIT_ACTIONS } from './moderation';
 import { deleteObjects, putObject } from './storage';
@@ -43,7 +44,8 @@ export function templateErrorMessage(e: TemplateError): string {
 }
 
 export interface TemplateRow {
-	id: number;
+	/** The public id; the internal serial never leaves the server. */
+	id: string;
 	name: string;
 	objectKey: string;
 	thumbKey: string;
@@ -101,7 +103,7 @@ export async function addTemplate(
 	actor: SessionUser,
 	name: string,
 	file: Buffer
-): Promise<{ id: number }> {
+): Promise<{ id: string }> {
 	assertAdmin(actor);
 	const cleaned = cleanName(name);
 	if (file.length > env.AVATAR_MAX_MB * 1024 * 1024) throw new TemplateError('size');
@@ -143,7 +145,7 @@ export async function addTemplate(
 			const [row] = await tx
 				.insert(templates)
 				.values({ name: cleaned, objectKey, thumbKey, width, height, createdBy: actor.id })
-				.returning({ id: templates.id });
+				.returning({ id: templates.id, publicId: templates.publicId });
 			await audit(
 				actor.id,
 				AUDIT_ACTIONS.templateAdded,
@@ -152,12 +154,19 @@ export async function addTemplate(
 				`name="${cleaned}" key=${objectKey}`,
 				tx
 			);
-			return { id: row.id };
+			return { id: row.publicId };
 		});
 	} catch (e) {
 		await deleteQuietly(uploaded);
 		throw e;
 	}
+}
+
+/** The internal id of a public id; notfound when it does not exist. */
+async function resolveOrThrow(pid: string): Promise<number> {
+	const id = await resolveTemplateId(pid);
+	if (id === null) throw new TemplateError('notfound');
+	return id;
 }
 
 /** Locks the template row (removed ones included) and returns its name; notfound when unknown. */
@@ -181,9 +190,10 @@ async function lockedName(tx: Tx, id: number, removed?: boolean) {
 }
 
 /** Renames a template, removed ones included (admins only). */
-export async function renameTemplate(actor: SessionUser, id: number, name: string): Promise<void> {
+export async function renameTemplate(actor: SessionUser, pid: string, name: string): Promise<void> {
 	assertAdmin(actor);
 	const cleaned = cleanName(name);
+	const id = await resolveOrThrow(pid);
 	await db.transaction(async (tx) => {
 		const from = await lockedName(tx, id);
 		await tx.update(templates).set({ name: cleaned }).where(eq(templates.id, id));
@@ -199,8 +209,9 @@ export async function renameTemplate(actor: SessionUser, id: number, name: strin
 }
 
 /** Soft delete: the row and its files stay so memes made from it keep their provenance. */
-export async function removeTemplate(actor: SessionUser, id: number): Promise<void> {
+export async function removeTemplate(actor: SessionUser, pid: string): Promise<void> {
 	assertAdmin(actor);
+	const id = await resolveOrThrow(pid);
 	await db.transaction(async (tx) => {
 		const name = await lockedName(tx, id, false);
 		await tx.update(templates).set({ removedAt: new Date() }).where(eq(templates.id, id));
@@ -209,8 +220,9 @@ export async function removeTemplate(actor: SessionUser, id: number): Promise<vo
 }
 
 /** Brings a removed template back (admins only). */
-export async function restoreTemplate(actor: SessionUser, id: number): Promise<void> {
+export async function restoreTemplate(actor: SessionUser, pid: string): Promise<void> {
 	assertAdmin(actor);
+	const id = await resolveOrThrow(pid);
 	await db.transaction(async (tx) => {
 		const name = await lockedName(tx, id, true);
 		await tx.update(templates).set({ removedAt: null }).where(eq(templates.id, id));
@@ -223,7 +235,7 @@ const usageCount = sql<number>`count(${media.id})::int`;
 function templateRows(where?: ReturnType<typeof and>) {
 	return db
 		.select({
-			id: templates.id,
+			id: templates.publicId,
 			name: templates.name,
 			objectKey: templates.objectKey,
 			thumbKey: templates.thumbKey,
@@ -259,13 +271,13 @@ export async function listTemplates(
 
 /** One active template; null when unknown or removed (removed ones only with `includeRemoved`). */
 export async function getTemplate(
-	id: number,
+	pid: string,
 	opts: { includeRemoved?: boolean } = {}
 ): Promise<TemplateRow | null> {
 	const [row] = await templateRows(
 		opts.includeRemoved
-			? eq(templates.id, id)
-			: and(eq(templates.id, id), isNull(templates.removedAt))
+			? eq(templates.publicId, pid)
+			: and(eq(templates.publicId, pid), isNull(templates.removedAt))
 	);
 	return row ? toRow(row) : null;
 }

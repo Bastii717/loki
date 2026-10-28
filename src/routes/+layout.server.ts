@@ -6,6 +6,9 @@ import { countUnread } from '../lib/server/notifications';
 import type { LayoutServerLoad } from './$types';
 
 /**
+ * `user` is the signed-in member as the client sees them: `id` is the public id (it matches
+ * `authorId` and `uploaderId` in the payloads), never the internal one.
+ *
  * `activeTimeout` is the viewer's current timeout ({until, reason}, ISO date) or null: the layout
  * renders it as a banner on every page, so a blocked write (e.g. a silently rolled-back vote)
  * is explained. One cheap indexed query, only for signed-in users.
@@ -41,7 +44,15 @@ export const load: LayoutServerLoad = async ({ locals, url, depends }) => {
 	const timeout = locals.user ? await activeTimeout(locals.user.id) : null;
 	const season = locals.season ? seasonById(locals.season.id) : undefined;
 	return {
-		user: locals.user,
+		// the client sees the public id as `id`; the internal one stays on the server
+		user: locals.user
+			? {
+					id: locals.user.publicId,
+					username: locals.user.username,
+					displayName: locals.user.displayName,
+					role: locals.user.role
+				}
+			: null,
 		season: season ? { id: season.id, label: season.label, icon: season.icon } : null,
 		status: await currentStatus(locals.user),
 		activeTimeout: timeout ? { until: timeout.until.toISOString(), reason: timeout.reason } : null,

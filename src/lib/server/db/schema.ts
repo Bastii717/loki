@@ -21,6 +21,9 @@ export const users = pgTable(
 	'users',
 	{
 		id: serial('id').primaryKey(),
+		publicId: text('public_id')
+			.notNull()
+			.default(sql`public_id()`),
 		sub: text('sub').notNull().unique(),
 		username: text('username').notNull(),
 		role: text('role', { enum: ['member', 'moderator', 'admin'] }).notNull(),
@@ -35,6 +38,7 @@ export const users = pgTable(
 		createdAt: createdAt()
 	},
 	(t) => [
+		uniqueIndex('users_public_id_idx').on(t.publicId),
 		uniqueIndex('users_display_name_key_idx')
 			.on(t.displayNameKey)
 			.where(sql`${t.displayNameKey} IS NOT NULL`),
@@ -59,22 +63,32 @@ export const sessions = pgTable('sessions', {
  * The meme generator's template library. Removal is a soft delete (`removedAt`): the row and its
  * objects stay so memes posted from the template keep their provenance.
  */
-export const templates = pgTable('templates', {
-	id: serial('id').primaryKey(),
-	name: text('name').notNull(),
-	objectKey: text('object_key').notNull(),
-	thumbKey: text('thumb_key').notNull(),
-	width: integer('width').notNull(),
-	height: integer('height').notNull(),
-	createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
-	createdAt: createdAt(),
-	removedAt: timestamp('removed_at', { withTimezone: true })
-});
+export const templates = pgTable(
+	'templates',
+	{
+		id: serial('id').primaryKey(),
+		publicId: text('public_id')
+			.notNull()
+			.default(sql`public_id()`),
+		name: text('name').notNull(),
+		objectKey: text('object_key').notNull(),
+		thumbKey: text('thumb_key').notNull(),
+		width: integer('width').notNull(),
+		height: integer('height').notNull(),
+		createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+		createdAt: createdAt(),
+		removedAt: timestamp('removed_at', { withTimezone: true })
+	},
+	(t) => [uniqueIndex('templates_public_id_idx').on(t.publicId)]
+);
 
 export const media = pgTable(
 	'media',
 	{
 		id: serial('id').primaryKey(),
+		publicId: text('public_id')
+			.notNull()
+			.default(sql`public_id()`),
 		uploaderId: integer('uploader_id')
 			.notNull()
 			.references(() => users.id),
@@ -95,6 +109,7 @@ export const media = pgTable(
 		createdAt: createdAt()
 	},
 	(t) => [
+		uniqueIndex('media_public_id_idx').on(t.publicId),
 		index('media_hot_score_idx').on(t.hotScore),
 		index('media_created_at_idx').on(t.createdAt),
 		// /media/[...key] resolves a requested key to its row to enforce under-review
@@ -159,6 +174,9 @@ export const comments = pgTable(
 	'comments',
 	{
 		id: serial('id').primaryKey(),
+		publicId: text('public_id')
+			.notNull()
+			.default(sql`public_id()`),
 		mediaId: integer('media_id')
 			.notNull()
 			.references(() => media.id, { onDelete: 'cascade' }),
@@ -169,7 +187,10 @@ export const comments = pgTable(
 		reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
 		createdAt: createdAt()
 	},
-	(t) => [index('comments_text_trgm_idx').using('gin', sql`${t.text} gin_trgm_ops`)]
+	(t) => [
+		uniqueIndex('comments_public_id_idx').on(t.publicId),
+		index('comments_text_trgm_idx').using('gin', sql`${t.text} gin_trgm_ops`)
+	]
 );
 
 export const mediaViews = pgTable(
@@ -190,13 +211,19 @@ export const quotes = pgTable(
 	'quotes',
 	{
 		id: serial('id').primaryKey(),
+		publicId: text('public_id')
+			.notNull()
+			.default(sql`public_id()`),
 		text: text('text').notNull(),
 		author: text('author').notNull(),
 		submittedBy: integer('submitted_by').references(() => users.id, { onDelete: 'set null' }),
 		reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
 		createdAt: createdAt()
 	},
-	(t) => [index('quotes_text_trgm_idx').using('gin', sql`${t.text} gin_trgm_ops`)]
+	(t) => [
+		uniqueIndex('quotes_public_id_idx').on(t.publicId),
+		index('quotes_text_trgm_idx').using('gin', sql`${t.text} gin_trgm_ops`)
+	]
 );
 
 export const quoteVotes = pgTable(

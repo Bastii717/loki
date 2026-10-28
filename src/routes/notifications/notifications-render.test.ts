@@ -7,7 +7,7 @@ type Item = {
 	kind: string;
 	actor: { name: string; avatarThumbKey: string | null } | null;
 	contentType: string | null;
-	mediaId: number | null;
+	mediaId: string | null;
 	title: string | null;
 	detail: string;
 	count: number;
@@ -20,7 +20,7 @@ const item = (over: Partial<Item> = {}): Item => ({
 	kind: 'comment',
 	actor: { name: 'Lena K', avatarThumbKey: null },
 	contentType: null,
-	mediaId: 7,
+	mediaId: 'AbCdEfGh1234',
 	title: 'Cat',
 	detail: 'lol',
 	count: 1,

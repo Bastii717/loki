@@ -16,7 +16,7 @@ describe('share stash', () => {
 	});
 
 	it('carries the optional title and template id through put, peek and take', () => {
-		const withMeta = { ...file, title: 'Montag', templateId: 4 };
+		const withMeta = { ...file, title: 'Montag', templateId: 'Tpl4aaaaaaaa' };
 		putShared(3, withMeta);
 		expect(peekShared(3)).toEqual(withMeta);
 		expect(takeShared(3)).toEqual(withMeta);
@@ -72,17 +72,16 @@ describe('stashSharedFile', () => {
 		expect(peekShared(8)).toBeNull();
 	});
 
-	it('stores a trimmed title (max 120 chars) and a positive integer template id', async () => {
+	it('stores a trimmed title (max 120 chars) and a public template id', async () => {
 		const png = await sharp({
 			create: { width: 2, height: 2, channels: 3, background: '#fff' }
 		})
 			.png()
 			.toBuffer();
 		const title = `  ${'x'.repeat(200)}  `;
-		expect(await stashSharedFile(10, { name: 'a.png', data: png, title, templateId: 12 })).toBe(
-			true
-		);
-		expect(peekShared(10)).toMatchObject({ title: 'x'.repeat(120), templateId: 12 });
+		const templateId = 'Tpl12aaaaaaa';
+		expect(await stashSharedFile(10, { name: 'a.png', data: png, title, templateId })).toBe(true);
+		expect(peekShared(10)).toMatchObject({ title: 'x'.repeat(120), templateId });
 	});
 
 	it('drops an empty title and an invalid template id', async () => {
@@ -91,12 +90,13 @@ describe('stashSharedFile', () => {
 		})
 			.png()
 			.toBuffer();
-		for (const templateId of [0, -3, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1]) {
+		// numbers (the old internal ids) and anything that is not 12 alphanumerics are dropped
+		for (const templateId of [12, 0, 'abc', 'Tpl12aaaaaaaa', 'Tpl-2aaaaaaa', '']) {
 			const stashed = await stashSharedFile(11, {
 				name: 'a.png',
 				data: png,
 				title: '   ',
-				templateId
+				templateId: templateId as never
 			});
 			expect(stashed).toBe(true);
 			const stored = takeShared(11)!;

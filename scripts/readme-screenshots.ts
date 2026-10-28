@@ -162,7 +162,7 @@ const wants = (name: string) => !only || only.split(',').includes(name);
 /** Whether any of the named shots is wanted. */
 const wantsAny = (...names: string[]) => names.some(wants);
 
-type FeedItem = { id: number; commentCount: number; thumbUrl: string };
+type FeedItem = { id: string; commentCount: number; thumbUrl: string };
 
 /** The feed as the API serves it (newest first), fetched with the page's session. */
 function feedItems(page: Page): Promise<FeedItem[]> {

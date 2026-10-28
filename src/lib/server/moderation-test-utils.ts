@@ -1,4 +1,4 @@
-import { createSession, type SessionUser } from './auth/session';
+import { createSession, type SessionUser, type SignedInUser } from './auth/session';
 import { db } from './db';
 import { comments, media, quotes, reports, timeouts } from './db/schema';
 import { testUser } from './db/test-utils';
@@ -45,15 +45,24 @@ export async function timeOut(
 	});
 }
 
-/** A fresh user with the given role and a live session cookie value. */
+/** A fresh user with the given role, a live session cookie value and the user's public id. */
 export async function userWithSession(role: SessionUser['role'] = 'member') {
 	const u = await testUser({ role });
-	const user: SessionUser = { id: u.id, username: u.username, displayName: u.displayName, role };
-	return { user, session: await createSession(u.id) };
+	const user: SignedInUser = {
+		id: u.id,
+		publicId: u.publicId,
+		username: u.username,
+		displayName: u.displayName,
+		role
+	};
+	return { user, session: await createSession(u.id), publicId: u.publicId };
 }
 
-/** Inserts a meme row (fake object keys, nothing in the bucket) and returns its id. */
-export async function insertMeme(uploaderId: number, title = 'Testmeme'): Promise<number> {
+/** Inserts a meme row (fake object keys, nothing in the bucket) and returns its ids. */
+export async function insertMemeRow(
+	uploaderId: number,
+	title = 'Testmeme'
+): Promise<{ id: number; publicId: string }> {
 	const key = `memes/utest/${crypto.randomUUID()}`;
 	const [row] = await db
 		.insert(media)
@@ -64,22 +73,42 @@ export async function insertMeme(uploaderId: number, title = 'Testmeme'): Promis
 			objectKey: `${key}.webp`,
 			thumbKey: `${key}-t.webp`
 		})
-		.returning({ id: media.id });
-	return row.id;
+		.returning({ id: media.id, publicId: media.publicId });
+	return row;
 }
 
-export async function insertComment(authorId: number, mediaId: number, text = 'Kommentar') {
+/** Inserts a meme row and returns its internal id. */
+export async function insertMeme(uploaderId: number, title = 'Testmeme'): Promise<number> {
+	return (await insertMemeRow(uploaderId, title)).id;
+}
+
+export async function insertCommentRow(
+	authorId: number,
+	mediaId: number,
+	text = 'Kommentar'
+): Promise<{ id: number; publicId: string }> {
 	const [row] = await db
 		.insert(comments)
 		.values({ authorId, mediaId, text })
-		.returning({ id: comments.id });
-	return row.id;
+		.returning({ id: comments.id, publicId: comments.publicId });
+	return row;
 }
 
-export async function insertQuote(submittedBy: number, text = 'Zitat'): Promise<number> {
+export async function insertComment(authorId: number, mediaId: number, text = 'Kommentar') {
+	return (await insertCommentRow(authorId, mediaId, text)).id;
+}
+
+export async function insertQuoteRow(
+	submittedBy: number,
+	text = 'Zitat'
+): Promise<{ id: number; publicId: string }> {
 	const [row] = await db
 		.insert(quotes)
 		.values({ submittedBy, text, author: 'Opa' })
-		.returning({ id: quotes.id });
-	return row.id;
+		.returning({ id: quotes.id, publicId: quotes.publicId });
+	return row;
+}
+
+export async function insertQuote(submittedBy: number, text = 'Zitat'): Promise<number> {
+	return (await insertQuoteRow(submittedBy, text)).id;
 }

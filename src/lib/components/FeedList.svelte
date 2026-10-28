@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import MemeCard from './MemeCard.svelte';
+	import { feedPageUrl } from '../feed-request';
 	import type { FeedItem } from '../server/feed';
 
 	/**
 	 * A card list with infinite scroll against /api/feed, used by the profile sub-pages
-	 * (`list=mine|favorites`) and the member page (`list="user"` sends `uploader=<id>`).
+	 * (`list=mine|favorites`) and the member page (`list="user"` sends `uploader=<public id>`).
 	 */
 	let {
 		items: initialItems,
@@ -19,7 +19,7 @@
 		nextCursor: string | null;
 		list: 'mine' | 'favorites' | 'user';
 		/** The member whose memes to list; required when `list` is 'user'. */
-		uploader?: number;
+		uploader?: string;
 		empty: string;
 	} = $props();
 
@@ -35,11 +35,8 @@
 		if (loading || !nextCursor) return;
 		loading = true;
 		failed = false;
-		const params = new SvelteURLSearchParams({ sort: 'new', cursor: nextCursor });
-		if (list === 'user') params.set('uploader', String(uploader));
-		else params.set('list', list);
 		try {
-			const res = await fetch(`/api/feed?${params}`);
+			const res = await fetch(feedPageUrl({ cursor: nextCursor, list, uploader }));
 			if (!res.ok) throw new Error(String(res.status));
 			const page: { items: FeedItem[]; nextCursor: string | null } = await res.json();
 			const known = new Set(items.map((i) => i.id));

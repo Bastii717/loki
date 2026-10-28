@@ -2,13 +2,14 @@
 	import { onMount } from 'svelte';
 	import type { ContentType, ReportCategory } from '../server/moderation';
 	import { apiErrorMessage } from '../api-error';
+	import { reportRequest } from '../report-request';
 	import { lockMessage, useStatus } from '../status-context';
 
 	let {
 		contentType,
 		contentId,
 		onclose
-	}: { contentType: ContentType; contentId: number; onclose: () => void } = $props();
+	}: { contentType: ContentType; contentId: string; onclose: () => void } = $props();
 
 	// Mirrors MAX_REPORT_TEXT in moderation.ts (the server module is not importable client-side).
 	const MAX_TEXT = 500;
@@ -44,11 +45,9 @@
 		sending = true;
 		failure = '';
 		try {
-			const res = await fetch('/api/report', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ contentType, contentId, category, text: text.trim() })
-			});
+			const res = await fetch(
+				...reportRequest({ contentType, contentId, category, text: text.trim() })
+			);
 			if (res.ok) {
 				done = true;
 			} else if (res.status === 409) {

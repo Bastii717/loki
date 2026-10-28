@@ -29,10 +29,11 @@ export class CommentPermissionError extends Error {
 	}
 }
 
+/** The `id`, `mediaId` and `authorId` of an item are public ids; the functions below take internal numbers. */
 export interface CommentItem {
-	id: number;
-	mediaId: number;
-	authorId: number;
+	id: string;
+	mediaId: string;
+	authorId: string;
 	/** Display name when set, else the username. */
 	author: string;
 	authorRole: 'member' | 'moderator' | 'admin';
@@ -45,9 +46,9 @@ export interface CommentItem {
 }
 
 const columns = {
-	id: comments.id,
-	mediaId: comments.mediaId,
-	authorId: comments.authorId,
+	id: comments.publicId,
+	mediaId: media.publicId,
+	authorId: users.publicId,
 	author: sql<string>`coalesce(${users.displayName}, ${users.username})`,
 	authorRole: users.role,
 	authorAvatar: users.avatarThumbKey,
@@ -67,6 +68,7 @@ export async function listComments(mediaId: number, revealAll = false): Promise<
 		.select(columns)
 		.from(comments)
 		.innerJoin(users, eq(users.id, comments.authorId))
+		.innerJoin(media, eq(media.id, comments.mediaId))
 		.where(eq(comments.mediaId, mediaId))
 		.orderBy(desc(comments.createdAt), desc(comments.id));
 	return rows.map((r) => {
@@ -119,6 +121,7 @@ export async function addComment(
 			.select(columns)
 			.from(comments)
 			.innerJoin(users, eq(users.id, comments.authorId))
+			.innerJoin(media, eq(media.id, comments.mediaId))
 			.where(eq(comments.id, inserted.id));
 		return toItem(row);
 	});

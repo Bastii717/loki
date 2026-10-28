@@ -30,7 +30,8 @@ export class QuotePermissionError extends Error {
 }
 
 export interface QuoteItem {
-	id: number;
+	/** The public id; the internal serial never leaves the server. */
+	id: string;
 	/** null while under review, for viewers who may not see it (author is then blanked too). */
 	text: string | null;
 	author: string;
@@ -48,7 +49,7 @@ const userVoteSql = (userId: number) =>
 	sql<number>`coalesce((select ${quoteVotes.value} from ${quoteVotes} where ${quoteVotes.quoteId} = ${quotes.id} and ${quoteVotes.userId} = ${userId}), 0)::int`;
 
 const columns = (userId: number) => ({
-	id: quotes.id,
+	id: quotes.publicId,
 	text: quotes.text,
 	author: quotes.author,
 	underReview: underReviewSql('quote', quotes.id, quotes.reviewedAt),
@@ -59,7 +60,7 @@ const columns = (userId: number) => ({
 });
 
 const toItem = (r: {
-	id: number;
+	id: string;
 	text: string;
 	author: string;
 	underReview: boolean;

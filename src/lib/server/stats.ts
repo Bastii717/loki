@@ -7,7 +7,7 @@ export type Stats = {
 	uploadsPerWeek: { week: string; count: number }[];
 	/** `username` holds the display form (display name when set, else the username). */
 	topUploaders: { username: string; count: number }[];
-	topVoted: { id: number; title: string; score: number }[];
+	topVoted: { id: string; title: string; score: number }[];
 	topTags: { name: string; count: number }[];
 };
 
@@ -47,7 +47,7 @@ export async function getStats(): Promise<Stats> {
 			.orderBy(desc(uploaderCount), users.id)
 			.limit(TOP),
 		db
-			.select({ id: media.id, title: media.title, score: media.score })
+			.select({ id: media.publicId, title: media.title, score: media.score })
 			.from(media)
 			// titles of memes under review must not leak through the stats page
 			.where(not(underReviewSql('meme', media.id, media.reviewedAt)))

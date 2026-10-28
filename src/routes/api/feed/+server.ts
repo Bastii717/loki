@@ -1,20 +1,20 @@
 import { canSeeUnderReview } from '../../../lib/server/moderation';
 import { error, json } from '@sveltejs/kit';
 import { InvalidCursorError, getFeedPage, parseSort, parseTag } from '../../../lib/server/feed';
+import { resolveUserId } from '../../../lib/server/public-ids';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url, locals }) => {
 	if (!locals.user) error(401, 'Unauthorized');
 	const revealAll = canSeeUnderReview(locals.user);
-	// ?uploader=<id>: a member's memes (member pages); hidden ones are dropped for members
+	// ?uploader=<public id>: a member's memes (member pages); hidden ones are dropped for members
 	const uploaderParam = url.searchParams.get('uploader');
-	const uploaderId = uploaderParam === null ? undefined : Number(uploaderParam);
-	// digits only and within the integer id column (a larger value would make Postgres throw)
-	if (
-		uploaderId !== undefined &&
-		!(/^\d+$/.test(uploaderParam!) && uploaderId >= 1 && uploaderId <= 2_147_483_647)
-	) {
-		error(400, 'Invalid uploader');
+	let uploaderId: number | undefined;
+	if (uploaderParam !== null) {
+		// an invalid shape resolves to null as well: 404, like every other malformed public id
+		const resolved = await resolveUserId(uploaderParam);
+		if (resolved === null) error(404, 'Not found');
+		uploaderId = resolved;
 	}
 	try {
 		const page = await getFeedPage({

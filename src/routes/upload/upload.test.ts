@@ -88,8 +88,8 @@ describe('upload action template provenance', () => {
 				height: 10,
 				removedAt
 			})
-			.returning({ id: templates.id });
-		return row.id;
+			.returning({ id: templates.id, publicId: templates.publicId });
+		return row;
 	};
 
 	const posted = async (templateId?: string) => {
@@ -103,13 +103,24 @@ describe('upload action template provenance', () => {
 	};
 
 	it('passes the id of an existing template to createMedia', async () => {
-		const id = await insertTemplate();
-		expect(await posted(String(id))).toBe(id);
+		const { id, publicId } = await insertTemplate();
+		expect(await posted(publicId)).toBe(id);
 	});
 
-	it('ignores a removed, unknown or malformed template id', async () => {
+	it('ignores a removed, unknown, numeric or malformed template id', async () => {
 		const removed = await insertTemplate(new Date());
-		for (const raw of [String(removed), '999999', 'abc', '-1', '0', '2147483648', '1e3', '']) {
+		const live = await insertTemplate();
+		for (const raw of [
+			removed.publicId,
+			// the internal id is no reference any more
+			String(live.id),
+			'AAAAAAAAAAAA',
+			'abc',
+			'-1',
+			'0',
+			'1e3',
+			''
+		]) {
 			stub.calls.length = 0;
 			expect(await posted(raw), raw).toBeNull();
 		}

@@ -7,6 +7,7 @@
  * the rate limiter.
  */
 import { sniffMedia } from './media/process';
+import { isPublicId } from './public-ids';
 
 export const SHARE_TTL_MS = 2 * 60 * 1000;
 
@@ -21,7 +22,7 @@ export type SharedFile = {
 	type: string;
 	data: Buffer;
 	title?: string;
-	templateId?: number;
+	templateId?: string;
 	nsfw?: boolean;
 	spoiler?: boolean;
 };
@@ -70,7 +71,7 @@ export async function stashSharedFile(
 		name: string;
 		data: Buffer;
 		title?: string;
-		templateId?: number;
+		templateId?: string;
 		nsfw?: boolean;
 		spoiler?: boolean;
 	}
@@ -83,13 +84,7 @@ export async function stashSharedFile(
 		? Array.from(file.title.trim()).slice(0, MAX_SHARED_TITLE).join('').trim()
 		: '';
 	if (title) shared.title = title;
-	if (
-		file.templateId !== undefined &&
-		Number.isSafeInteger(file.templateId) &&
-		file.templateId > 0
-	) {
-		shared.templateId = file.templateId;
-	}
+	if (isPublicId(file.templateId)) shared.templateId = file.templateId;
 	if (file.nsfw === true) shared.nsfw = true;
 	if (file.spoiler === true) shared.spoiler = true;
 	putShared(userId, shared);

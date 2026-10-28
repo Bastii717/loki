@@ -15,10 +15,10 @@ const RANK: Record<SessionUser['role'], number> = { member: 0, moderator: 1, adm
  *    English timeout notice.
  * Returns the verified user.
  */
-export async function requireModerator(
-	user: SessionUser | null | undefined,
+export async function requireModerator<U extends SessionUser>(
+	user: U | null | undefined,
 	level: ModerationLevel = 'moderator'
-): Promise<SessionUser> {
+): Promise<U> {
 	if (!user) error(401, 'Not signed in.');
 	if (RANK[user.role] < RANK[level]) {
 		error(
