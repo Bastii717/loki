@@ -94,6 +94,7 @@ async function authorsById(ids: number[]) {
 	const rows = await db
 		.select({
 			id: users.id,
+			publicId: users.publicId,
 			username: users.username,
 			displayName: users.displayName,
 			role: users.role
@@ -384,8 +385,10 @@ export async function listDoneCases(
 // --- timeouts and users ----------------------------------------------------------------------
 
 export interface ActiveTimeout {
+	/** Row id of the timeout itself (not a user, meme, comment or quote id). */
 	id: number;
-	userId: number;
+	/** Public id of the muted user; the internal id never leaves the query. */
+	publicId: string;
 	username: string;
 	/** Display name, null until set. */
 	displayName: string | null;
@@ -402,7 +405,7 @@ export async function listActiveTimeouts(): Promise<ActiveTimeout[]> {
 	const rows = await db
 		.select({
 			id: timeouts.id,
-			userId: timeouts.userId,
+			publicId: users.publicId,
 			username: users.username,
 			displayName: users.displayName,
 			role: users.role,
@@ -432,7 +435,8 @@ export interface UserTimeoutRecord {
 }
 
 export interface UserOverview {
-	id: number;
+	/** Public id of the user (API paths, links); the internal id stays inside the query. */
+	publicId: string;
 	username: string;
 	/** Self-chosen display name, null until set. */
 	displayName: string | null;
@@ -455,6 +459,7 @@ export interface UserOverview {
 export async function listUserOverview(): Promise<UserOverview[]> {
 	const rows = await db.execute<{
 		id: number;
+		public_id: string;
 		username: string;
 		display_name: string | null;
 		avatar_thumb_key: string | null;
@@ -467,7 +472,7 @@ export async function listUserOverview(): Promise<UserOverview[]> {
 		confirmed_reports: number;
 		confirmed_cases: number;
 	}>(sql`
-		SELECT u.id, u.username, u.display_name, u.avatar_thumb_key, u.motto, u.role, u.created_at,
+		SELECT u.id, u.public_id, u.username, u.display_name, u.avatar_thumb_key, u.motto, u.role, u.created_at,
 			(SELECT count(*)::int FROM media m WHERE m.uploader_id = u.id) AS memes,
 			(SELECT count(*)::int FROM comments c WHERE c.author_id = u.id) AS comments,
 			(SELECT count(*)::int FROM quotes q WHERE q.submitted_by = u.id) AS quotes,
@@ -512,7 +517,7 @@ export async function listUserOverview(): Promise<UserOverview[]> {
 	}
 
 	return [...rows].map((r) => ({
-		id: r.id,
+		publicId: r.public_id,
 		username: r.username,
 		displayName: r.display_name,
 		avatarThumbKey: r.avatar_thumb_key,
@@ -535,11 +540,11 @@ const escapeLike = (s: string) => s.replace(/[\\%_]/g, '\\$&');
 export async function searchUsers(
 	query: string,
 	limit = USER_SEARCH_LIMIT
-): Promise<{ id: number; username: string; displayName: string | null; role: Role }[]> {
+): Promise<{ publicId: string; username: string; displayName: string | null; role: Role }[]> {
 	const q = query.trim().slice(0, 50);
 	return db
 		.select({
-			id: users.id,
+			publicId: users.publicId,
 			username: users.username,
 			displayName: users.displayName,
 			role: users.role
@@ -550,15 +555,19 @@ export async function searchUsers(
 		.limit(limit);
 }
 
-/** id to display name, username and role for audit-log targets that point at users. Unknown ids are absent. */
+/**
+ * id to display name, username, role and public id for audit-log targets that point at users.
+ * Unknown ids are absent.
+ */
 export async function namesById(
 	ids: number[]
-): Promise<Map<number, { display: string; username: string; role: Role }>> {
+): Promise<Map<number, { display: string; username: string; role: Role; publicId: string }>> {
 	const unique = [...new Set(ids)];
 	if (unique.length === 0) return new Map();
 	const rows = await db
 		.select({
 			id: users.id,
+			publicId: users.publicId,
 			username: users.username,
 			displayName: users.displayName,
 			role: users.role
@@ -568,7 +577,12 @@ export async function namesById(
 	return new Map(
 		rows.map((r) => [
 			r.id,
-			{ display: r.displayName ?? r.username, username: r.username, role: r.role }
+			{
+				display: r.displayName ?? r.username,
+				username: r.username,
+				role: r.role,
+				publicId: r.publicId
+			}
 		])
 	);
 }

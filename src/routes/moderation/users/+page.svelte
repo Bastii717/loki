@@ -12,12 +12,12 @@
 	type ProfileAction = 'rename' | 'reset' | 'removeAvatar' | 'clearMotto';
 
 	/** The card whose rename field is open, its draft, a running request and the last error. */
-	let renaming = $state<number | null>(null);
+	let renaming = $state<string | null>(null);
 	let draft = $state('');
 	let busy = $state(false);
-	let failure = $state<{ id: number; message: string } | null>(null);
+	let failure = $state<{ id: string; message: string } | null>(null);
 
-	function startRename(id: number, current: string | null) {
+	function startRename(id: string, current: string | null) {
 		renaming = id;
 		draft = current ?? '';
 		failure = null;
@@ -28,7 +28,7 @@
 		node.focus();
 	}
 
-	async function run(id: number, action: ProfileAction) {
+	async function run(id: string, action: ProfileAction) {
 		if (busy) return;
 		busy = true;
 		failure = null;
@@ -62,7 +62,7 @@
 
 <h2 class="list-title">All users ({data.users.length})</h2>
 <ul class="list">
-	{#each data.users as u (u.id)}
+	{#each data.users as u (u.publicId)}
 		<li class="card">
 			<div class="head">
 				<Avatar thumbKey={u.avatarThumbKey} name={u.displayName ?? u.username} size={32} />
@@ -93,12 +93,12 @@
 				</div>
 			</dl>
 			<div class="actions">
-				{#if renaming === u.id}
+				{#if renaming === u.publicId}
 					<form
 						class="rename"
 						onsubmit={(e) => {
 							e.preventDefault();
-							void run(u.id, 'rename');
+							void run(u.publicId, 'rename');
 						}}
 					>
 						<label>
@@ -118,12 +118,17 @@
 						</button>
 					</form>
 				{:else}
-					<button type="button" class="btn" onclick={() => startRename(u.id, u.displayName)}>
+					<button type="button" class="btn" onclick={() => startRename(u.publicId, u.displayName)}>
 						Rename
 					</button>
 				{/if}
 				{#if u.displayName}
-					<button type="button" class="btn" disabled={busy} onclick={() => run(u.id, 'reset')}>
+					<button
+						type="button"
+						class="btn"
+						disabled={busy}
+						onclick={() => run(u.publicId, 'reset')}
+					>
 						Reset name
 					</button>
 				{/if}
@@ -132,18 +137,23 @@
 						type="button"
 						class="btn"
 						disabled={busy}
-						onclick={() => run(u.id, 'removeAvatar')}
+						onclick={() => run(u.publicId, 'removeAvatar')}
 					>
 						Remove avatar
 					</button>
 				{/if}
 				{#if u.motto}
-					<button type="button" class="btn" disabled={busy} onclick={() => run(u.id, 'clearMotto')}>
+					<button
+						type="button"
+						class="btn"
+						disabled={busy}
+						onclick={() => run(u.publicId, 'clearMotto')}
+					>
 						Clear motto
 					</button>
 				{/if}
 			</div>
-			{#if failure?.id === u.id}<p class="error" role="alert">{failure.message}</p>{/if}
+			{#if failure?.id === u.publicId}<p class="error" role="alert">{failure.message}</p>{/if}
 			{#if u.confirmedReports > 0}
 				<p class="muted">
 					in {u.confirmedCases}

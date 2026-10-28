@@ -90,10 +90,16 @@ async function setAndTrack(actor: SessionUser, file: Buffer) {
 
 describe('avatarKeys', () => {
 	it('shares one uuid between both keys', () => {
-		const { key, thumbKey } = avatarKeys(7);
-		const m = /^avatars\/u7\/([0-9a-f-]{36})-256\.webp$/.exec(key);
+		const { key, thumbKey } = avatarKeys();
+		const m = /^avatars\/([0-9a-f-]{36})-256\.webp$/.exec(key);
 		expect(m).not.toBeNull();
-		expect(thumbKey).toBe(`avatars/u7/${m![1]}-64.webp`);
+		expect(thumbKey).toBe(`avatars/${m![1]}-64.webp`);
+	});
+
+	it('carries no user segment and is fresh on every call', () => {
+		const a = avatarKeys();
+		expect(a.key).not.toMatch(/\/u\d+\//);
+		expect(avatarKeys().key).not.toBe(a.key);
 	});
 });
 
@@ -120,7 +126,7 @@ describe('setAvatar', () => {
 		const user = await testUser();
 		const { avatarKey, avatarThumbKey } = await setAndTrack(asSession(user), input());
 
-		expect(avatarKey).toMatch(new RegExp(`^avatars/u${user.id}/[0-9a-f-]{36}-256\\.webp$`));
+		expect(avatarKey).toMatch(/^avatars\/[0-9a-f-]{36}-256\.webp$/);
 		expect(avatarThumbKey).toBe(avatarKey.replace('-256.webp', '-64.webp'));
 
 		for (const [key, size] of [

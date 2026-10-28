@@ -147,7 +147,7 @@ describe('actions', () => {
 		const { user } = await userWithSession();
 		expect(await save(user, { displayName: 'Lena K', motto: 'hi' }, png)).toEqual({ saved: true });
 		const r = await row(user.id);
-		expect(r.avatarKey).toMatch(new RegExp(`^avatars/u${user.id}/.+-256\\.webp$`));
+		expect(r.avatarKey).toMatch(new RegExp(`^avatars/[0-9a-f-]{36}-256\\.webp$`));
 		created.push(r.avatarKey!, r.avatarThumbKey!);
 		expect(r.displayName).toBe('Lena K');
 		expect(r.motto).toBe('hi');

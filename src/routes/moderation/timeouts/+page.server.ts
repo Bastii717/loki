@@ -10,7 +10,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		// moderators may only lift timeouts of members (same matrix as setting them), nobody their own
 		timeouts: active.map((t) => ({
 			...t,
-			canLift: t.userId !== actor.id && (actor.role === 'admin' || t.role === 'member')
+			canLift: t.publicId !== actor.publicId && (actor.role === 'admin' || t.role === 'member')
 		})),
 		limits: { days: MAX_TIMEOUT_DAYS, reason: MAX_TIMEOUT_REASON }
 	};

@@ -148,6 +148,7 @@ describe('auth guard', () => {
 		expect(res.status).toBe(200);
 		expect(r.event.locals.user).toEqual({
 			id: user.id,
+			publicId: user.publicId,
 			username: user.username,
 			displayName: null,
 			role: 'admin'

@@ -6,7 +6,7 @@ import Page from './+page.svelte';
 vi.mock('$app/state', () => ({ page: { state: {} } }));
 
 const member = (over: Record<string, unknown> = {}) => ({
-	id: 7,
+	id: 'Hnn4Lee0Pid1',
 	name: 'Hanna Lee',
 	username: null,
 	role: 'member',
@@ -66,7 +66,7 @@ describe('member page', () => {
 	it('shows the name with the role badge, the motto, member since and the memes count', () => {
 		const { body } = renderPage(
 			{},
-			{ role: 'moderator', motto: 'Ship it', avatarThumbKey: 'avatars/u7/x-64.webp' }
+			{ role: 'moderator', motto: 'Ship it', avatarThumbKey: 'avatars/abc-64.webp' }
 		);
 		expect(body).toMatch(
 			/<h1[^>]*>\s*Hanna Lee\s*<!--[\s\S]*?role="img"[^>]*aria-label="Moderator"/
@@ -74,7 +74,7 @@ describe('member page', () => {
 		expect(body).toContain('Ship it');
 		expect(body).toContain('Member since Oct 2026');
 		expect(body).toMatch(/<dt[^>]*>Memes<\/dt>\s*<dd[^>]*>2<\/dd>/);
-		expect(body).toMatch(/<img class="avatar[^"]*" src="\/media\/avatars\/u7\/x-64\.webp"/);
+		expect(body).toMatch(/<img class="avatar[^"]*" src="\/media\/avatars\/abc-64\.webp"/);
 	});
 
 	it('shows the awards count after Memes, without chips when there are none', () => {

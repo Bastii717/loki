@@ -11,7 +11,8 @@
 	let { data }: PageProps = $props();
 
 	interface Candidate {
-		id: number;
+		/** Public id. */
+		id: string;
 		username: string;
 		displayName: string | null;
 		role: 'member' | 'moderator' | 'admin';
@@ -79,9 +80,9 @@
 		}
 	}
 
-	async function lift(userId: number) {
+	async function lift(publicId: string) {
 		liftFailure = '';
-		const result = await modRequest(`/api/moderation/timeouts/${userId}`, 'DELETE');
+		const result = await modRequest(`/api/moderation/timeouts/${publicId}`, 'DELETE');
 		if (result.ok) await invalidateAll();
 		else liftFailure = result.message;
 	}
@@ -204,7 +205,7 @@
 					until {formatDateTime(t.until)}, set by {t.setBy} on {formatDateTime(t.createdAt)}
 				</p>
 				{#if t.canLift}
-					<button type="button" class="btn" onclick={() => lift(t.userId)}>Lift</button>
+					<button type="button" class="btn" onclick={() => lift(t.publicId)}>Lift</button>
 				{/if}
 			</li>
 		{/each}

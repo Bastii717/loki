@@ -6,15 +6,15 @@ import { media, users } from '../../../lib/server/db/schema';
 import { getFeedPage } from '../../../lib/server/feed';
 import { canSeeUnderReview, underReviewSql } from '../../../lib/server/moderation';
 import { getProfile, ProfileInputError } from '../../../lib/server/profile';
+import { isPublicId, resolveUserId } from '../../../lib/server/public-ids';
 import type { PageServerLoad } from './$types';
-
-/** Largest value of the integer id column; anything above cannot be a member (and would make Postgres throw). */
-const MAX_ID = 2_147_483_647;
 
 export const load: PageServerLoad = async ({ locals, params }) => {
 	const viewer = locals.user!;
-	const id = /^\d+$/.test(params.id) ? Number(params.id) : NaN;
-	if (!Number.isSafeInteger(id) || id < 1 || id > MAX_ID) error(404, 'No such member.');
+	// an invalid shape never reaches the database
+	if (!isPublicId(params.pid)) error(404, 'No such member.');
+	const id = await resolveUserId(params.pid);
+	if (id === null) error(404, 'No such member.');
 
 	const revealAll = canSeeUnderReview(viewer);
 	const profile = await getProfile(id).catch((e: unknown) => {
@@ -45,7 +45,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 
 	return {
 		member: {
-			id,
+			id: params.pid,
 			name: profile.displayName ?? profile.username,
 			// the login name stays private to moderators, like in the rest of the app
 			username: revealAll ? profile.username : null,

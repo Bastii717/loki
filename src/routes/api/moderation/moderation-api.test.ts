@@ -28,7 +28,7 @@ import { GET as feed } from '../feed/+server';
 import { POST as report } from '../report/+server';
 import { POST as caseAction } from './case/+server';
 import { POST as setTimeoutRoute } from './timeouts/+server';
-import { DELETE as liftTimeoutRoute } from './timeouts/[userId]/+server';
+import { DELETE as liftTimeoutRoute } from './timeouts/[pid]/+server';
 import { GET as searchUsers } from './users/+server';
 
 beforeAll(async () => {
@@ -515,75 +515,93 @@ describe('timeouts API', () => {
 			session,
 			body
 		});
-	const liftCall = (session: string, userId: number | string) =>
+	const liftCall = (session: string, pid: string) =>
 		callRoute({
 			handler: liftTimeoutRoute,
-			path: `/api/moderation/timeouts/${userId}`,
+			path: `/api/moderation/timeouts/${pid}`,
 			method: 'DELETE',
-			params: { userId: String(userId) },
+			params: { pid },
 			session
 		});
 
 	it('sets, replaces and lifts a timeout with audit rows', async () => {
 		const w = await world();
 		const target = w.author.user.id;
+		const pid = w.author.publicId;
 		expect(
-			(await setTimeoutCall(w.mod.session, { userId: target, days: 2, reason: 'Streit' })).response
+			(await setTimeoutCall(w.mod.session, { userId: pid, days: 2, reason: 'Streit' })).response
 				.status
 		).toBe(204);
 		expect(await activeTimeout(target)).toMatchObject({ reason: 'Streit' });
 
 		expect(
-			(await setTimeoutCall(w.admin.session, { userId: target, days: 5, reason: 'Once more' }))
+			(await setTimeoutCall(w.admin.session, { userId: pid, days: 5, reason: 'Once more' }))
 				.response.status
 		).toBe(204);
 		expect(await activeTimeout(target)).toMatchObject({ reason: 'Once more' });
 		expect(await auditFor('timeout_lifted', 'user', target)).toHaveLength(1); // the replaced one
 		expect(await auditFor('timeout_set', 'user', target)).toHaveLength(2);
 
-		expect((await liftCall(w.mod.session, target)).response.status).toBe(204);
+		expect((await liftCall(w.mod.session, pid)).response.status).toBe(204);
 		expect(await activeTimeout(target)).toBeNull();
 		expect(await auditFor('timeout_lifted', 'user', target)).toHaveLength(2);
 		expect(await db.select().from(timeouts).where(eq(timeouts.userId, target))).toHaveLength(2);
 
 		// nothing active left to lift
-		expect((await liftCall(w.mod.session, target)).response.status).toBe(404);
+		expect((await liftCall(w.mod.session, pid)).response.status).toBe(404);
 	});
 
 	it('enforces the role matrix: no self, moderators only on members', async () => {
 		const w = await world();
 		const otherMod = await userWithSession('moderator');
-		const send = (session: string, userId: number) =>
+		const send = (session: string, userId: string) =>
 			setTimeoutCall(session, { userId, days: 1, reason: 'x' });
-		expect((await send(w.mod.session, w.mod.user.id)).response.status).toBe(400);
-		expect((await send(w.mod.session, otherMod.user.id)).response.status).toBe(403);
-		expect((await send(w.mod.session, w.admin.user.id)).response.status).toBe(403);
-		expect((await send(w.admin.session, otherMod.user.id)).response.status).toBe(204);
+		expect((await send(w.mod.session, w.mod.publicId)).response.status).toBe(400);
+		expect((await send(w.mod.session, otherMod.publicId)).response.status).toBe(403);
+		expect((await send(w.mod.session, w.admin.publicId)).response.status).toBe(403);
+		expect((await send(w.admin.session, otherMod.publicId)).response.status).toBe(204);
 		// a moderator cannot lift a moderator's timeout either
-		expect((await liftCall(w.mod.session, otherMod.user.id)).response.status).toBe(403);
+		expect((await liftCall(w.mod.session, otherMod.publicId)).response.status).toBe(403);
 		expect(await activeTimeout(otherMod.user.id)).not.toBeNull();
-		expect((await liftCall(w.admin.session, otherMod.user.id)).response.status).toBe(204);
+		expect((await liftCall(w.admin.session, otherMod.publicId)).response.status).toBe(204);
 	});
 
 	it.each([
 		['no user', { days: 1, reason: 'x' }],
-		['string user', { userId: '2', days: 1, reason: 'x' }],
-		['days 0', { userId: 2, days: 0, reason: 'x' }],
-		['days 31', { userId: 2, days: 31, reason: 'x' }],
-		['no reason', { userId: 2, days: 1 }],
-		['blank reason', { userId: 2, days: 1, reason: ' ' }]
+		['numeric user', { userId: 2, days: 1, reason: 'x' }],
+		['numeric string user', { userId: '2', days: 1, reason: 'x' }],
+		['short user id', { userId: 'abcdefghijk', days: 1, reason: 'x' }],
+		['days 0', { userId: 'AAAAAAAAAAAA', days: 0, reason: 'x' }],
+		['days 31', { userId: 'AAAAAAAAAAAA', days: 31, reason: 'x' }],
+		['no reason', { userId: 'AAAAAAAAAAAA', days: 1 }],
+		['blank reason', { userId: 'AAAAAAAAAAAA', days: 1, reason: ' ' }]
 	])('rejects invalid input (%s) with 400', async (_name, body) => {
 		const w = await world();
 		expect((await setTimeoutCall(w.mod.session, body)).response.status).toBe(400);
 		expect(await db.select().from(timeouts)).toHaveLength(0);
 	});
 
-	it('unknown user is 404, a non-numeric lift id is 404', async () => {
+	it('unknown user is 404, and so is every lift id that is not a known public id', async () => {
 		const w = await world();
 		expect(
-			(await setTimeoutCall(w.mod.session, { userId: 99999, days: 1, reason: 'x' })).response.status
+			(await setTimeoutCall(w.mod.session, { userId: 'AAAAAAAAAAAA', days: 1, reason: 'x' }))
+				.response.status
 		).toBe(404);
-		expect((await liftCall(w.mod.session, 'abc')).response.status).toBe(404);
+		for (const pid of ['abc', '1', String(w.author.user.id), 'AAAAAAAAAAAA']) {
+			expect((await liftCall(w.mod.session, pid)).response.status).toBe(404);
+		}
+		expect(await db.select().from(timeouts)).toHaveLength(0);
+	});
+
+	it('does not time out by internal id', async () => {
+		const w = await world();
+		const { response } = await setTimeoutCall(w.mod.session, {
+			userId: String(w.author.user.id),
+			days: 1,
+			reason: 'x'
+		});
+		expect(response.status).toBe(400);
+		expect(await activeTimeout(w.author.user.id)).toBeNull();
 	});
 });
 
@@ -599,18 +617,20 @@ describe('user search for the timeout picker', () => {
 			expect(response.status).toBe(200);
 			return (
 				(await response.json()) as {
-					users: { id: number; username: string; role: string; timeoutable: boolean }[];
+					users: { id: string; username: string; role: string; timeoutable: boolean }[];
 				}
 			).users;
 		};
 		const asMod = await search(w.mod.session, '');
 		const byId = Object.fromEntries(asMod.map((u) => [u.id, u]));
-		expect(byId[w.author.user.id]).toMatchObject({ role: 'member', timeoutable: true });
-		expect(byId[w.mod.user.id].timeoutable).toBe(false); // self
-		expect(byId[w.admin.user.id].timeoutable).toBe(false); // above a moderator
+		expect(byId[w.author.publicId]).toMatchObject({ role: 'member', timeoutable: true });
+		expect(byId[w.mod.publicId].timeoutable).toBe(false); // self
+		expect(byId[w.admin.publicId].timeoutable).toBe(false); // above a moderator
+		// the hits carry public ids only
+		expect(JSON.stringify(asMod)).not.toMatch(/"id":\d/);
 		const asAdmin = await search(w.admin.session, w.mod.user.username);
-		expect(asAdmin.find((u) => u.id === w.mod.user.id)?.timeoutable).toBe(true);
-		expect(asAdmin.find((u) => u.id === w.admin.user.id)).toBeUndefined();
+		expect(asAdmin.find((u) => u.id === w.mod.publicId)?.timeoutable).toBe(true);
+		expect(asAdmin.find((u) => u.id === w.admin.publicId)).toBeUndefined();
 		expect(await search(w.mod.session, 'no-such-user')).toEqual([]);
 	});
 });

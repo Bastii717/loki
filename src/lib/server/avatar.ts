@@ -35,12 +35,12 @@ export function avatarErrorMessage(e: AvatarError): string {
 	}
 }
 
-/** A fresh, unguessable key pair sharing one uuid: avatars/u{id}/{uuid}-256.webp and -64.webp. */
-export function avatarKeys(userId: number): { key: string; thumbKey: string } {
+/** A fresh, unguessable key pair sharing one uuid: avatars/{uuid}-256.webp and -64.webp (no user segment). */
+export function avatarKeys(): { key: string; thumbKey: string } {
 	const id = randomUUID();
 	return {
-		key: `avatars/u${userId}/${id}-${FULL_SIZE}.webp`,
-		thumbKey: `avatars/u${userId}/${id}-${THUMB_SIZE}.webp`
+		key: `avatars/${id}-${FULL_SIZE}.webp`,
+		thumbKey: `avatars/${id}-${THUMB_SIZE}.webp`
 	};
 }
 
@@ -93,7 +93,7 @@ export async function setAvatar(
 		throw new AvatarError('process');
 	}
 
-	const { key: avatarKey, thumbKey: avatarThumbKey } = avatarKeys(actor.id);
+	const { key: avatarKey, thumbKey: avatarThumbKey } = avatarKeys();
 	const uploaded: string[] = [];
 	let previous: string[];
 	try {

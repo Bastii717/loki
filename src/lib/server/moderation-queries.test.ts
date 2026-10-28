@@ -23,8 +23,14 @@ beforeAll(setupDb);
 beforeEach(resetDb);
 afterAll(resetDb);
 
-const asSession = (u: { id: number; username: string; role: string }) =>
-	({ id: u.id, username: u.username, displayName: null, role: u.role }) as SessionUser;
+const asSession = (u: { id: number; publicId: string; username: string; role: string }) =>
+	({
+		id: u.id,
+		publicId: u.publicId,
+		username: u.username,
+		displayName: null,
+		role: u.role
+	}) as SessionUser;
 
 async function meme(uploaderId: number, title = 'Titel') {
 	const [row] = await db
@@ -260,13 +266,15 @@ describe('listActiveTimeouts', () => {
 		const list = await listActiveTimeouts();
 		expect(list).toHaveLength(1);
 		expect(list[0]).toMatchObject({
-			userId: a.id,
+			publicId: a.publicId,
 			username: a.username,
 			displayName: null,
 			role: 'member',
 			reason: 'Streit',
 			setBy: admin.username
 		});
+		// the muted user's internal id never leaves the query
+		expect(list[0]).not.toHaveProperty('userId');
 	});
 });
 
@@ -298,6 +306,7 @@ describe('listUserOverview', () => {
 		const overview = await listUserOverview();
 		const byName = Object.fromEntries(overview.map((u) => [u.username, u]));
 		expect(byName[bad.username]).toMatchObject({
+			publicId: bad.publicId,
 			role: 'member',
 			memes: 2,
 			comments: 1,
@@ -320,6 +329,8 @@ describe('listUserOverview', () => {
 		expect(byName[admin.username].role).toBe('admin');
 		// most confirmed reports first
 		expect(overview[0].username).toBe(bad.username);
+		// users are identified by their public id only
+		expect(overview[0]).not.toHaveProperty('id');
 	});
 });
 
@@ -333,12 +344,12 @@ describe('listUserOverview profile fields', () => {
 		});
 		const plain = await testUser();
 		const overview = await listUserOverview();
-		expect(overview.find((u) => u.id === named.id)).toMatchObject({
+		expect(overview.find((u) => u.publicId === named.publicId)).toMatchObject({
 			displayName: 'Ronja',
 			avatarThumbKey: 'avatars/b-thumb.webp',
 			motto: 'Ship it'
 		});
-		expect(overview.find((u) => u.id === plain.id)).toMatchObject({
+		expect(overview.find((u) => u.publicId === plain.publicId)).toMatchObject({
 			displayName: null,
 			avatarThumbKey: null,
 			motto: ''
@@ -382,6 +393,8 @@ describe('searchUsers / namesById', () => {
 		expect(await searchUsers('%')).toEqual([]);
 		const [anna] = await searchUsers('a_b');
 		expect(anna.displayName).toBeNull();
+		expect(anna.publicId).toMatch(/^[A-Za-z0-9]{12}$/);
+		expect(anna).not.toHaveProperty('id');
 		expect(await searchUsers('')).toHaveLength(3);
 		expect(await searchUsers('', 2)).toHaveLength(2);
 	});
@@ -416,12 +429,14 @@ describe('searchUsers / namesById', () => {
 		expect(map.get(u.id)).toEqual({
 			display: 'Zed',
 			username: 'Zed',
-			role: 'member'
+			role: 'member',
+			publicId: u.publicId
 		});
 		expect(map.get(named.id)).toEqual({
 			display: 'Yannick',
 			username: 'yan',
-			role: 'moderator'
+			role: 'moderator',
+			publicId: named.publicId
 		});
 		expect(map.has(99999)).toBe(false);
 		expect((await namesById([])).size).toBe(0);

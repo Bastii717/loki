@@ -8,6 +8,7 @@ import {
 	resetDisplayName,
 	setDisplayName
 } from '../../../../../../lib/server/profile';
+import { isPublicId, resolveUserId } from '../../../../../../lib/server/public-ids';
 import type { RequestHandler } from './$types';
 
 /**
@@ -16,8 +17,9 @@ import type { RequestHandler } from './$types';
  */
 export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const actor = await requireModerator(locals.user, 'admin');
-	const userId = Number(params.id);
-	if (!Number.isSafeInteger(userId) || userId <= 0) error(404, 'User not found.');
+	if (!isPublicId(params.pid)) error(404, 'User not found.');
+	const userId = await resolveUserId(params.pid);
+	if (userId === null) error(404, 'User not found.');
 
 	let raw: unknown;
 	try {

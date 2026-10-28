@@ -98,11 +98,11 @@ describe('new rows get a public id', () => {
 });
 
 describe('test helpers', () => {
-	it('userWithSession exposes the public id next to the internal session user', async () => {
+	it('userWithSession exposes the public id, on the session user and next to it', async () => {
 		const { user, publicId } = await userWithSession('moderator');
 		expect(publicId).toMatch(PUBLIC_ID_RE);
 		expect(await resolveUserId(publicId)).toBe(user.id);
-		expect('publicId' in user).toBe(false);
+		expect(user.publicId).toBe(publicId);
 	});
 
 	it('insertMeme, insertComment and insertQuote keep returning the numeric id', async () => {
