@@ -1,4 +1,5 @@
 import { sql, type SQL } from 'drizzle-orm';
+import { TOTAL_CAP } from '../search-view';
 import { db } from './db';
 import { getFeedPage, type FeedItem } from './feed';
 import { underReviewSql } from './moderation';
@@ -14,8 +15,7 @@ export const SIMILARITY_MIN = 0.3;
  * typo in a word inside a longer text ("metting" for "meeting") scores about 0.45.
  */
 export const WORD_SIMILARITY_MIN = 0.4;
-/** `total` never exceeds this; counting further would only cost time. */
-export const TOTAL_CAP = 500;
+export { TOTAL_CAP };
 
 /** getFeedPage hydrates at most this many items per call. */
 const FEED_MAX = 50;
@@ -32,7 +32,14 @@ export interface Page {
  */
 export function parseQuery(raw: string | null): { scope: SearchScope; text: string } | null {
 	if (raw === null) return null;
-	let text = raw.trim().replace(/\s+/g, ' ').slice(0, QUERY_MAX);
+	// Control characters go (a NUL byte makes PostgreSQL reject the query); tab, newline and the
+	// like are whitespace and collapse into a space below.
+	let text = raw
+		// eslint-disable-next-line no-control-regex
+		.replace(/[\u0000-\u0008\u000e-\u001f\u007f]/g, '')
+		.trim()
+		.replace(/\s+/g, ' ')
+		.slice(0, QUERY_MAX);
 	let scope: SearchScope = 'all';
 	if (text.startsWith('#')) {
 		scope = 'tags';
@@ -92,10 +99,10 @@ const withThresholds = <T>(fn: (q: Executor) => Promise<T>): Promise<T> =>
 		return fn(tx);
 	});
 
-/** Rows of `from ... where` counted up to TOTAL_CAP. */
+/** Rows of `from ... where`, counted over a subquery that stops at TOTAL_CAP rows. */
 async function cappedCount(q: Executor, from: SQL, where: SQL): Promise<number> {
 	const [row] = await q.execute<{ n: number }>(
-		sql`SELECT LEAST(count(*), ${TOTAL_CAP})::int AS n FROM ${from} WHERE ${where}`
+		sql`SELECT count(*)::int AS n FROM (SELECT 1 FROM ${from} WHERE ${where} LIMIT ${TOTAL_CAP}) capped`
 	);
 	return row.n;
 }
@@ -133,7 +140,16 @@ export async function searchMemes(
 	const ids = rows.map((r) => r.id);
 	if (ids.length === 0) return { items: [], total };
 
-	const { items } = await getFeedPage({ viewerId, revealAll, sort: 'new', ids, limit: ids.length });
+	// hideUnderReview: a meme reported over the threshold between ranking and hydration drops out
+	// instead of coming back as a placeholder
+	const { items } = await getFeedPage({
+		viewerId,
+		revealAll,
+		sort: 'new',
+		ids,
+		limit: ids.length,
+		filter: { hideUnderReview: !revealAll }
+	});
 	const byId = new Map(items.map((item) => [item.id, item]));
 	return {
 		items: ids.flatMap((id) => {

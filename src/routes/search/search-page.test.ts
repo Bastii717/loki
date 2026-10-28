@@ -109,6 +109,19 @@ describe('search page load', () => {
 		expect(data).toMatchObject({ q: '  stand  up ', text: 'stand up' });
 	});
 
+	it('answers 200 for a query with a NUL byte and searches the text without it', async () => {
+		const member = await userWithSession();
+		const res = await callRoute({
+			handler: async (event: never) => Response.json(await (load as (e: never) => unknown)(event)),
+			path: '/search?q=ab%00c',
+			session: member.session
+		});
+		expect(res.response.status).toBe(200);
+		const body = (await res.response.json()) as Data;
+		expect(body.text).toBe('abc');
+		expect(body.sections).toHaveProperty('memes');
+	});
+
 	it('pages a typed view by 30', async () => {
 		const member = await userWithSession();
 		for (let i = 0; i < 35; i++) await insertMeme(member.user.id, `Standup ${i}`);

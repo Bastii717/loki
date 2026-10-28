@@ -17,6 +17,10 @@ describe('date formatters', () => {
 		// 23:30 UTC on 31 Oct is already 1 Nov in Berlin
 		expect(formatMonthYear('2026-10-31T23:30:00Z')).toBe('Nov 2026');
 	});
+
+	it('abbreviates September as Sep', () => {
+		expect(formatMonthYear('2026-09-15T12:00:00Z')).toBe('Sep 2026');
+	});
 });
 
 describe('modName', () => {

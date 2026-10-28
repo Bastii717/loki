@@ -229,6 +229,22 @@ describe('search page', () => {
 			expect(body).not.toContain('Show more');
 		});
 
+		it('reads Show all 500+ when a section hit the count cap', () => {
+			const body = html(ran({ memes: { items: memes(5), total: 500 } }));
+			expect(links(body, 'Show all 500+')).toHaveLength(1);
+			expect(links(body, 'Show all 500+')[0]).toContain('href="/search?q=standup&amp;type=memes"');
+		});
+
+		it('still pages a typed view at the cap', () => {
+			const body = html(ran({ memes: { items: memes(30), total: 500 } }, { type: 'memes' }));
+			expect(links(body, 'Show more')[0]).toContain('page=2');
+			expect(body).not.toContain('500+');
+			const last = html(
+				ran({ memes: { items: memes(20), total: 500 } }, { type: 'memes', page: 17 })
+			);
+			expect(links(last, 'Show more')).toHaveLength(0);
+		});
+
 		it('renders memes as meme cards', () => {
 			const body = html(ran({ memes: { items: [feedItem(4, 'Monday cat')], total: 1 } }));
 			expect(body).toContain('Monday cat');
@@ -332,8 +348,28 @@ describe('search page', () => {
 			expect(row).toContain('href="/meme/7"');
 			expect(row).toContain('The weekly <mark>standup</mark> was long');
 			expect(row).toContain('Monday cat');
-			expect(row).toContain('Jonas');
 			expect(row).toMatch(/<time datetime="2026-10-28T10:00:00.000Z">/);
+		});
+
+		it('link a comment author to the member page, apart from the link to the meme', () => {
+			const body = marks(html(ran({ comments: { items: [comment()], total: 1 } })));
+			const [author] = links(body, 'Jonas');
+			expect(author).toMatch(/^<a [^>]*href="\/users\/3"/);
+			expect(author.replace(/<[^>]*>/g, '').trim()).toBe('Jonas');
+			const [excerpt] = links(body, 'weekly');
+			expect(excerpt).toMatch(/^<a [^>]*href="\/meme\/7"/);
+			expect(excerpt).not.toContain('Jonas');
+			// the row is a <li> holding both links; an <a> never sits inside another <a>
+			const row = body.match(/<li class="[^"]*row[^"]*">[\s\S]*?<\/li>/)![0];
+			expect(row.match(/<a\b/g)).toHaveLength(2);
+			expect(row).not.toMatch(/<a\b[^>]*>(?:(?!<\/a>)[\s\S])*<a\b/);
+		});
+
+		it('shows the role badge of a comment author', () => {
+			const body = html(
+				ran({ comments: { items: [comment({ authorRole: 'moderator' })], total: 1 } })
+			);
+			expect(body).toContain('aria-label="Moderator"');
 		});
 
 		it('marks the match regardless of case and keeps the excerpt casing', () => {

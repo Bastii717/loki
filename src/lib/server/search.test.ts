@@ -114,6 +114,16 @@ describe('parseQuery', () => {
 		expect(parseQuery('x'.repeat(81))).toEqual({ scope: 'all', text: 'x'.repeat(80) });
 	});
 
+	it('strips control characters, NUL included', () => {
+		expect(parseQuery('ab\u0000c')).toEqual({ scope: 'all', text: 'abc' });
+		expect(parseQuery('\u0007ab\u007fc\u001f')).toEqual({ scope: 'all', text: 'abc' });
+		expect(parseQuery('\u0000')).toBeNull();
+	});
+
+	it('still collapses tabs and newlines into one space', () => {
+		expect(parseQuery('a\t\nb')).toEqual({ scope: 'all', text: 'a b' });
+	});
+
 	it('removes only one leading marker', () => {
 		expect(parseQuery('##tag')).toEqual({ scope: 'tags', text: '#tag' });
 	});
@@ -265,6 +275,16 @@ describe('searchMemes', () => {
 		expect(mod.items.map((i) => i.id).sort()).toEqual([visible, hidden].sort());
 		expect(mod.total).toBe(2);
 		expect(mod.items.find((i) => i.id === hidden)?.underReview).toBe(true);
+	});
+
+	it('never returns an item under review to a member, whichever of two matches is hidden', async () => {
+		const u = await testUser();
+		const stays = await insertMeme(u.id, 'Standup one');
+		await hiddenMeme(u.id, 'Standup two');
+		const { items, total } = await searchMemes(u.id, false, 'standup', PAGE);
+		expect(items.map((i) => i.id)).toEqual([stays]);
+		expect(items.every((i) => !i.underReview)).toBe(true);
+		expect(total).toBe(1);
 	});
 
 	it('does not reveal a hidden meme through its tag', async () => {

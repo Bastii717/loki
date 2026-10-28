@@ -7,6 +7,8 @@ export type SearchType = (typeof SEARCH_TYPES)[number];
 export const PREVIEW = 5;
 /** Results per page in a typed view. */
 export const PAGE_SIZE = 30;
+/** `total` never exceeds this (the searches stop counting here); a total at the cap reads "500+". */
+export const TOTAL_CAP = 500;
 
 /**
  * Splits `excerpt` around the first case-insensitive occurrence of `needle`, so the template can

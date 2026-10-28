@@ -6,7 +6,7 @@
 	import MemeCard from '#lib/components/MemeCard.svelte';
 	import RoleBadge from '#lib/components/RoleBadge.svelte';
 	import { formatDateTime } from '../../lib/moderation-labels';
-	import { highlight, PAGE_SIZE, PREVIEW, type SearchType } from '../../lib/search-view';
+	import { highlight, PAGE_SIZE, PREVIEW, TOTAL_CAP, type SearchType } from '../../lib/search-view';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -54,7 +54,11 @@
 			</div>
 		{/if}
 	{:else if total !== null && total > PREVIEW}
-		<div class="pager"><a href="{resolve('/search')}{query(type)}">Show all {total}</a></div>
+		<div class="pager">
+			<a href="{resolve('/search')}{query(type)}"
+				>Show all {total === TOTAL_CAP ? `${total}+` : total}</a
+			>
+		</div>
 	{/if}
 {/snippet}
 
@@ -150,13 +154,15 @@
 				<ul class="rows">
 					{#each sections.comments.items as comment (comment.id)}
 						{@const hit = highlight(comment.excerpt, data.text)}
-						<li>
-							<a href={resolve('/meme/[id]', { id: String(comment.mediaId) })} class="row comment">
-								<span class="author">
-									<Avatar thumbKey={comment.authorAvatar} name={comment.author} size={24} />
-									<span class="name">{comment.author}</span>
-									<RoleBadge role={comment.authorRole} />
-								</span>
+						<li class="row comment">
+							<span class="author">
+								<Avatar thumbKey={comment.authorAvatar} name={comment.author} size={24} />
+								<a href={resolve('/users/[id]', { id: String(comment.authorId) })} class="name"
+									>{comment.author}</a
+								>
+								<RoleBadge role={comment.authorRole} />
+							</span>
+							<a href={resolve('/meme/[id]', { id: String(comment.mediaId) })} class="body">
 								<span class="excerpt"
 									>{#if hit}{hit.before}<mark>{hit.match}</mark
 										>{hit.after}{:else}{comment.excerpt}{/if}</span
@@ -263,6 +269,8 @@
 	.chips {
 		display: flex;
 		gap: 2px;
+		/* the vertical padding leaves room for the focus ring, which overflow-x: auto would clip */
+		padding-block: 4px;
 		overflow-x: auto;
 		scrollbar-width: none;
 	}
@@ -352,11 +360,26 @@
 		flex-direction: column;
 	}
 
+	.comment {
+		gap: 8px;
+	}
+
 	.author {
 		display: flex;
 		align-items: center;
 		gap: 6px;
 		font-weight: 600;
+	}
+
+	.author .name {
+		color: inherit;
+	}
+
+	.body {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		color: inherit;
 	}
 
 	.meta {
