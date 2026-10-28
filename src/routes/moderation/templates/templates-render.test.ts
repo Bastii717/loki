@@ -2,8 +2,11 @@ import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import Page from './+page.svelte';
 
+// public ids: 12 characters from [A-Za-z0-9]
+const P = (n: number) => `Tpl${n}`.padEnd(12, 'x');
+
 const template = (over: Record<string, unknown> = {}) => ({
-	id: 7,
+	id: P(7),
 	name: 'Drake',
 	objectKey: 'templates/a.webp',
 	thumbKey: 'templates/a-320.webp',
@@ -44,17 +47,17 @@ describe('templates page', () => {
 
 	it('shows a card per template with the thumbnail scaled into a 96 px box', () => {
 		const body = html({
-			templates: [template(), template({ id: 8, name: 'Doge', width: 300, height: 600 })]
+			templates: [template(), template({ id: P(8), name: 'Doge', width: 300, height: 600 })]
 		});
 		expect(body).not.toContain('No templates yet');
-		expect(body).toMatch(/<img[^>]*src="\/api\/templates\/7\/thumb"/);
-		expect(body).toMatch(/<img[^>]*src="\/api\/templates\/8\/thumb"/);
+		expect(body).toMatch(/<img[^>]*src="\/api\/templates\/Tpl7xxxxxxxx\/thumb"/);
+		expect(body).toMatch(/<img[^>]*src="\/api\/templates\/Tpl8xxxxxxxx\/thumb"/);
 		// 1200x600 -> 96x48, 300x600 -> 48x96
 		expect(body).toMatch(
-			/<img[^>]*src="\/api\/templates\/7\/thumb"[^>]*width="96"[^>]*height="48"/
+			/<img[^>]*src="\/api\/templates\/Tpl7xxxxxxxx\/thumb"[^>]*width="96"[^>]*height="48"/
 		);
 		expect(body).toMatch(
-			/<img[^>]*src="\/api\/templates\/8\/thumb"[^>]*width="48"[^>]*height="96"/
+			/<img[^>]*src="\/api\/templates\/Tpl8xxxxxxxx\/thumb"[^>]*width="48"[^>]*height="96"/
 		);
 		expect(body).toContain('alt=""');
 		expect(body).toContain('Drake');
@@ -64,9 +67,9 @@ describe('templates page', () => {
 	it('words the usage count', () => {
 		const body = html({
 			templates: [
-				template({ id: 1, name: 'A', usageCount: 3 }),
-				template({ id: 2, name: 'B', usageCount: 1 }),
-				template({ id: 3, name: 'C', usageCount: 0 })
+				template({ id: P(1), name: 'A', usageCount: 3 }),
+				template({ id: P(2), name: 'B', usageCount: 1 }),
+				template({ id: P(3), name: 'C', usageCount: 0 })
 			]
 		});
 		expect(body).toContain('Used 3 times');
@@ -78,7 +81,7 @@ describe('templates page', () => {
 		const body = html({ templates: [template()] });
 		expect(body).toMatch(/<form[^>]*action="\?\/rename"/);
 		expect(body).toMatch(/<form[^>]*action="\?\/remove"/);
-		expect(body).toMatch(/name="id"[^>]*value="7"/);
+		expect(body).toMatch(/name="id"[^>]*value="Tpl7xxxxxxxx"/);
 		expect(body).toMatch(/name="name"[^>]*value="Drake"/);
 		expect(body).toContain('Save');
 		expect(body).toContain('Remove');
@@ -87,7 +90,7 @@ describe('templates page', () => {
 	it('lists removed templates in a collapsed group with Restore', () => {
 		const body = html({
 			templates: [template()],
-			removed: [template({ id: 9, name: 'Old one', removedAt: '2026-10-01T10:00:00.000Z' })]
+			removed: [template({ id: P(9), name: 'Old one', removedAt: '2026-10-01T10:00:00.000Z' })]
 		});
 		expect(body).toMatch(/<details[ >]/);
 		expect(body).not.toMatch(/<details[^>]*\sopen/);
@@ -99,7 +102,7 @@ describe('templates page', () => {
 
 	it('shows the removed group even when no template is active', () => {
 		const body = html({
-			removed: [template({ id: 9, name: 'Old one', removedAt: '2026-10-01T10:00:00.000Z' })]
+			removed: [template({ id: P(9), name: 'Old one', removedAt: '2026-10-01T10:00:00.000Z' })]
 		});
 		expect(body).toContain('No templates yet. Add the first one above.');
 		expect(body).toContain('Removed (1)');

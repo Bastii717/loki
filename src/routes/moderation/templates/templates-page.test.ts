@@ -14,8 +14,8 @@ import { actions, load } from './+page.server';
 type Session = Awaited<ReturnType<typeof userWithSession>>;
 type Result = { ok: true } | { status: number; data: { error: string } };
 type LoadData = {
-	templates: { id: number; name: string; usageCount: number }[];
-	removed: { id: number; name: string }[];
+	templates: { id: string; name: string; usageCount: number }[];
+	removed: { id: string; name: string }[];
 };
 
 const NOT_FOUND = { status: 404, data: { error: 'Template not found.' } };
@@ -144,11 +144,15 @@ describe('load', () => {
 		const doge = await seed('Doge');
 		const memeId = await insertMeme(admin.user.id, 'Made from Drake');
 		await db.update(media).set({ templateId: drake.id }).where(eq(media.id, memeId));
-		expect(await run('remove', admin, { id: String(doge.id) })).toEqual({ ok: true });
+		expect(await run('remove', admin, { id: doge.publicId })).toEqual({ ok: true });
 
 		const data = (await load({ locals: { user: admin.user } } as never)) as LoadData;
 		expect(data.templates.map((t) => [t.name, t.usageCount])).toEqual([['Drake', 1]]);
 		expect(data.removed.map((t) => t.name)).toEqual(['Doge']);
+		// the page carries public ids only
+		expect(data.templates[0].id).toBe(drake.publicId);
+		expect(data.removed[0].id).toBe(doge.publicId);
+		expect(JSON.stringify(data)).not.toMatch(/"id":\d/);
 	});
 
 	it('is empty without templates', async () => {
@@ -225,7 +229,7 @@ describe('add', () => {
 describe('rename', () => {
 	it('renames, trims and audits', async () => {
 		const row = await seed('Drake');
-		expect(await run('rename', admin, { id: String(row.id), name: '  Drake 2  ' })).toEqual({
+		expect(await run('rename', admin, { id: row.publicId, name: '  Drake 2  ' })).toEqual({
 			ok: true
 		});
 		expect((await rowOf(row.id)).name).toBe('Drake 2');
@@ -234,7 +238,7 @@ describe('rename', () => {
 
 	it('explains a bad name and keeps the old one', async () => {
 		const row = await seed('Drake');
-		expect(await run('rename', admin, { id: String(row.id), name: '   ' })).toEqual({
+		expect(await run('rename', admin, { id: row.publicId, name: '   ' })).toEqual({
 			status: 400,
 			data: { error: 'The name must be 1 to 60 characters.' }
 		});
@@ -245,20 +249,20 @@ describe('rename', () => {
 describe('remove and restore', () => {
 	it('removes softly and restores, auditing both', async () => {
 		const row = await seed('Drake');
-		expect(await run('remove', admin, { id: String(row.id) })).toEqual({ ok: true });
+		expect(await run('remove', admin, { id: row.publicId })).toEqual({ ok: true });
 		expect((await rowOf(row.id)).removedAt).not.toBeNull();
 		expect(await audits('template_removed')).toHaveLength(1);
 
-		expect(await run('restore', admin, { id: String(row.id) })).toEqual({ ok: true });
+		expect(await run('restore', admin, { id: row.publicId })).toEqual({ ok: true });
 		expect((await rowOf(row.id)).removedAt).toBeNull();
 		expect(await audits('template_restored')).toHaveLength(1);
 	});
 
 	it('says not found for a template that is in the wrong state', async () => {
 		const row = await seed('Drake');
-		expect(await run('restore', admin, { id: String(row.id) })).toEqual(NOT_FOUND);
-		await run('remove', admin, { id: String(row.id) });
-		expect(await run('remove', admin, { id: String(row.id) })).toEqual(NOT_FOUND);
+		expect(await run('restore', admin, { id: row.publicId })).toEqual(NOT_FOUND);
+		await run('remove', admin, { id: row.publicId });
+		expect(await run('remove', admin, { id: row.publicId })).toEqual(NOT_FOUND);
 	});
 });
 
@@ -266,7 +270,18 @@ describe('ids', () => {
 	it.each(['rename', 'remove', 'restore'] as const)(
 		'%s: a missing, malformed or unknown id is "Template not found." (404)',
 		async (name) => {
-			for (const id of ['', 'abc', '0', '-3', '1.5', '99999']) {
+			const row = await seed('Drake');
+			// the internal serial is not a template reference
+			for (const id of [
+				'',
+				'abc',
+				'0',
+				'-3',
+				'1.5',
+				String(row.id),
+				'AAAAAAAAAAAA',
+				'AAAAAAAAAAAAA'
+			]) {
 				expect(await run(name, admin, { id, name: 'Whatever' }), id).toEqual(NOT_FOUND);
 			}
 			expect(await run(name, admin, { name: 'Whatever' })).toEqual(NOT_FOUND);

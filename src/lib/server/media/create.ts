@@ -4,6 +4,7 @@ import { db } from '../db';
 import { media, mediaTags, tags } from '../db/schema';
 import { env } from '../env';
 import { assertNotTimedOut } from '../moderation';
+import { isPublicId, resolveTemplateId } from '../public-ids';
 import { deleteObjects, mediaKey, putObject } from '../storage';
 import { processMedia, sniffMedia } from './process';
 
@@ -23,13 +24,9 @@ export function normalizeTag(raw: string): string | null {
 	return TAG_PATTERN.test(tag) ? tag : null;
 }
 
-const INT4_MAX = 2147483647;
-
-/** A template id from form input: digits only, within the int4 range; undefined otherwise. */
-export function parseTemplateId(raw: FormDataEntryValue | null): number | undefined {
-	if (typeof raw !== 'string' || !/^\d+$/.test(raw)) return undefined;
-	const id = Number(raw);
-	return id >= 1 && id <= INT4_MAX ? id : undefined;
+/** A template's internal id from a public id in form input; null when malformed or unknown. */
+export async function parseTemplateId(raw: FormDataEntryValue | null): Promise<number | null> {
+	return isPublicId(raw) ? resolveTemplateId(raw) : null;
 }
 
 export type CreateMediaOptions = {

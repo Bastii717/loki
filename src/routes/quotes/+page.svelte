@@ -18,7 +18,7 @@
 
 	// Local copy so votes update instantly; resynced whenever load data changes.
 	let items = $derived(data.quotes);
-	let confirmingId = $state<number | null>(null);
+	let confirmingId = $state<string | null>(null);
 	let busy = $state(false);
 	let failure = $state<string | null>(null);
 
@@ -34,7 +34,7 @@
 		return true;
 	}
 
-	async function vote(id: number, clicked: 1 | -1) {
+	async function vote(id: string, clicked: 1 | -1) {
 		const q = items.find((x) => x.id === id);
 		if (!q || busy || blocked()) return;
 		busy = true;
@@ -59,7 +59,7 @@
 		}
 	}
 
-	async function remove(id: number) {
+	async function remove(id: string) {
 		if (blocked()) return;
 		busy = true;
 		failure = null;

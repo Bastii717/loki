@@ -21,13 +21,13 @@ const png = { name: 'a.png', type: 'image/png', data: Buffer.from('x') };
 describe('GET /share/file hand-over headers', () => {
 	it('adds the title (URI-encoded) and the template id when present', async () => {
 		const { user, session } = await userWithSession();
-		putShared(user.id, { ...png, title: 'Montag, wieder ä', templateId: 7 });
+		putShared(user.id, { ...png, title: 'Montag, wieder ä', templateId: 'Tpl7aaaaaaaa' });
 		const { response } = await callRoute({ handler: GET, path: '/share/file', session });
 		expect(response.status).toBe(200);
 		const title = response.headers.get('x-shared-title')!;
 		expect(title).not.toContain(' ');
 		expect(decodeURIComponent(title)).toBe('Montag, wieder ä');
-		expect(response.headers.get('x-shared-template')).toBe('7');
+		expect(response.headers.get('x-shared-template')).toBe('Tpl7aaaaaaaa');
 		expect(response.headers.get('x-shared-name')).toBe('a.png');
 	});
 

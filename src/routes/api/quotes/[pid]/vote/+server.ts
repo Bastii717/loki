@@ -1,12 +1,14 @@
 import { error, json } from '@sveltejs/kit';
 import { QuoteNotFoundError, voteQuote } from '../../../../../lib/server/quotes';
 import { mapModerationError } from '../../../../../lib/server/moderation-http';
+import { isPublicId, resolveQuoteId } from '../../../../../lib/server/public-ids';
 import type { VoteValue } from '../../../../../lib/server/votes';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
-	const id = Number(params.id);
-	if (!Number.isSafeInteger(id) || id <= 0) error(404, 'Not found');
+	if (!isPublicId(params.pid)) error(404, 'Not found');
+	const id = await resolveQuoteId(params.pid);
+	if (id === null) error(404, 'Not found');
 
 	let body: unknown;
 	try {

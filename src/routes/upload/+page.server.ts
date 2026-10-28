@@ -3,6 +3,7 @@ import { env } from '../../lib/server/env';
 import { TimeoutActiveError } from '../../lib/server/moderation';
 import { timeoutFail } from '../../lib/server/moderation-http';
 import { UploadError, createMedia, parseTemplateId } from '../../lib/server/media/create';
+import { isPublicId } from '../../lib/server/public-ids';
 import { peekShared } from '../../lib/server/share-stash';
 import { getTemplate } from '../../lib/server/templates';
 import type { Actions, PageServerLoad } from './$types';
@@ -31,8 +32,11 @@ export const actions: Actions = {
 		}
 
 		// provenance from the generator hand-over; an unknown or removed template is ignored
-		const requested = parseTemplateId(form.get('templateId'));
-		const templateId = requested !== undefined && (await getTemplate(requested)) ? requested : null;
+		const requested = form.get('templateId');
+		const templateId =
+			isPublicId(requested) && (await getTemplate(requested))
+				? await parseTemplateId(requested)
+				: null;
 
 		try {
 			await createMedia({

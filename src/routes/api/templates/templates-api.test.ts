@@ -10,8 +10,8 @@ import { deleteObjects, getObject } from '../../../lib/server/storage';
 import { ensureBucket } from '../../../lib/server/storage-test-utils';
 import { callRoute } from '../../../lib/server/test-request';
 import { addTemplate, removeTemplate } from '../../../lib/server/templates';
-import { GET as getImage } from './[id]/image/+server';
-import { GET as getThumb } from './[id]/thumb/+server';
+import { GET as getImage } from './[pid]/image/+server';
+import { GET as getThumb } from './[pid]/thumb/+server';
 
 const created: string[] = [];
 let png: Buffer;
@@ -36,8 +36,8 @@ afterAll(async () => {
 async function world() {
 	const admin = await userWithSession('admin');
 	const member = await userWithSession('member');
-	const { id } = await addTemplate(admin.user, 'Fine', png);
-	const [row] = await db.select().from(templates).where(eq(templates.id, id));
+	const { id: pid } = await addTemplate(admin.user, 'Fine', png);
+	const [row] = await db.select().from(templates).where(eq(templates.publicId, pid));
 	created.push(row.objectKey, row.thumbKey);
 	return { admin, member, row };
 }
@@ -47,15 +47,15 @@ const endpoints = [
 	['thumb', getThumb, 'thumbKey', 320]
 ] as const;
 
-describe.each(endpoints)('GET /api/templates/[id]/%s', (name, handler, keyField, side) => {
-	const path = (id: number | string) => `/api/templates/${id}/${name}`;
+describe.each(endpoints)('GET /api/templates/[pid]/%s', (name, handler, keyField, side) => {
+	const path = (pid: string) => `/api/templates/${pid}/${name}`;
 
 	it('streams the stored WebP with the cache headers', async () => {
 		const { member, row } = await world();
 		const { response } = await callRoute({
 			handler,
-			path: path(row.id),
-			params: { id: String(row.id) },
+			path: path(row.publicId),
+			params: { pid: row.publicId },
 			session: member.session
 		});
 		expect(response.status).toBe(200);
@@ -67,23 +67,37 @@ describe.each(endpoints)('GET /api/templates/[id]/%s', (name, handler, keyField,
 		expect((await sharp(bytes).metadata()).width).toBe(side);
 	});
 
-	it('answers 404 for an unknown id', async () => {
+	it('answers 404 for an unknown public id', async () => {
 		const { member } = await world();
 		const { response } = await callRoute({
 			handler,
-			path: path(999),
-			params: { id: '999' },
+			path: path('AAAAAAAAAAAA'),
+			params: { pid: 'AAAAAAAAAAAA' },
 			session: member.session
 		});
 		expect(response.status).toBe(404);
 	});
 
-	it.each(['0', '-1', '1.5', 'abc', '99999999999'])('answers 404 for the id %s', async (id) => {
-		const { member } = await world();
+	it.each(['0', '1', '-1', '1.5', 'abc', '99999999999', 'AAAAAAAAAAAAA'])(
+		'answers 404 for the id %s',
+		async (pid) => {
+			const { member } = await world();
+			const { response } = await callRoute({
+				handler,
+				path: path(pid),
+				params: { pid },
+				session: member.session
+			});
+			expect(response.status).toBe(404);
+		}
+	);
+
+	it('answers 404 for the internal numeric id of an existing template', async () => {
+		const { member, row } = await world();
 		const { response } = await callRoute({
 			handler,
-			path: path(id),
-			params: { id },
+			path: path(String(row.id)),
+			params: { pid: String(row.id) },
 			session: member.session
 		});
 		expect(response.status).toBe(404);
@@ -91,11 +105,11 @@ describe.each(endpoints)('GET /api/templates/[id]/%s', (name, handler, keyField,
 
 	it('answers 404 for a removed template', async () => {
 		const { admin, member, row } = await world();
-		await removeTemplate(admin.user, row.id);
+		await removeTemplate(admin.user, row.publicId);
 		const { response } = await callRoute({
 			handler,
-			path: path(row.id),
-			params: { id: String(row.id) },
+			path: path(row.publicId),
+			params: { pid: row.publicId },
 			session: member.session
 		});
 		expect(response.status).toBe(404);
@@ -103,12 +117,12 @@ describe.each(endpoints)('GET /api/templates/[id]/%s', (name, handler, keyField,
 
 	it('serves a removed template to an admin only', async () => {
 		const { admin, member, row } = await world();
-		await removeTemplate(admin.user, row.id);
+		await removeTemplate(admin.user, row.publicId);
 		const call = (session: string) =>
 			callRoute({
 				handler,
-				path: path(row.id),
-				params: { id: String(row.id) },
+				path: path(row.publicId),
+				params: { pid: row.publicId },
 				session
 			});
 		const asAdmin = (await call(admin.session)).response;
@@ -121,8 +135,8 @@ describe.each(endpoints)('GET /api/templates/[id]/%s', (name, handler, keyField,
 		const { row } = await world();
 		const { response } = await callRoute({
 			handler,
-			path: path(row.id),
-			params: { id: String(row.id) }
+			path: path(row.publicId),
+			params: { pid: row.publicId }
 		});
 		expect(response.status).toBe(401);
 		expect(response.headers.get('content-type')).toContain('application/json');

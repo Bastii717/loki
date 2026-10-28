@@ -7,7 +7,7 @@ import { media, templates } from '../../lib/server/db/schema';
 import { resetDb, setupDb } from '../../lib/server/db/test-utils';
 import {
 	addOpenReports,
-	insertMeme,
+	insertMemeRow,
 	OVER_THRESHOLD,
 	userWithSession
 } from '../../lib/server/moderation-test-utils';
@@ -43,11 +43,12 @@ afterAll(async () => {
 	if (created.length) await deleteObjects(created);
 });
 
-async function template(name: string): Promise<number> {
-	const { id } = await addTemplate(admin.user, name, png);
-	const [row] = await db.select().from(templates).where(eq(templates.id, id));
+/** Adds a template; `pid` is the public id, `id` the internal one (for direct database edits). */
+async function template(name: string): Promise<{ pid: string; id: number }> {
+	const { id: pid } = await addTemplate(admin.user, name, png);
+	const [row] = await db.select().from(templates).where(eq(templates.publicId, pid));
 	created.push(row.objectKey, row.thumbKey);
-	return id;
+	return { pid, id: row.id };
 }
 
 /** The page load for `member`, called directly (callRoute only returns Responses). */
@@ -71,13 +72,14 @@ describe('create page load', () => {
 		const alpha = await template('Alpha');
 		const beta = await template('Beta');
 		const author = await userWithSession();
-		const meme = await insertMeme(author.user.id);
-		await db.update(media).set({ templateId: beta }).where(eq(media.id, meme));
+		const meme = await insertMemeRow(author.user.id);
+		await db.update(media).set({ templateId: beta.id }).where(eq(media.id, meme.id));
 
 		const data = await loadFor(author);
 		expect(data.mode).toBe('grid');
 		if (data.mode !== 'grid') return;
-		expect(data.templates.map((t) => t.id)).toEqual([beta, alpha]);
+		expect(data.templates.map((t) => t.id)).toEqual([beta.pid, alpha.pid]);
+		expect(JSON.stringify(data)).not.toMatch(/"id":\d/);
 	});
 
 	it('returns an empty grid without templates', async () => {
@@ -86,53 +88,53 @@ describe('create page load', () => {
 	});
 
 	it('opens a template as the editor source', async () => {
-		const id = await template('Drake');
+		const { pid } = await template('Drake');
 		const member = await userWithSession();
-		expect(await loadFor(member, `?template=${id}`)).toEqual({
+		expect(await loadFor(member, `?template=${pid}`)).toEqual({
 			mode: 'template',
 			source: {
 				kind: 'template',
-				id,
+				id: pid,
 				name: 'Drake',
 				width: 300,
 				height: 500,
-				url: `/api/templates/${id}/image`
+				url: `/api/templates/${pid}/image`
 			}
 		});
 	});
 
 	it('answers 404 for an unknown or removed template', async () => {
 		const member = await userWithSession();
-		const res = await status(member, '?template=999999');
+		const res = await status(member, '?template=AAAAAAAAAAAA');
 		expect(res.status).toBe(404);
 		expect(await res.text()).toBe('Template not found.');
 
-		const id = await template('Gone');
-		await removeTemplate(admin.user, id);
-		expect((await status(member, `?template=${id}`)).status).toBe(404);
+		const { pid } = await template('Gone');
+		await removeTemplate(admin.user, pid);
+		expect((await status(member, `?template=${pid}`)).status).toBe(404);
 	});
 
 	it('opens an image meme as the editor source', async () => {
 		const member = await userWithSession();
-		const id = await insertMeme(member.user.id, 'Monday cat');
-		await db.update(media).set({ width: 640, height: 480 }).where(eq(media.id, id));
-		expect(await loadFor(member, `?meme=${id}`)).toEqual({
+		const meme = await insertMemeRow(member.user.id, 'Monday cat');
+		await db.update(media).set({ width: 640, height: 480 }).where(eq(media.id, meme.id));
+		expect(await loadFor(member, `?meme=${meme.publicId}`)).toEqual({
 			mode: 'meme',
 			source: {
 				kind: 'meme',
-				id,
+				id: meme.publicId,
 				name: 'Monday cat',
 				width: 640,
 				height: 480,
-				url: `/api/memes/${id}/source`
+				url: `/api/memes/${meme.publicId}/source`
 			}
 		});
 	});
 
 	it('falls back to 1200 x 900 and "Untitled" for a meme without size or title', async () => {
 		const member = await userWithSession();
-		const id = await insertMeme(member.user.id, '');
-		const data = await loadFor(member, `?meme=${id}`);
+		const meme = await insertMemeRow(member.user.id, '');
+		const data = await loadFor(member, `?meme=${meme.publicId}`);
 		expect(data).toMatchObject({
 			mode: 'meme',
 			source: { name: 'Untitled', width: 1200, height: 900 }
@@ -141,33 +143,44 @@ describe('create page load', () => {
 
 	it('answers 404 for a gif or a missing meme', async () => {
 		const member = await userWithSession();
-		const id = await insertMeme(member.user.id);
-		await db.update(media).set({ kind: 'gif' }).where(eq(media.id, id));
-		const res = await status(member, `?meme=${id}`);
+		const meme = await insertMemeRow(member.user.id);
+		await db.update(media).set({ kind: 'gif' }).where(eq(media.id, meme.id));
+		const res = await status(member, `?meme=${meme.publicId}`);
 		expect(res.status).toBe(404);
 		expect(await res.text()).toBe('Meme not found.');
-		expect((await status(member, '?meme=999999')).status).toBe(404);
+		expect((await status(member, '?meme=AAAAAAAAAAAA')).status).toBe(404);
 	});
 
 	it('hides a meme under review from members but not from moderators', async () => {
 		const author = await userWithSession();
-		const id = await insertMeme(author.user.id);
-		await addOpenReports('meme', id, author.user.id, OVER_THRESHOLD);
+		const meme = await insertMemeRow(author.user.id);
+		await addOpenReports('meme', meme.id, author.user.id, OVER_THRESHOLD);
 
 		const member = await userWithSession();
-		expect((await status(member, `?meme=${id}`)).status).toBe(404);
+		expect((await status(member, `?meme=${meme.publicId}`)).status).toBe(404);
 
 		const moderator = await userWithSession('moderator');
-		expect(await loadFor(moderator, `?meme=${id}`)).toMatchObject({
+		expect(await loadFor(moderator, `?meme=${meme.publicId}`)).toMatchObject({
 			mode: 'meme',
-			source: { id }
+			source: { id: meme.publicId }
 		});
-		expect((await status(moderator, `?meme=${id}`)).status).toBe(204);
+		expect((await status(moderator, `?meme=${meme.publicId}`)).status).toBe(204);
 	});
 
-	it('ignores a malformed id and shows the grid', async () => {
+	it('answers 404 for an internal (numeric) or malformed id', async () => {
 		const member = await userWithSession();
-		expect((await loadFor(member, '?template=abc&meme=-3')).mode).toBe('grid');
+		const own = await insertMemeRow(member.user.id);
+		const { id: internalTemplate } = await template('Drake');
+		for (const query of [
+			`?template=${internalTemplate}`,
+			`?meme=${own.id}`,
+			'?template=abc',
+			'?meme=-3',
+			'?template=',
+			'?meme='
+		]) {
+			expect((await status(member, query)).status, query).toBe(404);
+		}
 	});
 });
 
@@ -200,12 +213,12 @@ describe('create page actions', () => {
 	beforeEach(() => resetRateLimits());
 
 	it('stashes the PNG with title and template, then redirects to the upload form', async () => {
-		const id = await template('Drake');
+		const { pid } = await template('Drake');
 		const member = await userWithSession();
 		const res = await stash(member, {
 			file: pngFile(),
 			title: '  Monday  ',
-			templateId: String(id)
+			templateId: pid
 		});
 		expect(res).toMatchObject({ status: 303, location: '/upload?shared=1' });
 		const shared = takeShared(member.user.id);
@@ -213,7 +226,7 @@ describe('create page actions', () => {
 			name: 'meme.png',
 			type: 'image/png',
 			title: 'Monday',
-			templateId: id
+			templateId: pid
 		});
 		expect(shared!.data.equals(png)).toBe(true);
 		expect(await db.select().from(media)).toHaveLength(0);
@@ -229,43 +242,46 @@ describe('create page actions', () => {
 		it('copies nsfw and spoiler from a visible image source', async () => {
 			const member = await userWithSession();
 			const author = await userWithSession();
-			const id = await insertMeme(author.user.id);
-			await db.update(media).set({ nsfw: true }).where(eq(media.id, id));
-			const shared = await stashRemix(member, String(id));
+			const meme = await insertMemeRow(author.user.id);
+			await db.update(media).set({ nsfw: true }).where(eq(media.id, meme.id));
+			const shared = await stashRemix(member, meme.publicId);
 			expect(shared.nsfw).toBe(true);
 			expect(shared.spoiler).toBeUndefined();
 
-			await db.update(media).set({ nsfw: false, spoiler: true }).where(eq(media.id, id));
-			const spoiler = await stashRemix(member, String(id));
+			await db.update(media).set({ nsfw: false, spoiler: true }).where(eq(media.id, meme.id));
+			const spoiler = await stashRemix(member, meme.publicId);
 			expect(spoiler.nsfw).toBeUndefined();
 			expect(spoiler.spoiler).toBe(true);
 		});
 
 		it('is not fooled by a low score: only the stored flags count', async () => {
 			const member = await userWithSession();
-			const id = await insertMeme(member.user.id);
-			await db.update(media).set({ score: -100 }).where(eq(media.id, id));
-			const shared = await stashRemix(member, String(id));
+			const meme = await insertMemeRow(member.user.id);
+			await db.update(media).set({ score: -100 }).where(eq(media.id, meme.id));
+			const shared = await stashRemix(member, meme.publicId);
 			expect(shared.nsfw).toBeUndefined();
 		});
 
 		it('ignores a gif, a hidden, an unknown or a malformed source', async () => {
 			const member = await userWithSession();
 			const author = await userWithSession();
-			const gif = await insertMeme(author.user.id);
-			await db.update(media).set({ kind: 'gif', nsfw: true }).where(eq(media.id, gif));
-			const hidden = await insertMeme(author.user.id);
-			await db.update(media).set({ nsfw: true }).where(eq(media.id, hidden));
-			await addOpenReports('meme', hidden, author.user.id, OVER_THRESHOLD);
+			const gif = await insertMemeRow(author.user.id);
+			await db.update(media).set({ kind: 'gif', nsfw: true }).where(eq(media.id, gif.id));
+			const hidden = await insertMemeRow(author.user.id);
+			await db.update(media).set({ nsfw: true }).where(eq(media.id, hidden.id));
+			await addOpenReports('meme', hidden.id, author.user.id, OVER_THRESHOLD);
+			// an internal (numeric) id is no longer a valid reference
+			const numeric = await insertMemeRow(author.user.id);
+			await db.update(media).set({ nsfw: true }).where(eq(media.id, numeric.id));
 
 			for (const sourceMemeId of [
-				String(gif),
-				String(hidden),
-				'999999',
+				gif.publicId,
+				hidden.publicId,
+				String(numeric.id),
+				'AAAAAAAAAAAA',
 				'abc',
 				'-1',
 				'0',
-				'2147483648',
 				'99999999999',
 				''
 			]) {
@@ -277,11 +293,11 @@ describe('create page actions', () => {
 
 		it('lets a moderator remix a hidden meme and keeps its flags', async () => {
 			const author = await userWithSession();
-			const id = await insertMeme(author.user.id);
-			await db.update(media).set({ nsfw: true }).where(eq(media.id, id));
-			await addOpenReports('meme', id, author.user.id, OVER_THRESHOLD);
+			const meme = await insertMemeRow(author.user.id);
+			await db.update(media).set({ nsfw: true }).where(eq(media.id, meme.id));
+			await addOpenReports('meme', meme.id, author.user.id, OVER_THRESHOLD);
 			const moderator = await userWithSession('moderator');
-			expect((await stashRemix(moderator, String(id))).nsfw).toBe(true);
+			expect((await stashRemix(moderator, meme.publicId)).nsfw).toBe(true);
 		});
 
 		it('stores no flags without a sourceMemeId', async () => {
@@ -295,9 +311,19 @@ describe('create page actions', () => {
 
 	it('drops an unknown, removed or malformed template id and still stashes', async () => {
 		const gone = await template('Gone');
-		await removeTemplate(admin.user, gone);
+		await removeTemplate(admin.user, gone.pid);
+		const live = await template('Live');
 		const member = await userWithSession();
-		for (const templateId of ['999999', String(gone), 'abc', '-1', '0', '2147483648', '']) {
+		for (const templateId of [
+			'AAAAAAAAAAAA',
+			gone.pid,
+			String(live.id),
+			'abc',
+			'-1',
+			'0',
+			'2147483648',
+			''
+		]) {
 			const res = await stash(member, { file: pngFile(), templateId });
 			expect(res, templateId).toMatchObject({ status: 303 });
 			const shared = takeShared(member.user.id);

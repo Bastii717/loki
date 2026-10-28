@@ -5,8 +5,8 @@ import { db } from '../../lib/server/db';
 import { media } from '../../lib/server/db/schema';
 import { env } from '../../lib/server/env';
 import { getFeedItem } from '../../lib/server/feed';
-import { parseTemplateId } from '../../lib/server/media/create';
 import { sniffMedia } from '../../lib/server/media/process';
+import { isPublicId, resolveMediaId } from '../../lib/server/public-ids';
 import { stashSharedFile } from '../../lib/server/share-stash';
 import { canSeeUnderReview } from '../../lib/server/moderation';
 import { getTemplate, listTemplates, type TemplateRow } from '../../lib/server/templates';
@@ -17,7 +17,8 @@ const FALLBACK = { width: 1200, height: 900 };
 
 export interface EditorSource {
 	kind: 'template' | 'meme';
-	id: number;
+	/** Public id of the template or meme. */
+	id: string;
 	name: string;
 	width: number;
 	height: number;
@@ -28,19 +29,15 @@ export interface EditorSource {
 export type CreateData =
 	{ mode: 'grid'; templates: TemplateRow[] } | { mode: 'template' | 'meme'; source: EditorSource };
 
-/** A positive integer from user input, else null. */
-function parseId(raw: string | null): number | null {
-	if (raw === null || !/^\d{1,9}$/.test(raw)) return null;
-	const n = Number(raw);
-	return n > 0 ? n : null;
-}
-
 /** An image meme the viewer may see (same rule as the editor load), else null. */
-async function visibleImageMeme(user: SessionUser, id: number) {
+async function visibleImageMeme(user: SessionUser, pid: string) {
+	const id = await resolveMediaId(pid);
+	if (id === null) return null;
 	const revealAll = canSeeUnderReview(user);
+	// TODO(public-ids slice A): switch to getFeedItemById
 	const item = await getFeedItem(user.id, id, revealAll);
 	if (!item || item.kind !== 'image' || (item.underReview && !revealAll)) return null;
-	return item;
+	return { item, id };
 }
 
 /** The stored NSFW/spoiler flags of a remix source; none when it is unknown, not an image or hidden. */
@@ -48,24 +45,23 @@ async function sourceFlags(
 	user: SessionUser,
 	raw: FormDataEntryValue | null
 ): Promise<{ nsfw?: boolean; spoiler?: boolean }> {
-	// parseId caps at nine digits, so the id is always inside int4
-	const id = typeof raw === 'string' ? parseId(raw) : null;
-	if (id === null || !(await visibleImageMeme(user, id))) return {};
+	const visible = isPublicId(raw) ? await visibleImageMeme(user, raw) : null;
+	if (!visible) return {};
 	const [row] = await db
 		.select({ nsfw: media.nsfw, spoiler: media.spoiler })
 		.from(media)
-		.where(eq(media.id, id));
+		.where(eq(media.id, visible.id));
 	return row ? { nsfw: row.nsfw, spoiler: row.spoiler } : {};
 }
 
 // The hooks already require a session for this path, so there is no guard of its own.
 export const load: PageServerLoad = async ({ locals, url }): Promise<CreateData> => {
 	const user = locals.user!;
-	const templateId = parseId(url.searchParams.get('template'));
-	const memeId = parseId(url.searchParams.get('meme'));
+	const templateParam = url.searchParams.get('template');
+	const memeParam = url.searchParams.get('meme');
 
-	if (templateId !== null) {
-		const template = await getTemplate(templateId);
+	if (templateParam !== null) {
+		const template = isPublicId(templateParam) ? await getTemplate(templateParam) : null;
 		if (!template) error(404, 'Template not found.');
 		return {
 			mode: 'template',
@@ -80,18 +76,19 @@ export const load: PageServerLoad = async ({ locals, url }): Promise<CreateData>
 		};
 	}
 
-	if (memeId !== null) {
-		const item = await visibleImageMeme(user, memeId);
-		if (!item) error(404, 'Meme not found.');
+	if (memeParam !== null) {
+		const visible = isPublicId(memeParam) ? await visibleImageMeme(user, memeParam) : null;
+		if (!visible) error(404, 'Meme not found.');
+		const { item } = visible;
 		return {
 			mode: 'meme',
 			source: {
 				kind: 'meme',
-				id: item.id,
+				id: memeParam,
 				name: item.title || 'Untitled',
 				width: item.width ?? FALLBACK.width,
 				height: item.height ?? FALLBACK.height,
-				url: `/api/memes/${item.id}/source`
+				url: `/api/memes/${memeParam}/source`
 			}
 		};
 	}
@@ -115,10 +112,10 @@ export const actions: Actions = {
 			return fail(415, { error: 'Unsupported file type' });
 		}
 
-		const requested = parseTemplateId(form.get('templateId'));
-		// a removed or unknown template is dropped silently: the meme still posts
+		const requested = form.get('templateId');
+		// an unknown, malformed or removed template is dropped silently: the meme still posts
 		const templateId =
-			requested !== undefined && (await getTemplate(requested)) ? requested : undefined;
+			isPublicId(requested) && (await getTemplate(requested)) ? requested : undefined;
 		// a remix keeps the source meme's flags, looked up here and never taken from the client
 		const flags = await sourceFlags(locals.user!, form.get('sourceMemeId'));
 		const stashed = await stashSharedFile(locals.user!.id, {

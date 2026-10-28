@@ -51,8 +51,8 @@ async function makeAdmin(role: SessionUser['role'] = 'admin'): Promise<SessionUs
 }
 
 async function add(name: string, file: Buffer, actor = admin) {
-	const { id } = await addTemplate(actor, name, file);
-	const [row] = await db.select().from(templates).where(eq(templates.id, id));
+	const { id: pid } = await addTemplate(actor, name, file);
+	const [row] = await db.select().from(templates).where(eq(templates.publicId, pid));
 	created.push(row.objectKey, row.thumbKey);
 	return row;
 }
@@ -107,6 +107,15 @@ describe('templateErrorMessage', () => {
 });
 
 describe('addTemplate', () => {
+	it('returns the public id of the new template', async () => {
+		const { id } = await addTemplate(admin, 'Public', png);
+		expect(typeof id).toBe('string');
+		expect(id).toMatch(/^[A-Za-z0-9]{12}$/);
+		const [row] = await db.select().from(templates).where(eq(templates.publicId, id));
+		created.push(row.objectKey, row.thumbKey);
+		expect(row.name).toBe('Public');
+	});
+
 	it.each([
 		['a JPEG', () => jpeg],
 		['a PNG', () => png],
@@ -224,8 +233,8 @@ describe('addTemplate', () => {
 describe('renameTemplate', () => {
 	it('renames, trims and audits from and to', async () => {
 		const row = await add('Old', png);
-		await renameTemplate(admin, row.id, '  New name ');
-		expect((await getTemplate(row.id))?.name).toBe('New name');
+		await renameTemplate(admin, row.publicId, '  New name ');
+		expect((await getTemplate(row.publicId))?.name).toBe('New name');
 		const [entry] = await audits('template_renamed');
 		expect(entry).toMatchObject({
 			actorId: admin.id,
@@ -237,29 +246,35 @@ describe('renameTemplate', () => {
 
 	it('validates the name', async () => {
 		const row = await add('Old', png);
-		await expect(renameTemplate(admin, row.id, ' ')).rejects.toMatchObject({ code: 'name' });
-		await expect(renameTemplate(admin, row.id, 'x'.repeat(61))).rejects.toMatchObject({
+		await expect(renameTemplate(admin, row.publicId, ' ')).rejects.toMatchObject({ code: 'name' });
+		await expect(renameTemplate(admin, row.publicId, 'x'.repeat(61))).rejects.toMatchObject({
 			code: 'name'
 		});
-		expect((await getTemplate(row.id))?.name).toBe('Old');
+		expect((await getTemplate(row.publicId))?.name).toBe('Old');
 		expect(await audits('template_renamed')).toEqual([]);
 	});
 
 	it('fails for an unknown template', async () => {
-		await expect(renameTemplate(admin, 999, 'X')).rejects.toMatchObject({ code: 'notfound' });
+		await expect(renameTemplate(admin, 'AAAAAAAAAAAA', 'X')).rejects.toMatchObject({
+			code: 'notfound'
+		});
 	});
 
 	it('also renames a removed template', async () => {
 		const row = await add('Old', png);
-		await removeTemplate(admin, row.id);
-		await renameTemplate(admin, row.id, 'Renamed');
-		const [all] = (await listTemplates({ includeRemoved: true })).filter((t) => t.id === row.id);
+		await removeTemplate(admin, row.publicId);
+		await renameTemplate(admin, row.publicId, 'Renamed');
+		const [all] = (await listTemplates({ includeRemoved: true })).filter(
+			(t) => t.id === row.publicId
+		);
 		expect(all.name).toBe('Renamed');
 	});
 
 	it('rejects non-admins', async () => {
 		const row = await add('Old', png);
-		await expect(renameTemplate(await makeAdmin('moderator'), row.id, 'X')).rejects.toMatchObject({
+		await expect(
+			renameTemplate(await makeAdmin('moderator'), row.publicId, 'X')
+		).rejects.toMatchObject({
 			code: 'forbidden'
 		});
 	});
@@ -268,15 +283,15 @@ describe('renameTemplate', () => {
 describe('removeTemplate and restoreTemplate', () => {
 	it('soft-deletes: row and files stay, listings and lookups drop it', async () => {
 		const row = await add('Gone', png);
-		await removeTemplate(admin, row.id);
+		await removeTemplate(admin, row.publicId);
 
 		const [stored] = await db.select().from(templates).where(eq(templates.id, row.id));
 		expect(stored.removedAt).toBeInstanceOf(Date);
 		expect(await exists(row.objectKey)).toBe(true);
 		expect(await exists(row.thumbKey)).toBe(true);
-		expect(await getTemplate(row.id)).toBeNull();
-		expect(await getTemplate(row.id, { includeRemoved: false })).toBeNull();
-		expect((await getTemplate(row.id, { includeRemoved: true }))?.removedAt).toBe(
+		expect(await getTemplate(row.publicId)).toBeNull();
+		expect(await getTemplate(row.publicId, { includeRemoved: false })).toBeNull();
+		expect((await getTemplate(row.publicId, { includeRemoved: true }))?.removedAt).toBe(
 			stored.removedAt!.toISOString()
 		);
 		expect(await listTemplates()).toEqual([]);
@@ -295,9 +310,9 @@ describe('removeTemplate and restoreTemplate', () => {
 
 	it('restores a removed template and audits it', async () => {
 		const row = await add('Back', png);
-		await removeTemplate(admin, row.id);
-		await restoreTemplate(admin, row.id);
-		expect((await getTemplate(row.id))?.removedAt).toBeNull();
+		await removeTemplate(admin, row.publicId);
+		await restoreTemplate(admin, row.publicId);
+		expect((await getTemplate(row.publicId))?.removedAt).toBeNull();
 		expect(await listTemplates()).toHaveLength(1);
 		const [entry] = await audits('template_restored');
 		expect(entry).toMatchObject({ targetId: row.id, detail: 'name="Back"' });
@@ -305,10 +320,12 @@ describe('removeTemplate and restoreTemplate', () => {
 
 	it('fails for unknown ids, a template already removed and one not removed', async () => {
 		const row = await add('Once', png);
-		await expect(removeTemplate(admin, 999)).rejects.toMatchObject({ code: 'notfound' });
-		await expect(restoreTemplate(admin, row.id)).rejects.toMatchObject({ code: 'notfound' });
-		await removeTemplate(admin, row.id);
-		await expect(removeTemplate(admin, row.id)).rejects.toMatchObject({ code: 'notfound' });
+		await expect(removeTemplate(admin, 'AAAAAAAAAAAA')).rejects.toMatchObject({ code: 'notfound' });
+		await expect(restoreTemplate(admin, row.publicId)).rejects.toMatchObject({ code: 'notfound' });
+		// the internal serial does not address a template
+		await expect(removeTemplate(admin, String(row.id))).rejects.toMatchObject({ code: 'notfound' });
+		await removeTemplate(admin, row.publicId);
+		await expect(removeTemplate(admin, row.publicId)).rejects.toMatchObject({ code: 'notfound' });
 		expect(await audits('template_removed')).toHaveLength(1);
 		expect(await audits('template_restored')).toEqual([]);
 	});
@@ -316,9 +333,9 @@ describe('removeTemplate and restoreTemplate', () => {
 	it('rejects non-admins', async () => {
 		const row = await add('Safe', png);
 		const mod = await makeAdmin('moderator');
-		await expect(removeTemplate(mod, row.id)).rejects.toMatchObject({ code: 'forbidden' });
-		await expect(restoreTemplate(mod, row.id)).rejects.toMatchObject({ code: 'forbidden' });
-		expect(await getTemplate(row.id)).not.toBeNull();
+		await expect(removeTemplate(mod, row.publicId)).rejects.toMatchObject({ code: 'forbidden' });
+		await expect(restoreTemplate(mod, row.publicId)).rejects.toMatchObject({ code: 'forbidden' });
+		expect(await getTemplate(row.publicId)).not.toBeNull();
 	});
 });
 
@@ -334,9 +351,9 @@ describe('listTemplates and getTemplate', () => {
 		await db.update(media).set({ templateId: row.id }).where(eq(media.id, b));
 
 		const list = await listTemplates();
-		expect(list.find((t) => t.id === row.id)?.usageCount).toBe(2);
-		expect(list.find((t) => t.id === other.id)?.usageCount).toBe(0);
-		expect((await getTemplate(row.id))?.usageCount).toBe(2);
+		expect(list.find((t) => t.id === row.publicId)?.usageCount).toBe(2);
+		expect(list.find((t) => t.id === other.publicId)?.usageCount).toBe(0);
+		expect((await getTemplate(row.publicId))?.usageCount).toBe(2);
 	});
 
 	it('orders active by usage desc then name asc, removed ones last', async () => {
@@ -351,7 +368,7 @@ describe('listTemplates and getTemplate', () => {
 		await db.update(media).set({ templateId: zed.id }).where(eq(media.id, m1));
 		await db.update(media).set({ templateId: gone.id }).where(eq(media.id, m2));
 		await db.update(media).set({ templateId: gone.id }).where(eq(media.id, m3));
-		await removeTemplate(admin, gone.id);
+		await removeTemplate(admin, gone.publicId);
 
 		expect((await listTemplates()).map((t) => t.name)).toEqual(['Zed', 'Alpha', 'Beta']);
 		expect((await listTemplates({ includeRemoved: true })).map((t) => t.name)).toEqual([
@@ -365,8 +382,8 @@ describe('listTemplates and getTemplate', () => {
 
 	it('returns the full row shape', async () => {
 		const row = await add('Shape', webp);
-		expect(await getTemplate(row.id)).toEqual({
-			id: row.id,
+		expect(await getTemplate(row.publicId)).toEqual({
+			id: row.publicId,
 			name: 'Shape',
 			objectKey: row.objectKey,
 			thumbKey: row.thumbKey,
@@ -378,8 +395,19 @@ describe('listTemplates and getTemplate', () => {
 	});
 
 	it('returns null for an unknown id', async () => {
-		expect(await getTemplate(12345)).toBeNull();
-		expect(await getTemplate(12345, { includeRemoved: true })).toBeNull();
+		expect(await getTemplate('AAAAAAAAAAAA')).toBeNull();
+		expect(await getTemplate('AAAAAAAAAAAA', { includeRemoved: true })).toBeNull();
+		// an internal serial is not a public id
+		const row = await add('Serial', png);
+		expect(await getTemplate(String(row.id))).toBeNull();
+	});
+
+	it('never exposes the internal id in the row JSON', async () => {
+		const row = await add('Hidden', png);
+		const one = await getTemplate(row.publicId);
+		expect(one!.id).toBe(row.publicId);
+		expect(JSON.stringify(one)).not.toMatch(/"id":\d/);
+		expect(JSON.stringify(await listTemplates({ includeRemoved: true }))).not.toMatch(/"id":\d/);
 	});
 
 	it('keeps the template when its creator is deleted', async () => {

@@ -5,11 +5,13 @@ import {
 	QuotePermissionError
 } from '../../../../lib/server/quotes';
 import { mapModerationError } from '../../../../lib/server/moderation-http';
+import { isPublicId, resolveQuoteId } from '../../../../lib/server/public-ids';
 import type { RequestHandler } from './$types';
 
 export const DELETE: RequestHandler = async ({ params, locals }) => {
-	const id = Number(params.id);
-	if (!Number.isSafeInteger(id) || id <= 0) error(404, 'Not found');
+	if (!isPublicId(params.pid)) error(404, 'Not found');
+	const id = await resolveQuoteId(params.pid);
+	if (id === null) error(404, 'Not found');
 	try {
 		await deleteQuote(locals.user!, id);
 	} catch (e) {
