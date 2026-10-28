@@ -55,6 +55,22 @@ export const sessions = pgTable('sessions', {
 	createdAt: createdAt()
 });
 
+/**
+ * The meme generator's template library. Removal is a soft delete (`removedAt`): the row and its
+ * objects stay so memes posted from the template keep their provenance.
+ */
+export const templates = pgTable('templates', {
+	id: serial('id').primaryKey(),
+	name: text('name').notNull(),
+	objectKey: text('object_key').notNull(),
+	thumbKey: text('thumb_key').notNull(),
+	width: integer('width').notNull(),
+	height: integer('height').notNull(),
+	createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+	createdAt: createdAt(),
+	removedAt: timestamp('removed_at', { withTimezone: true })
+});
+
 export const media = pgTable(
 	'media',
 	{
@@ -74,6 +90,8 @@ export const media = pgTable(
 		viewCount: integer('view_count').notNull().default(0),
 		hotScore: doublePrecision('hot_score').notNull().default(0),
 		reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+		// the library template the meme was made from (null for plain uploads and remixes)
+		templateId: integer('template_id').references(() => templates.id, { onDelete: 'set null' }),
 		createdAt: createdAt()
 	},
 	(t) => [

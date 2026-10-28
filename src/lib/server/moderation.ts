@@ -33,7 +33,11 @@ export const AUDIT_ACTIONS = {
 	avatarChanged: 'avatar_changed',
 	avatarRemoved: 'avatar_removed',
 	mottoChanged: 'motto_changed',
-	mottoCleared: 'motto_cleared'
+	mottoCleared: 'motto_cleared',
+	templateAdded: 'template_added',
+	templateRenamed: 'template_renamed',
+	templateRemoved: 'template_removed',
+	templateRestored: 'template_restored'
 } as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
 

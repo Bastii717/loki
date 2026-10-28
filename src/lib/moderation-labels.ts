@@ -38,7 +38,11 @@ export const AUDIT_LABELS: Record<string, string> = {
 	avatar_changed: 'Avatar changed',
 	avatar_removed: 'Avatar removed',
 	motto_changed: 'Motto changed',
-	motto_cleared: 'Motto cleared'
+	motto_cleared: 'Motto cleared',
+	template_added: 'Template added',
+	template_renamed: 'Template renamed',
+	template_removed: 'Template removed',
+	template_restored: 'Template restored'
 };
 
 export const ROLE_LABELS: Record<string, string> = {
