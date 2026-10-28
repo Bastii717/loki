@@ -32,13 +32,15 @@
 		</div>
 	</dl>
 
-	<FeedList
-		items={data.items}
-		nextCursor={data.nextCursor}
-		list="user"
-		uploader={member.id}
-		empty="No memes yet."
-	/>
+	{#key member.id}
+		<FeedList
+			items={data.items}
+			nextCursor={data.nextCursor}
+			list="user"
+			uploader={member.id}
+			empty="No memes yet."
+		/>
+	{/key}
 </main>
 
 <style>

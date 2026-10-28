@@ -410,6 +410,16 @@
 		text-overflow: ellipsis;
 	}
 
+	a.name:hover {
+		text-decoration: underline;
+	}
+
+	a.name:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+		border-radius: 2px;
+	}
+
 	.votes {
 		display: flex;
 		flex-direction: column;

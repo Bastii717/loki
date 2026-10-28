@@ -243,6 +243,16 @@
 		pointer-events: auto;
 	}
 
+	.caption a.name:hover {
+		text-decoration: underline;
+	}
+
+	.caption a.name:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+		border-radius: 2px;
+	}
+
 	.rail {
 		position: absolute;
 		right: 6px;

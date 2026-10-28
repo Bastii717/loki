@@ -262,7 +262,7 @@
 
 	.chips {
 		display: flex;
-		gap: 4px;
+		gap: 2px;
 		overflow-x: auto;
 		scrollbar-width: none;
 	}
@@ -271,10 +271,10 @@
 		display: inline-flex;
 		align-items: center;
 		min-height: 40px;
-		padding: 0 14px;
+		padding: 0 7px;
 		border-radius: var(--radius-pill);
 		color: var(--text-muted);
-		font-size: 14px;
+		font-size: 13px;
 		font-weight: 600;
 		white-space: nowrap;
 	}
