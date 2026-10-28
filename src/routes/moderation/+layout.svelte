@@ -15,7 +15,8 @@
 			? [
 					{ href: '/moderation/users', label: 'Users', count: 0 },
 					{ href: '/moderation/maintenance', label: 'Maintenance', count: 0 },
-					{ href: '/moderation/theme', label: 'Theme', count: 0 }
+					{ href: '/moderation/theme', label: 'Theme', count: 0 },
+					{ href: '/moderation/templates', label: 'Templates', count: 0 }
 				]
 			: []),
 		{ href: '/moderation/log', label: 'Log', count: 0 }
