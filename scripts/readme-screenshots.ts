@@ -482,7 +482,9 @@ async function main(): Promise<void> {
 				'profile-edit-mobile',
 				'stats-mobile',
 				'notifications-mobile',
-				'profile-notifications-mobile'
+				'profile-notifications-mobile',
+				'search-mobile',
+				'member-mobile'
 			)
 		)
 			await withContext(
@@ -504,6 +506,15 @@ async function main(): Promise<void> {
 							'profile-notifications-mobile.png',
 							'Save'
 						);
+					if (wants('search-mobile'))
+						// hits a meme, a tag and a quote in the demo data
+						await shootPage(page, '/search?q=metting', 'search-mobile.png', 'Memes');
+					if (wants('member-mobile')) {
+						await page.goto(`${BASE_URL}/search?q=%40jonas`);
+						const href = await page.locator('a[href^="/users/"]').first().getAttribute('href');
+						if (!href) throw new Error('no member link for jonas');
+						await shootPage(page, href, 'member-mobile.png', 'Member since');
+					}
 				},
 				{ mobile: true, account: OWNER }
 			);

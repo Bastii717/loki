@@ -174,6 +174,10 @@ Members edit their profile at `/profile/edit`: a display name of 2 to 24 charact
 
 Members get in-app notices (comments on their memes and threads, moderation outcomes) behind the bell in the tab bar, and switch the optional ones off at `/profile/notifications`. A daily job deletes notices whose last activity is older than 90 days, read or not; it also runs once at every start and needs no configuration.
 
+### Search
+
+Search needs no configuration. Migration 0010 runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` (a trusted extension, so the application role may create it when it owns the database, as in the shipped compose setup) and adds the trigram indexes. On a managed database where the application role cannot create extensions, create `pg_trgm` once by hand before deploying.
+
 ## Releases
 
 The `Docker` workflow builds the image for every pull request (without pushing) and publishes it on pushes to `main` and on release tags:
