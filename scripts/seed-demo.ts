@@ -467,11 +467,12 @@ async function seedMemes(byName: UserMap) {
 			.where(eq(media.id, id));
 		// comments arrive a while after the post, ~17 minutes apart
 		for (const [i, c] of m.comments.entries()) {
+			// addComment hands back the public id, which is what the update keys on
 			const comment = await addComment(byName.get(c.by)!.id, id, c.text);
 			await db
 				.update(comments)
 				.set({ createdAt: new Date(postedAt + (i + 1) * 17 * 60_000) })
-				.where(eq(comments.id, comment.id));
+				.where(eq(comments.publicId, comment.id));
 		}
 		console.log(`Seeded #${id} "${m.title}"`);
 	}
@@ -487,7 +488,12 @@ async function seedExtras(byName: UserMap) {
 	const [{ n: quoteCount }] = await db.select({ n: count() }).from(quotes);
 	if (quoteCount === 0) {
 		for (const q of QUOTES) {
-			const { id } = await addQuote(byName.get(q.by)!.id, q.text, q.author);
+			// addQuote hands back the public id; voteQuote wants the internal one
+			const { id: publicId } = await addQuote(byName.get(q.by)!.id, q.text, q.author);
+			const [{ id }] = await db
+				.select({ id: quotes.id })
+				.from(quotes)
+				.where(eq(quotes.publicId, publicId));
 			for (const name of q.up) await voteQuote(byName.get(name)!.id, id, 1);
 			for (const name of q.down) await voteQuote(byName.get(name)!.id, id, -1);
 		}
