@@ -71,7 +71,7 @@ export class TimeoutActionError extends Error {
 	}
 }
 
-type Executor = Pick<typeof db, 'select' | 'insert' | 'update'>;
+export type Executor = Pick<typeof db, 'select' | 'insert' | 'update'>;
 
 const ROLE_RANK = { member: 0, moderator: 1, admin: 2 } as const;
 

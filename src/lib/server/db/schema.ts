@@ -279,3 +279,45 @@ export const seasonSettings = pgTable('season_settings', {
 	updatedBy: integer('updated_by').references(() => users.id),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
+
+/**
+ * In-app notices. contentId deliberately has no foreign key: a notice about deleted content must
+ * survive it. mediaId is set only while the meme exists and the notice leads to its page, so
+ * deleting the meme takes those notices with it.
+ */
+export const notifications = pgTable(
+	'notifications',
+	{
+		id: serial('id').primaryKey(),
+		userId: integer('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		kind: text('kind').notNull(),
+		actorId: integer('actor_id').references(() => users.id, { onDelete: 'set null' }),
+		contentType: text('content_type', { enum: ['meme', 'comment', 'quote'] }),
+		contentId: integer('content_id'),
+		mediaId: integer('media_id').references(() => media.id, { onDelete: 'cascade' }),
+		detail: text('detail').notNull().default(''),
+		count: integer('count').notNull().default(1),
+		readAt: timestamp('read_at', { withTimezone: true }),
+		createdAt: createdAt(),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(t) => [
+		// The bell count only ever looks at unread rows.
+		index('notifications_unread_idx')
+			.on(t.userId)
+			.where(sql`${t.readAt} IS NULL`),
+		index('notifications_user_updated_idx').on(t.userId, t.updatedAt.desc())
+	]
+);
+
+/** Per-member opt-outs for the optional notices. No row means everything is on. */
+export const notificationPrefs = pgTable('notification_prefs', {
+	userId: integer('user_id')
+		.primaryKey()
+		.references(() => users.id, { onDelete: 'cascade' }),
+	comments: boolean('comments').notNull().default(true),
+	threadComments: boolean('thread_comments').notNull().default(true),
+	reportOutcomes: boolean('report_outcomes').notNull().default(true)
+});
