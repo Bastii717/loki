@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import type { TemplateRow } from '../../lib/server/templates';
+import Editor from './Editor.svelte';
 import Page from './+page.svelte';
 
 const tpl = (id: number, name: string): TemplateRow => ({
@@ -75,13 +77,43 @@ describe('create page: editor', () => {
 		expect(out.match(/0\/100/g)).toHaveLength(2);
 	});
 
-	it('sizes the canvas by the output size', () => {
+	it('does not size the canvas from the stored dimensions before the image loads', () => {
 		const out = html({
 			...editorData('template'),
 			source: { ...editorData('template').source, width: 4000, height: 3000 }
 		});
-		expect(out).toMatch(/<canvas[^>]*width="1200"/);
-		expect(out).toMatch(/<canvas[^>]*height="900"/);
+		expect(out).toMatch(/<canvas[^>]*style="[^"]*aspect-ratio:\s*4000 \/ 3000/);
+		const canvas = out.match(/<canvas[^>]*>/)![0];
+		expect(canvas).not.toMatch(/\swidth=/);
+		expect(canvas).not.toMatch(/\sheight=/);
+	});
+
+	it('uses the stored size as the aspect-ratio placeholder', () => {
+		const out = html(editorData('template'));
+		expect(out).toMatch(/<canvas[^>]*style="[^"]*aspect-ratio:\s*640 \/ 480/);
+	});
+
+	it('limits the preview height so the fields stay reachable', () => {
+		const source = readFileSync(new URL('./Editor.svelte', import.meta.url), 'utf8');
+		const canvasRule = source.match(/canvas\s*\{[^}]*\}/)![0];
+		expect(canvasRule).toContain('max-height: 60vh');
+		expect(canvasRule).toMatch(/width:\s*auto/);
+		expect(canvasRule).toContain('max-width: 100%');
+		expect(canvasRule).toContain('margin-inline: auto');
+	});
+
+	it('derives the title from the top text with collapsed whitespace', () => {
+		const out = render(Editor, {
+			props: { source: editorData('template').source, form: null, top: 'a   b\n c' } as never
+		}).body;
+		expect(out).toMatch(/<input[^>]*type="hidden"[^>]*name="title"[^>]*value="a b c"/);
+	});
+
+	it('caps the title at 120 characters', () => {
+		const out = render(Editor, {
+			props: { source: editorData('template').source, form: null, top: 'x'.repeat(300) } as never
+		}).body;
+		expect(out).toContain(`name="title" value="${'x'.repeat(120)}"`);
 	});
 
 	it('has UPPERCASE checked by default', () => {
@@ -123,5 +155,36 @@ describe('create page: editor', () => {
 			props: { data: editorData('template'), form: { error: 'Posting is not wired yet.' } } as never
 		}).body;
 		expect(out).toContain('Posting is not wired yet.');
+	});
+});
+
+describe('create page: keyed editor', () => {
+	const withSource = (id: number, name: string) => ({
+		mode: 'template',
+		source: {
+			kind: 'template',
+			id,
+			name,
+			width: 640,
+			height: 480,
+			url: `/api/templates/${id}/image`
+		}
+	});
+
+	it('renders a different editor for each source', () => {
+		const a = html(withSource(5, 'Drake'));
+		const b = html(withSource(9, 'Distracted boyfriend'));
+		expect(a).toMatch(/name="templateId"[^>]*value="5"/);
+		expect(b).toMatch(/name="templateId"[^>]*value="9"/);
+		expect(a).toContain('aria-label="Preview of Drake"');
+		expect(b).toContain('aria-label="Preview of Distracted boyfriend"');
+		expect(a).not.toEqual(b);
+	});
+
+	it('renders no grid markup in editor mode', () => {
+		const out = html(withSource(5, 'Drake'));
+		expect(out).not.toMatch(/class="[^"]*\bgrid\b/);
+		expect(out).not.toContain('Pick a template');
+		expect(out).toContain('<canvas');
 	});
 });
