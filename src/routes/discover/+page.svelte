@@ -17,9 +17,9 @@
 	let loading = false;
 	let exhausted = false;
 	let replaying = false;
-	let activeId = $state<number | null>(null);
-	const loaded = new SvelteSet<number>();
-	const marked = new SvelteSet<number>();
+	let activeId = $state<string | null>(null);
+	const loaded = new SvelteSet<string>();
+	const marked = new SvelteSet<string>();
 
 	function append(items: FeedItem[], caughtUp: boolean) {
 		const fresh = items.filter((item) => !loaded.has(item.id));
@@ -57,7 +57,7 @@
 		}
 	}
 
-	function markSeen(id: number) {
+	function markSeen(id: string) {
 		if (marked.has(id)) return;
 		marked.add(id);
 		// failures (network or HTTP, e.g. 429) un-mark so the next activation retries
@@ -75,7 +75,7 @@
 					(hits) => {
 						for (const hit of hits) {
 							const el = hit.target as HTMLElement;
-							const id = el.dataset.id ? Number(el.dataset.id) : null;
+							const id = el.dataset.id ?? null;
 							// a slide dropping below the threshold stops being the active one (pauses its video)
 							if (
 								(!hit.isIntersecting || hit.intersectionRatio < ACTIVE_RATIO) &&

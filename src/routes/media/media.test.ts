@@ -80,6 +80,21 @@ describe('GET /media/[...key]', () => {
 		expect(await object.text()).toBe(BYTES);
 	});
 
+	it('accepts the id-free key shapes and the old per-user shapes', async () => {
+		const user = await testUser();
+		const cookie = await createSession(user.id);
+		const uuid = crypto.randomUUID();
+		for (const key of [
+			`memes/${uuid}.webp`,
+			`memes/u7/${uuid}.webp`,
+			`avatars/${uuid}-256.webp`,
+			`avatars/${uuid}-64.webp`,
+			`avatars/u7/${uuid}-64.webp`
+		]) {
+			expect((await request(`/media/${key}`, cookie)).status, key).toBe(302);
+		}
+	});
+
 	it.each([
 		'/media/memes/../secrets/x.jpg',
 		'/media/../../etc',
@@ -93,7 +108,9 @@ describe('GET /media/[...key]', () => {
 		'/media/memes/u1/x%00.jpg',
 		'/media/other/u1/x.jpg',
 		'/media/xmemes/u1/x.jpg',
-		'/media/memes'
+		'/media/memes',
+		'/media/memes/',
+		'/media/avatars/%2e%2e/x-64.webp'
 	])('returns 404 for %s', async (path) => {
 		const user = await testUser();
 		const res = await request(path, await createSession(user.id));

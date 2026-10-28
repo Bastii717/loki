@@ -14,12 +14,12 @@ export function optimisticVote(state: VoteState, dir: 1 | -1): VoteState {
  * optimistic state right away, POSTs it, lets the server's answer win, and rolls back on any
  * failure. A click while a request is in flight is ignored.
  *
- * `read`/`write` bridge to the component's own reactive state; `memeId` is a getter so the
+ * `read`/`write` bridge to the component's own reactive state; `memeId` (the meme's public id) is a getter so the
  * current id is used at click time. `onError` gets the user-facing text of a rejected vote (the
  * maintenance notice of a 503, the timeout notice of a 403), other failures roll back silently.
  */
 export function createVoter(
-	memeId: () => number,
+	memeId: () => string,
 	read: () => VoteState,
 	write: (state: VoteState) => void,
 	onError?: (message: string) => void

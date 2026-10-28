@@ -21,7 +21,7 @@
 	// Under review and withheld by the server (members): panel only, no reveal. Mods keep the content.
 	const withheld = $derived(item.mediaUrl === null);
 	const userHref = $derived(
-		item.uploaderId === null ? null : resolve('/users/[id]', { id: String(item.uploaderId) })
+		item.uploaderId === null ? null : resolve('/users/[pid]', { pid: item.uploaderId })
 	);
 
 	// Only the active slide plays; the rest stay paused so swiping does not decode a pile of videos.
@@ -146,7 +146,7 @@
 	>
 	<a
 		class="stat"
-		href={resolve('/meme/[id]', { id: String(item.id) })}
+		href={resolve('/meme/[pid]', { pid: item.id })}
 		aria-label="{item.commentCount} {item.commentCount === 1 ? 'comment' : 'comments'}"
 		><MessageCircle size={22} /><small>{item.commentCount}</small></a
 	>

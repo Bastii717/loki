@@ -3,11 +3,13 @@ import { createVoter, optimisticVote, type VoteState } from './vote';
 
 afterEach(() => vi.unstubAllGlobals());
 
+const PID = 'Ab3dE5gH7jK9';
+
 function setup(initial: VoteState, fetchImpl: typeof fetch) {
 	vi.stubGlobal('fetch', fetchImpl);
 	let state = initial;
 	const vote = createVoter(
-		() => 7,
+		() => PID,
 		() => state,
 		(s) => {
 			state = s;
@@ -37,7 +39,7 @@ describe('createVoter', () => {
 		await done;
 		expect(t.get()).toEqual({ score: 10, userVote: 1 }); // server wins
 		const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-		expect(url).toBe('/api/memes/7/vote');
+		expect(url).toBe(`/api/memes/${PID}/vote`);
 		expect(init).toMatchObject({ method: 'POST', body: JSON.stringify({ value: 1 }) });
 	});
 
@@ -63,7 +65,7 @@ describe('createVoter', () => {
 		let state: VoteState = { score: 3, userVote: 0 };
 		const errors: string[] = [];
 		const vote = createVoter(
-			() => 7,
+			() => PID,
 			() => state,
 			(s) => {
 				state = s;
@@ -79,7 +81,7 @@ describe('createVoter', () => {
 		vi.stubGlobal('fetch', () => Promise.resolve(new Response('no', { status: 500 })));
 		const errors: string[] = [];
 		const vote = createVoter(
-			() => 7,
+			() => PID,
 			() => ({ score: 3, userVote: 0 }),
 			() => {},
 			(m) => errors.push(m)

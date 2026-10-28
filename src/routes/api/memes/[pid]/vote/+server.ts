@@ -1,11 +1,12 @@
 import { error, json } from '@sveltejs/kit';
 import { applyVote, MediaNotFoundError, type VoteValue } from '../../../../../lib/server/votes';
 import { mapModerationError } from '../../../../../lib/server/moderation-http';
+import { resolveMediaId } from '../../../../../lib/server/public-ids';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
-	const mediaId = Number(params.id);
-	if (!Number.isSafeInteger(mediaId) || mediaId <= 0) error(404, 'Not found');
+	const mediaId = await resolveMediaId(params.pid);
+	if (mediaId === null) error(404, 'Not found');
 
 	let body: unknown;
 	try {

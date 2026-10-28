@@ -7,10 +7,10 @@ import { addOpenReports, OVER_THRESHOLD } from '../../lib/server/moderation-test
 import { resetRateLimits } from '../../lib/server/rate-limit';
 import { callRoute } from '../../lib/server/test-request';
 import { load as quotesLoad } from '../quotes/+page.server';
-import { load as memeLoad } from '../meme/[id]/+page.server';
+import { load as memeLoad } from '../meme/[pid]/+page.server';
 import { GET as discover } from './discover/+server';
 import { GET as feed } from './feed/+server';
-import { GET as getComments } from './memes/[id]/comments/+server';
+import { GET as getComments } from './memes/[pid]/comments/+server';
 
 beforeAll(setupDb);
 beforeEach(async () => {
@@ -38,7 +38,7 @@ async function world() {
 			objectKey: 'memes/o.webp',
 			thumbKey: 'memes/t.webp'
 		})
-		.returning({ id: media.id });
+		.returning({ id: media.id, publicId: media.publicId });
 	const [comment] = await db
 		.insert(comments)
 		.values({ mediaId: meme.id, authorId: author.id, text: COMMENT })
@@ -57,12 +57,13 @@ async function world() {
 	});
 	return {
 		memeId: meme.id,
+		memePid: meme.publicId,
 		member: { session: await createSession(member.id), user: user(member, 'member') },
 		mod: { session: await createSession(mod.id), user: user(mod, 'moderator') }
 	};
 }
 
-type Item = { id: number; title: string; mediaUrl: string | null; underReview: boolean };
+type Item = { id: string; title: string; mediaUrl: string | null; underReview: boolean };
 
 describe('revealAll plumbing: members get nulled content, moderators the full content', () => {
 	it('GET /api/feed', async () => {
@@ -70,7 +71,7 @@ describe('revealAll plumbing: members get nulled content, moderators the full co
 		const get = async (session: string) => {
 			const { response } = await callRoute({ handler: feed, path: '/api/feed', session });
 			expect(response.status).toBe(200);
-			return ((await response.json()) as { items: Item[] }).items.find((i) => i.id === w.memeId)!;
+			return ((await response.json()) as { items: Item[] }).items.find((i) => i.id === w.memePid)!;
 		};
 		expect(await get(w.member.session)).toMatchObject({
 			title: '',
@@ -89,7 +90,7 @@ describe('revealAll plumbing: members get nulled content, moderators the full co
 		const get = async (session: string) => {
 			const { response } = await callRoute({ handler: discover, path: '/api/discover', session });
 			expect(response.status).toBe(200);
-			return ((await response.json()) as { items: Item[] }).items.find((i) => i.id === w.memeId)!;
+			return ((await response.json()) as { items: Item[] }).items.find((i) => i.id === w.memePid)!;
 		};
 		expect(await get(w.member.session)).toMatchObject({ title: '', mediaUrl: null });
 		expect(await get(w.mod.session)).toMatchObject({
@@ -98,13 +99,13 @@ describe('revealAll plumbing: members get nulled content, moderators the full co
 		});
 	});
 
-	it('GET /api/memes/[id]/comments', async () => {
+	it('GET /api/memes/[pid]/comments', async () => {
 		const w = await world();
 		const get = async (session: string) => {
 			const { response } = await callRoute({
 				handler: getComments,
-				path: `/api/memes/${w.memeId}/comments`,
-				params: { id: String(w.memeId) },
+				path: `/api/memes/${w.memePid}/comments`,
+				params: { pid: w.memePid },
 				session
 			});
 			expect(response.status).toBe(200);
@@ -114,10 +115,10 @@ describe('revealAll plumbing: members get nulled content, moderators the full co
 		expect((await get(w.mod.session)).map((c) => c.text)).toEqual([COMMENT]);
 	});
 
-	it('/meme/[id] load', async () => {
+	it('/meme/[pid] load', async () => {
 		const w = await world();
 		const load = (user: (typeof w)['member']['user']) =>
-			memeLoad({ params: { id: String(w.memeId) }, locals: { user } } as never) as Promise<{
+			memeLoad({ params: { pid: w.memePid }, locals: { user } } as never) as Promise<{
 				item: Item;
 				comments: { text: string | null }[];
 			}>;

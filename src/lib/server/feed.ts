@@ -3,11 +3,13 @@ import { AWARD_KIND } from './awards';
 import { db } from './db';
 import { env } from './env';
 import { openReporterCountSelect, overThresholdSql, underReviewSql } from './moderation';
+import { isPublicId, publicIdOfMedia } from './public-ids';
 
 export type FeedSort = 'new' | 'hot' | 'hof';
 
 export interface FeedItem {
-	id: number;
+	/** The meme's public id; the internal id never leaves this module. */
+	id: string;
 	title: string;
 	kind: 'image' | 'gif' | 'video';
 	/** null while under review, for viewers who may not see it. */
@@ -26,8 +28,8 @@ export interface FeedItem {
 	/** Display name when set, else the username. */
 	uploader: string;
 	uploaderRole: 'member' | 'moderator' | 'admin';
-	/** The uploader's user id for name links; null exactly when `uploader` is blanked (hidden for the viewer). */
-	uploaderId: number | null;
+	/** The uploader's public id for name links; null exactly when `uploader` is blanked (hidden for the viewer). */
+	uploaderId: string | null;
 	/** Thumb key of the uploader's avatar, null when they have none. */
 	uploaderAvatar: string | null;
 	/** The viewer uploaded this meme (never offer "Report" on it). */
@@ -50,10 +52,10 @@ export interface FeedOptions {
 	tag?: string;
 	cursor?: string;
 	limit?: number;
-	/** Restrict to a single meme (detail view); sort/cursor are then irrelevant. */
-	id?: number;
-	/** Restrict to these memes (discover hydrates its own selection); ordering is the caller's job. */
-	ids?: number[];
+	/** Restrict to a single meme by public id (detail view); sort/cursor are then irrelevant. */
+	id?: string;
+	/** Restrict to these memes by public id (discover hydrates its own selection); items come back in this order. */
+	ids?: string[];
 	/**
 	 * Profile lists: only memes uploaded by `uploaderId` / favorited by `favoriteOf` (viewer state stays the viewer's).
 	 * `hideUnderReview` drops hidden memes from the row set instead of masking them (member pages show no placeholders).
@@ -72,7 +74,8 @@ const MAX_LIMIT = 50;
 
 interface Cursor {
 	v: number | string;
-	id: number;
+	/** Public id of the last row: the keyset tiebreak (compared byte-wise, `COLLATE "C"`), so a decoded cursor reveals no internal id. */
+	id: string;
 }
 
 const encodeCursor = (c: Cursor) => Buffer.from(JSON.stringify(c)).toString('base64url');
@@ -84,7 +87,7 @@ function decodeCursor(raw: string, sort: FeedSort): Cursor {
 			sort === 'new'
 				? typeof c.v === 'string' && !Number.isNaN(Date.parse(c.v))
 				: typeof c.v === 'number' && Number.isFinite(c.v);
-		if (valueOk && Number.isInteger(c.id)) return { v: c.v, id: c.id };
+		if (valueOk && isPublicId(c.id)) return { v: c.v, id: c.id };
 	} catch {
 		// fall through
 	}
@@ -103,7 +106,7 @@ export function parseTag(raw: string | null): string | undefined {
 }
 
 interface Row extends Record<string, unknown> {
-	id: number;
+	public_id: string;
 	title: string;
 	kind: FeedItem['kind'];
 	object_key: string;
@@ -119,7 +122,7 @@ interface Row extends Record<string, unknown> {
 	created_at_raw: string;
 	uploader: string;
 	uploader_role: FeedItem['uploaderRole'];
-	uploader_id: number;
+	uploader_public_id: string;
 	uploader_avatar: string | null;
 	mine: boolean;
 	tag_names: string[];
@@ -133,7 +136,7 @@ interface Row extends Record<string, unknown> {
 
 /**
  * One page of the feed. A single statement with lateral aggregates (no per-row queries);
- * keyset pagination on (sort key, id). Optional filters (`tag`, `id`, `ids`, `filter.uploaderId`,
+ * keyset pagination on (sort key, public id). Optional filters (`tag`, `id`, `ids`, `filter.uploaderId`,
  * `filter.favoriteOf`, `filter.hideUnderReview`) only narrow the row set; ordering and cursors are unaffected. `created_at` travels in the cursor as Postgres' own
  * text form so microsecond precision survives (a JS Date would truncate to milliseconds).
  */
@@ -152,7 +155,7 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 	);
 
 	const after = cursor
-		? sql`AND (${keyCol}, m.id) < (${cursor.v}::${keyType}, ${cursor.id}::integer)`
+		? sql`AND (${keyCol}, m.public_id COLLATE "C") < (${cursor.v}::${keyType}, ${cursor.id}::text COLLATE "C")`
 		: sql``;
 	const tagFilter = opts.tag
 		? sql`AND EXISTS (
@@ -167,15 +170,24 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 		}`
 		: sql``;
 
-	const idFilter = opts.id !== undefined ? sql`AND m.id = ${opts.id}` : sql``;
-
-	const idsFilter =
-		opts.ids !== undefined
-			? sql`AND m.id IN (${sql.join(
-					opts.ids.map((i) => sql`${i}`),
-					sql`, `
-				)})`
+	// Ids that are not public ids match nothing (and never reach a comparison with a column).
+	const idFilter =
+		opts.id !== undefined
+			? isPublicId(opts.id)
+				? sql`AND m.public_id = ${opts.id}`
+				: sql`AND false`
 			: sql``;
+
+	const idsList = opts.ids?.filter(isPublicId);
+	const idsFilter =
+		idsList === undefined
+			? sql``
+			: idsList.length === 0
+				? sql`AND false`
+				: sql`AND m.public_id IN (${sql.join(
+						idsList.map((i) => sql`${i}`),
+						sql`, `
+					)})`;
 
 	const uploaderFilter =
 		opts.filter?.uploaderId !== undefined
@@ -193,12 +205,12 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 		: sql``;
 
 	const rows = await db.execute<Row>(sql`
-		SELECT m.id, m.title, m.kind, m.object_key, m.thumb_key, m.width, m.height,
+		SELECT m.public_id AS public_id, m.title, m.kind, m.object_key, m.thumb_key, m.width, m.height,
 			m.nsfw, m.spoiler, m.score, m.view_count, m.hot_score, m.created_at,
 			m.created_at::text AS created_at_raw,
 			COALESCE(u.display_name, u.username) AS uploader,
 			u.role AS uploader_role,
-			m.uploader_id AS uploader_id,
+			u.public_id AS uploader_public_id,
 			u.avatar_thumb_key AS uploader_avatar,
 			(m.uploader_id = ${opts.viewerId}) AS mine,
 			COALESCE(tg.names, ARRAY[]::text[]) AS tag_names,
@@ -234,7 +246,7 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 		LEFT JOIN votes v ON v.media_id = m.id AND v.user_id = ${opts.viewerId}
 		LEFT JOIN favorites uf ON uf.media_id = m.id AND uf.user_id = ${opts.viewerId}
 		WHERE true ${after} ${tagFilter} ${idFilter} ${idsFilter} ${uploaderFilter} ${favoriteFilter} ${hideFilter}
-		ORDER BY ${keyCol} DESC, m.id DESC
+		ORDER BY ${keyCol} DESC, m.public_id COLLATE "C" DESC
 		LIMIT ${limit + 1}
 	`);
 
@@ -242,10 +254,16 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 	const hasMore = page.length > limit;
 	if (hasMore) page.length = limit;
 
-	const items: FeedItem[] = page.map((r) => {
+	// `ids` callers rely on their own order (discover's weighted replay), not the sort order
+	const rank = idsList && new Map(idsList.map((pid, i) => [pid, i]));
+	const ordered = rank
+		? [...page].sort((x, y) => rank.get(x.public_id)! - rank.get(y.public_id)!)
+		: page;
+
+	const items: FeedItem[] = ordered.map((r) => {
 		const hide = r.under_review && !opts.revealAll;
 		return {
-			id: r.id,
+			id: r.public_id,
 			title: hide ? '' : r.title,
 			kind: r.kind,
 			thumbUrl: hide ? null : `/media/${r.thumb_key}`,
@@ -263,7 +281,7 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 			uploader: hide ? '' : r.uploader,
 			// the role would identify the hidden uploader as much as the name does
 			uploaderRole: hide ? 'member' : r.uploader_role,
-			uploaderId: hide ? null : r.uploader_id,
+			uploaderId: hide ? null : r.uploader_public_id,
 			uploaderAvatar: hide ? null : r.uploader_avatar,
 			mine: r.mine,
 			createdAt: new Date(r.created_at).toISOString(),
@@ -278,17 +296,27 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 		const last = page[page.length - 1];
 		const v =
 			opts.sort === 'new' ? last.created_at_raw : opts.sort === 'hot' ? last.hot_score : last.score;
-		nextCursor = encodeCursor({ v, id: last.id });
+		nextCursor = encodeCursor({ v, id: last.public_id });
 	}
 	return { items, nextCursor };
 }
 
-/** A single meme in feed-item shape, or null when it does not exist. */
+/** A single meme in feed-item shape by public id, or null when the id is invalid or unknown. */
 export async function getFeedItem(
 	viewerId: number,
-	id: number,
-	revealAll = false
+	revealAll: boolean,
+	pid: string
 ): Promise<FeedItem | null> {
-	const { items } = await getFeedPage({ viewerId, revealAll, sort: 'new', id, limit: 1 });
+	const { items } = await getFeedPage({ viewerId, revealAll, sort: 'new', id: pid, limit: 1 });
 	return items[0] ?? null;
+}
+
+/** Same as `getFeedItem` for server callers that hold the internal id (one extra lookup). */
+export async function getFeedItemById(
+	viewerId: number,
+	revealAll: boolean,
+	id: number
+): Promise<FeedItem | null> {
+	const pid = await publicIdOfMedia(id);
+	return pid === null ? null : getFeedItem(viewerId, revealAll, pid);
 }

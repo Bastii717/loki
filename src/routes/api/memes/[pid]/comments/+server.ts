@@ -2,22 +2,24 @@ import { canSeeUnderReview } from '../../../../../lib/server/moderation';
 import { error, json } from '@sveltejs/kit';
 import { addComment, CommentTextError, listComments } from '../../../../../lib/server/comments';
 import { mapModerationError } from '../../../../../lib/server/moderation-http';
+import { resolveMediaId } from '../../../../../lib/server/public-ids';
 import { MediaNotFoundError } from '../../../../../lib/server/votes';
 import type { RequestHandler } from './$types';
 
-function parseId(raw: string): number {
-	const id = Number(raw);
-	if (!Number.isSafeInteger(id) || id <= 0) error(404, 'Not found');
+/** The meme's internal id for a public id from the URL; an invalid or unknown id is a 404. */
+async function parseId(pid: string): Promise<number> {
+	const id = await resolveMediaId(pid);
+	if (id === null) error(404, 'Not found');
 	return id;
 }
 
 export const GET: RequestHandler = async ({ params, locals }) => {
 	const revealAll = locals.user !== null && canSeeUnderReview(locals.user);
-	return json({ comments: await listComments(parseId(params.id), revealAll) });
+	return json({ comments: await listComments(await parseId(params.pid), revealAll) });
 };
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
-	const mediaId = parseId(params.id);
+	const mediaId = await parseId(params.pid);
 	let body: unknown;
 	try {
 		body = await request.json();

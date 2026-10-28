@@ -1,18 +1,21 @@
 import { eq } from 'drizzle-orm';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSession } from '../../lib/server/auth/session';
-import { addComment } from '../../lib/server/comments';
 import { db } from '../../lib/server/db';
 import { comments, media, quotes } from '../../lib/server/db/schema';
 import { resetDb, setupDb, testUser } from '../../lib/server/db/test-utils';
+import { insertCommentRow, insertQuoteRow } from '../../lib/server/moderation-test-utils';
 import { ensureBucket } from '../../lib/server/storage-test-utils';
-import { addQuote } from '../../lib/server/quotes';
 import { resetRateLimits } from '../../lib/server/rate-limit';
 import { callRoute } from '../../lib/server/test-request';
-import { DELETE as deleteComment } from './comments/[id]/+server';
-import { DELETE as deleteMeme, PATCH as patchMeme } from './memes/[id]/+server';
-import { POST as seenMeme } from './memes/[id]/seen/+server';
-import { POST as voteMeme } from './memes/[id]/vote/+server';
+import { DELETE as deleteComment } from './comments/[pid]/+server';
+import { DELETE as deleteMeme, PATCH as patchMeme } from './memes/[pid]/+server';
+import { GET as getMemeComments, POST as postMemeComment } from './memes/[pid]/comments/+server';
+import { POST as favoriteMeme } from './memes/[pid]/favorite/+server';
+import { POST as seenMeme } from './memes/[pid]/seen/+server';
+import { GET as memeSource } from './memes/[pid]/source/+server';
+import { POST as voteMeme } from './memes/[pid]/vote/+server';
+// TODO(public-ids slice B): the quote routes become [pid] and take the quote's public id
 import { DELETE as deleteQuote } from './quotes/[id]/+server';
 import { POST as voteQuote } from './quotes/[id]/vote/+server';
 
@@ -49,22 +52,33 @@ async function world() {
 			objectKey: `${key}.webp`,
 			thumbKey: `${key}-thumb.webp`
 		})
-		.returning({ id: media.id });
-	const comment = await addComment(owner.id, meme.id, 'hallo');
-	const quote = await addQuote(owner.id, 'Zitat', 'Opa');
-	return { sessions, memeId: meme.id, commentId: comment.id, quoteId: quote.id };
+		.returning({ id: media.id, publicId: media.publicId });
+	const comment = await insertCommentRow(owner.id, meme.id, 'hallo');
+	const quote = await insertQuoteRow(owner.id, 'Zitat');
+	return {
+		sessions,
+		memeId: meme.id,
+		memePid: meme.publicId,
+		commentId: comment.id,
+		commentPid: comment.publicId,
+		quoteId: quote.id,
+		quotePid: quote.publicId
+	};
 }
 
-const MISSING = '999999';
+/** Well-formed, but nobody's public id. */
+const MISSING = 'AAAAAAAAAAAA';
+// TODO(public-ids slice B): quotes switch to MISSING as well
+const MISSING_QUOTE = '999999';
 
-describe('DELETE /api/comments/[id]', () => {
+describe('DELETE /api/comments/[pid]', () => {
 	it('forbids a member from deleting a foreign comment (403) and keeps it', async () => {
 		const w = await world();
 		const { response } = await callRoute({
 			handler: deleteComment,
-			path: `/api/comments/${w.commentId}`,
+			path: `/api/comments/${w.commentPid}`,
 			method: 'DELETE',
-			params: { id: String(w.commentId) },
+			params: { pid: w.commentPid },
 			session: w.sessions.other
 		});
 		expect(response.status).toBe(403);
@@ -75,9 +89,9 @@ describe('DELETE /api/comments/[id]', () => {
 		const w = await world();
 		const own = await callRoute({
 			handler: deleteComment,
-			path: `/api/comments/${w.commentId}`,
+			path: `/api/comments/${w.commentPid}`,
 			method: 'DELETE',
-			params: { id: String(w.commentId) },
+			params: { pid: w.commentPid },
 			session: w.sessions.owner
 		});
 		expect(own.response.status).toBe(204);
@@ -85,9 +99,9 @@ describe('DELETE /api/comments/[id]', () => {
 		const again = await world();
 		const mod = await callRoute({
 			handler: deleteComment,
-			path: `/api/comments/${again.commentId}`,
+			path: `/api/comments/${again.commentPid}`,
 			method: 'DELETE',
-			params: { id: String(again.commentId) },
+			params: { pid: again.commentPid },
 			session: again.sessions.mod
 		});
 		expect(mod.response.status).toBe(204);
@@ -102,21 +116,21 @@ describe('DELETE /api/comments/[id]', () => {
 			handler: deleteComment,
 			path: `/api/comments/${MISSING}`,
 			method: 'DELETE',
-			params: { id: MISSING },
+			params: { pid: MISSING },
 			session: w.sessions.mod
 		});
 		expect(response.status).toBe(404);
 	});
 });
 
-describe('DELETE/PATCH /api/memes/[id]', () => {
+describe('DELETE/PATCH /api/memes/[pid]', () => {
 	it('forbids a member from deleting a foreign meme (403) and keeps it', async () => {
 		const w = await world();
 		const { response } = await callRoute({
 			handler: deleteMeme,
-			path: `/api/memes/${w.memeId}`,
+			path: `/api/memes/${w.memePid}`,
 			method: 'DELETE',
-			params: { id: String(w.memeId) },
+			params: { pid: w.memePid },
 			session: w.sessions.other
 		});
 		expect(response.status).toBe(403);
@@ -127,9 +141,9 @@ describe('DELETE/PATCH /api/memes/[id]', () => {
 		const w = await world();
 		const { response } = await callRoute({
 			handler: patchMeme,
-			path: `/api/memes/${w.memeId}`,
+			path: `/api/memes/${w.memePid}`,
 			method: 'PATCH',
-			params: { id: String(w.memeId) },
+			params: { pid: w.memePid },
 			body: { nsfw: true },
 			session: w.sessions.other
 		});
@@ -142,9 +156,9 @@ describe('DELETE/PATCH /api/memes/[id]', () => {
 		const w = await world();
 		const patched = await callRoute({
 			handler: patchMeme,
-			path: `/api/memes/${w.memeId}`,
+			path: `/api/memes/${w.memePid}`,
 			method: 'PATCH',
-			params: { id: String(w.memeId) },
+			params: { pid: w.memePid },
 			body: { nsfw: true },
 			session: w.sessions.mod
 		});
@@ -154,9 +168,9 @@ describe('DELETE/PATCH /api/memes/[id]', () => {
 
 		const deleted = await callRoute({
 			handler: deleteMeme,
-			path: `/api/memes/${w.memeId}`,
+			path: `/api/memes/${w.memePid}`,
 			method: 'DELETE',
-			params: { id: String(w.memeId) },
+			params: { pid: w.memePid },
 			session: w.sessions.mod
 		});
 		expect(deleted.response.status).toBe(204);
@@ -167,9 +181,9 @@ describe('DELETE/PATCH /api/memes/[id]', () => {
 		const w = await world();
 		const { response } = await callRoute({
 			handler: deleteMeme,
-			path: `/api/memes/${w.memeId}`,
+			path: `/api/memes/${w.memePid}`,
 			method: 'DELETE',
-			params: { id: String(w.memeId) },
+			params: { pid: w.memePid },
 			session: w.sessions.owner
 		});
 		expect(response.status).toBe(204);
@@ -181,7 +195,7 @@ describe('DELETE/PATCH /api/memes/[id]', () => {
 			handler: deleteMeme,
 			path: `/api/memes/${MISSING}`,
 			method: 'DELETE',
-			params: { id: MISSING },
+			params: { pid: MISSING },
 			session: w.sessions.mod
 		});
 		expect(del.response.status).toBe(404);
@@ -189,7 +203,7 @@ describe('DELETE/PATCH /api/memes/[id]', () => {
 			handler: patchMeme,
 			path: `/api/memes/${MISSING}`,
 			method: 'PATCH',
-			params: { id: MISSING },
+			params: { pid: MISSING },
 			body: { spoiler: true },
 			session: w.sessions.mod
 		});
@@ -197,6 +211,7 @@ describe('DELETE/PATCH /api/memes/[id]', () => {
 	});
 });
 
+// TODO(public-ids slice B): quotes by public id (`params: { pid: w.quotePid }`, `/api/quotes/${w.quotePid}`)
 describe('DELETE /api/quotes/[id]', () => {
 	it('forbids a member from deleting a quote (403), even their own', async () => {
 		const w = await world();
@@ -230,9 +245,9 @@ describe('DELETE /api/quotes/[id]', () => {
 		const w = await world();
 		const { response } = await callRoute({
 			handler: deleteQuote,
-			path: `/api/quotes/${MISSING}`,
+			path: `/api/quotes/${MISSING_QUOTE}`,
 			method: 'DELETE',
-			params: { id: MISSING },
+			params: { id: MISSING_QUOTE },
 			session: w.sessions.mod
 		});
 		expect(response.status).toBe(404);
@@ -246,9 +261,9 @@ describe('vote endpoints', () => {
 		const w = await world();
 		const { response } = await callRoute({
 			handler: voteMeme,
-			path: `/api/memes/${w.memeId}/vote`,
+			path: `/api/memes/${w.memePid}/vote`,
 			method: 'POST',
-			params: { id: String(w.memeId) },
+			params: { pid: w.memePid },
 			body: { value },
 			session: w.sessions.other
 		});
@@ -260,9 +275,9 @@ describe('vote endpoints', () => {
 		for (const body of [{}, null, 'up']) {
 			const { response } = await callRoute({
 				handler: voteMeme,
-				path: `/api/memes/${w.memeId}/vote`,
+				path: `/api/memes/${w.memePid}/vote`,
 				method: 'POST',
-				params: { id: String(w.memeId) },
+				params: { pid: w.memePid },
 				body,
 				session: w.sessions.other
 			});
@@ -288,9 +303,9 @@ describe('vote endpoints', () => {
 		for (const value of [1, -1, 0]) {
 			const { response } = await callRoute({
 				handler: voteMeme,
-				path: `/api/memes/${w.memeId}/vote`,
+				path: `/api/memes/${w.memePid}/vote`,
 				method: 'POST',
-				params: { id: String(w.memeId) },
+				params: { pid: w.memePid },
 				body: { value },
 				session: w.sessions.other
 			});
@@ -301,7 +316,7 @@ describe('vote endpoints', () => {
 			handler: voteMeme,
 			path: `/api/memes/${MISSING}/vote`,
 			method: 'POST',
-			params: { id: MISSING },
+			params: { pid: MISSING },
 			body: { value: 1 },
 			session: w.sessions.other
 		});
@@ -309,26 +324,26 @@ describe('vote endpoints', () => {
 	});
 });
 
-describe('POST /api/memes/[id]/seen', () => {
+describe('POST /api/memes/[pid]/seen', () => {
 	const seen = (memeId: string, session: string) =>
 		callRoute({
 			handler: seenMeme,
 			path: `/api/memes/${memeId}/seen`,
 			method: 'POST',
-			params: { id: memeId },
+			params: { pid: memeId },
 			session
 		});
 
 	it('answers {counted:true} for a first view and {counted:false} for a repeat', async () => {
 		const w = await world();
-		const first = await seen(String(w.memeId), w.sessions.other);
+		const first = await seen(w.memePid, w.sessions.other);
 		expect(first.response.status).toBe(200);
 		expect(await first.response.json()).toEqual({ counted: true });
-		const second = await seen(String(w.memeId), w.sessions.other);
+		const second = await seen(w.memePid, w.sessions.other);
 		expect(second.response.status).toBe(200);
 		expect(await second.response.json()).toEqual({ counted: false });
 		// a different viewer still counts
-		const other = await seen(String(w.memeId), w.sessions.mod);
+		const other = await seen(w.memePid, w.sessions.mod);
 		expect(await other.response.json()).toEqual({ counted: true });
 	});
 
@@ -343,11 +358,127 @@ describe('auth guard in front of the routes', () => {
 		const w = await world();
 		const { response } = await callRoute({
 			handler: deleteComment,
-			path: `/api/comments/${w.commentId}`,
+			path: `/api/comments/${w.commentPid}`,
 			method: 'DELETE',
-			params: { id: String(w.commentId) }
+			params: { pid: w.commentPid }
 		});
 		expect(response.status).toBe(401);
 		expect(await db.select().from(comments).where(eq(comments.id, w.commentId))).toHaveLength(1);
+	});
+});
+
+describe('the renamed meme and comment routes only know public ids', () => {
+	const routes = [
+		{
+			name: 'DELETE /api/comments/[pid]',
+			handler: deleteComment,
+			base: 'comments',
+			method: 'DELETE'
+		},
+		{ name: 'DELETE /api/memes/[pid]', handler: deleteMeme, base: 'memes', method: 'DELETE' },
+		{
+			name: 'PATCH /api/memes/[pid]',
+			handler: patchMeme,
+			base: 'memes',
+			method: 'PATCH',
+			body: { nsfw: true }
+		},
+		{
+			name: 'POST /api/memes/[pid]/vote',
+			handler: voteMeme,
+			base: 'memes',
+			suffix: '/vote',
+			method: 'POST',
+			body: { value: 1 }
+		},
+		{
+			name: 'POST /api/memes/[pid]/favorite',
+			handler: favoriteMeme,
+			base: 'memes',
+			suffix: '/favorite',
+			method: 'POST'
+		},
+		{
+			name: 'POST /api/memes/[pid]/seen',
+			handler: seenMeme,
+			base: 'memes',
+			suffix: '/seen',
+			method: 'POST'
+		},
+		{
+			name: 'GET /api/memes/[pid]/comments',
+			handler: getMemeComments,
+			base: 'memes',
+			suffix: '/comments',
+			method: 'GET'
+		},
+		{
+			name: 'POST /api/memes/[pid]/comments',
+			handler: postMemeComment,
+			base: 'memes',
+			suffix: '/comments',
+			method: 'POST',
+			body: { text: 'hi' }
+		},
+		{
+			name: 'GET /api/memes/[pid]/source',
+			handler: memeSource,
+			base: 'memes',
+			suffix: '/source',
+			method: 'GET'
+		}
+	] as const;
+
+	// the numeric internal id of a real row is the most tempting wrong answer
+	it.each(routes)(
+		'$name answers 404 for 1, abc, an unknown id and the real internal id',
+		async (route) => {
+			const w = await world();
+			const real = route.base === 'comments' ? w.commentId : w.memeId;
+			for (const pid of ['1', 'abc', 'AAAAAAAAAAA', 'AAAAAAAAAAAAA', String(real), MISSING]) {
+				const { response } = await callRoute({
+					handler: route.handler,
+					path: `/api/${route.base}/${pid}${'suffix' in route ? route.suffix : ''}`,
+					method: route.method,
+					params: { pid },
+					body: 'body' in route ? route.body : undefined,
+					session: w.sessions.mod
+				});
+				expect(response.status, `${route.name} ${pid}`).toBe(404);
+			}
+		}
+	);
+
+	it('leaves the rows alone after those 404s', async () => {
+		const w = await world();
+		await callRoute({
+			handler: deleteMeme,
+			path: `/api/memes/${w.memeId}`,
+			method: 'DELETE',
+			params: { pid: String(w.memeId) },
+			session: w.sessions.mod
+		});
+		await callRoute({
+			handler: deleteComment,
+			path: `/api/comments/${w.commentId}`,
+			method: 'DELETE',
+			params: { pid: String(w.commentId) },
+			session: w.sessions.mod
+		});
+		expect(await db.select().from(media).where(eq(media.id, w.memeId))).toHaveLength(1);
+		expect(await db.select().from(comments).where(eq(comments.id, w.commentId))).toHaveLength(1);
+	});
+
+	it('the public id of the row works where its numeric id did not', async () => {
+		const w = await world();
+		const { response } = await callRoute({
+			handler: voteMeme,
+			path: `/api/memes/${w.memePid}/vote`,
+			method: 'POST',
+			params: { pid: w.memePid },
+			body: { value: 1 },
+			session: w.sessions.other
+		});
+		expect(response.status).toBe(200);
 	});
 });
