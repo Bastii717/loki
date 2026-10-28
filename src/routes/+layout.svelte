@@ -104,11 +104,7 @@
 </div>
 
 {#if showTabs}
-	<TabBar
-		pathname={page.url.pathname}
-		badge={data.openCases ?? 0}
-		unread={data.unreadNotifications}
-	/>
+	<TabBar pathname={page.url.pathname} unread={data.unreadNotifications} />
 {/if}
 
 <style>

@@ -23,7 +23,8 @@ import type { LayoutServerLoad } from './$types';
  * 0 without a query for anonymous requests). It refreshes on reload, `invalidateAll()` and
  * `invalidate('loki:notifications')`, which the layout calls whenever the tab becomes visible.
  *
- * `openCases` is the badge for the Profile tab and the profile link: the number of open report
+ * `openCases` is the badge on the profile avatar in the feed header and on the profile page's
+ * Moderation link: the number of open report
  * cases, for moderators and admins only (one cheap grouped count; null for everyone else, so
  * members never trigger the query). A timed-out moderator has lost the moderation rights, so
  * they get null too (no badge, no Moderation link). It refreshes on reload and after
