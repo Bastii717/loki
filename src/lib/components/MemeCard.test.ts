@@ -22,6 +22,7 @@ function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
 		viewCount: 0,
 		blurred: null,
 		uploader: 'dev',
+		uploaderId: 7,
 		uploaderRole: 'member',
 		uploaderAvatar: null,
 		mine: false,
@@ -97,7 +98,7 @@ describe('MemeCard', () => {
 		const { body } = render(MemeCard, { props: { item: feedItem({ title: '' }) } });
 		expect(body).toContain('Untitled');
 		expect(body).toMatch(/class="by[^"]*">by /);
-		expect(body).toMatch(/class="name[^"]*">dev<\/span>/);
+		expect(body).toMatch(/class="name[^"]*"[^>]*>dev<\/a>/);
 		expect(body).toContain('aria-label="Upvote"');
 		expect(body).toContain('aria-label="Downvote"');
 	});
@@ -105,7 +106,26 @@ describe('MemeCard', () => {
 	describe('uploader', () => {
 		it('shows the display name', () => {
 			const { body } = render(MemeCard, { props: { item: feedItem({ uploader: 'Hanna Lee' }) } });
-			expect(body).toMatch(/class="name[^"]*">Hanna Lee<\/span>/);
+			expect(body).toMatch(/class="name[^"]*"[^>]*>Hanna Lee<\/a>/);
+		});
+
+		it('links the name to the member page, with the badge outside the link', () => {
+			const { body } = render(MemeCard, {
+				props: { item: feedItem({ uploaderRole: 'admin' }), feedIds: [1] }
+			});
+			const link = body.match(/<a\b[^>]*href="\/users\/7"[^>]*>[\s\S]*?<\/a>/);
+			expect(link, 'name link rendered').not.toBeNull();
+			expect(link![0]).toMatch(/class="name[^"]*"/);
+			expect(link![0]).toContain('>dev</a>');
+			expect(link![0]).not.toContain('role="img"');
+			expect(link![0]).not.toContain('avatar');
+			expect(body).toContain('aria-label="Admin"');
+		});
+
+		it('renders a plain name when the uploader id is withheld', () => {
+			const { body } = render(MemeCard, { props: { item: feedItem({ uploaderId: null }) } });
+			expect(body).toMatch(/<span class="name[^"]*">dev<\/span>/);
+			expect(body).not.toContain('/users/');
 		});
 
 		it.each([
@@ -143,6 +163,7 @@ describe('MemeCard', () => {
 				props: {
 					item: feedItem({
 						uploader: '',
+						uploaderId: null,
 						uploaderRole: 'member',
 						uploaderAvatar: null,
 						underReview: true

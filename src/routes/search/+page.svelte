@@ -29,9 +29,6 @@
 		return `?${params}`;
 	};
 
-	// People rows link to /users/<id>, a route that arrives with the member page: until its type
-	// exists, resolve() is given the concrete path (cast to a known route type).
-
 	const sections = $derived(data.sections);
 	const typed = $derived(data.type !== 'all');
 	const memeIds = $derived(sections.memes?.items.map((m) => m.id));
@@ -135,7 +132,7 @@
 				<ul class="rows">
 					{#each sections.people.items as person (person.id)}
 						<li>
-							<a href={resolve(`/users/${person.id}` as '/')} class="row person">
+							<a href={resolve('/users/[id]', { id: String(person.id) })} class="row person">
 								<Avatar thumbKey={person.avatarThumbKey} name={person.name} size={32} />
 								<span class="name">{person.name}</span>
 								<RoleBadge role={person.role} />

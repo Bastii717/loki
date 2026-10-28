@@ -4,16 +4,22 @@
 	import MemeCard from './MemeCard.svelte';
 	import type { FeedItem } from '../server/feed';
 
-	/** A card list with infinite scroll against /api/feed?list=…, used by the profile sub-pages. */
+	/**
+	 * A card list with infinite scroll against /api/feed, used by the profile sub-pages
+	 * (`list=mine|favorites`) and the member page (`list="user"` sends `uploader=<id>`).
+	 */
 	let {
 		items: initialItems,
 		nextCursor: initialCursor,
 		list,
+		uploader,
 		empty
 	}: {
 		items: FeedItem[];
 		nextCursor: string | null;
-		list: 'mine' | 'favorites';
+		list: 'mine' | 'favorites' | 'user';
+		/** The member whose memes to list; required when `list` is 'user'. */
+		uploader?: number;
 		empty: string;
 	} = $props();
 
@@ -29,7 +35,9 @@
 		if (loading || !nextCursor) return;
 		loading = true;
 		failed = false;
-		const params = new SvelteURLSearchParams({ sort: 'new', cursor: nextCursor, list });
+		const params = new SvelteURLSearchParams({ sort: 'new', cursor: nextCursor });
+		if (list === 'user') params.set('uploader', String(uploader));
+		else params.set('list', list);
 		try {
 			const res = await fetch(`/api/feed?${params}`);
 			if (!res.ok) throw new Error(String(res.status));

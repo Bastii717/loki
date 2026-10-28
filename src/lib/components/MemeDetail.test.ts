@@ -25,6 +25,7 @@ function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
 		viewCount: 0,
 		blurred: null,
 		uploader: 'Hanna Lee',
+		uploaderId: 7,
 		uploaderRole: 'member',
 		uploaderAvatar: null,
 		mine: false,
@@ -74,7 +75,7 @@ describe('MemeDetail comment authors', () => {
 
 	it('shows the author name and an avatar', () => {
 		const body = html(feedItem(), [comment({ authorAvatar: 'avatars/u5/abc-64.webp' })]);
-		expect(body).toMatch(/<b[^>]*>Mo Derator<\/b>/);
+		expect(body).toMatch(/<a\b[^>]*href="\/users\/5"[^>]*>Mo Derator<\/a>/);
 		expect(body).toMatch(/<img class="avatar[^"]*" src="\/media\/avatars\/u5\/abc-64\.webp"/);
 	});
 });
@@ -83,12 +84,41 @@ describe('MemeDetail uploader line', () => {
 	it('shows name, avatar and badge', () => {
 		const body = html(feedItem({ uploaderRole: 'admin' }), []);
 		expect(body).toMatch(/class="by[^"]*">by /);
-		expect(body).toMatch(/class="name[^"]*">Hanna Lee<\/span>/);
+		expect(body).toMatch(/class="name[^"]*"[^>]*>Hanna Lee<\/a>/);
 		expect(body).toContain('aria-label="Admin"');
 	});
 
 	it('renders no uploader group for hidden items', () => {
-		const body = html(feedItem({ uploader: '', underReview: true }), []);
+		const body = html(feedItem({ uploader: '', uploaderId: null, underReview: true }), []);
 		expect(body).not.toContain('class="by');
+	});
+});
+
+describe('MemeDetail name links', () => {
+	it('links the uploader name to the member page', () => {
+		const body = html(feedItem({ uploaderRole: 'moderator' }), []);
+		const link = body.match(/<a\b[^>]*href="\/users\/7"[^>]*>[\s\S]*?<\/a>/);
+		expect(link, 'uploader link rendered').not.toBeNull();
+		expect(link![0]).toMatch(/class="name[^"]*"/);
+		expect(link![0]).toContain('>Hanna Lee</a>');
+		expect(link![0]).not.toContain('role="img"');
+		expect(body).toContain('aria-label="Moderator"');
+	});
+
+	it('renders a plain uploader name when the id is withheld', () => {
+		const body = html(feedItem({ uploaderId: null }), []);
+		expect(body).toMatch(/<span class="name[^"]*">Hanna Lee<\/span>/);
+		expect(body).not.toContain('href="/users/');
+	});
+
+	it('links each comment author to /users/<authorId>, badge outside the link', () => {
+		const body = html(feedItem(), [
+			comment({ id: 1, authorId: 5, author: 'Mo Derator', authorRole: 'moderator' }),
+			comment({ id: 2, authorId: 6, author: 'Jonas' })
+		]);
+		const first = body.match(/<a\b[^>]*href="\/users\/5"[^>]*>[\s\S]*?<\/a>/);
+		expect(first![0]).toContain('>Mo Derator</a>');
+		expect(first![0]).not.toContain('role="img"');
+		expect(body).toMatch(/<a\b[^>]*href="\/users\/6"[^>]*>Jonas<\/a>/);
 	});
 });

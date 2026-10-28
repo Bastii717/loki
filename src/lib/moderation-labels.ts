@@ -63,6 +63,12 @@ const dateOnly = new Intl.DateTimeFormat('en-GB', {
 	timeZone: 'Europe/Berlin'
 });
 
+const monthYear = new Intl.DateTimeFormat('en-GB', {
+	month: 'short',
+	year: 'numeric',
+	timeZone: 'Europe/Berlin'
+});
+
 const timeOnly = new Intl.DateTimeFormat('en-GB', {
 	hour: '2-digit',
 	minute: '2-digit',
@@ -72,6 +78,8 @@ const timeOnly = new Intl.DateTimeFormat('en-GB', {
 
 export const formatDateTime = (iso: string) => dateTime.format(new Date(iso));
 export const formatDate = (iso: string) => dateOnly.format(new Date(iso));
+/** "Oct 2026" */
+export const formatMonthYear = (iso: string) => monthYear.format(new Date(iso));
 export const formatTime = (iso: string) => timeOnly.format(new Date(iso));
 
 /** "1 report" / "3 reports" */

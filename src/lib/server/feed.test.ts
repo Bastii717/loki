@@ -229,6 +229,45 @@ describe('getFeedPage', () => {
 	});
 });
 
+describe('uploaderId and the uploader filter', () => {
+	it('returns the uploader id of a visible meme', async () => {
+		const u = await testUser();
+		const id = await addMedia(u.id);
+		const viewer = await testUser();
+		expect((await getFeedItem(viewer.id, id))!.uploaderId).toBe(u.id);
+	});
+
+	it('hideUnderReview drops hidden memes from the row set, so cursors stay valid', async () => {
+		const author = await testUser();
+		const base = Date.now() - 100_000;
+		const ids: number[] = [];
+		for (let i = 0; i < 5; i++) {
+			ids.push(await addMedia(author.id, { createdAt: new Date(base + i * 1000) }));
+		}
+		await addOpenReports('meme', ids[3], author.id, OVER_THRESHOLD);
+		const viewer = await testUser();
+		const filter = { uploaderId: author.id, hideUnderReview: true };
+		const p1 = await getFeedPage({ viewerId: viewer.id, sort: 'new', filter, limit: 2 });
+		expect(p1.items.map((i) => i.id)).toEqual([ids[4], ids[2]]);
+		const p2 = await getFeedPage({
+			viewerId: viewer.id,
+			sort: 'new',
+			filter,
+			limit: 2,
+			cursor: p1.nextCursor!
+		});
+		expect(p2.items.map((i) => i.id)).toEqual([ids[1], ids[0]]);
+		expect(p2.nextCursor).toBeNull();
+		// without the flag the hidden one stays as a placeholder row
+		const all = await getFeedPage({
+			viewerId: viewer.id,
+			sort: 'new',
+			filter: { uploaderId: author.id }
+		});
+		expect(all.items.map((i) => i.id)).toContain(ids[3]);
+	});
+});
+
 describe('getFeedItem', () => {
 	it('returns the one meme with viewer-specific fields, or null', async () => {
 		const u = await testUser();
@@ -294,7 +333,8 @@ describe('under review', () => {
 				tags: [],
 				uploader: '',
 				uploaderRole: 'member',
-				uploaderAvatar: null
+				uploaderAvatar: null,
+				uploaderId: null
 			});
 			expect(JSON.stringify(item)).not.toContain('secret title');
 			expect(JSON.stringify(item)).not.toContain('avatars/');
@@ -317,7 +357,8 @@ describe('under review', () => {
 			title: 'secret title',
 			uploader: author.username,
 			uploaderRole: 'moderator',
-			uploaderAvatar: 'avatars/u9/x-64.webp'
+			uploaderAvatar: 'avatars/u9/x-64.webp',
+			uploaderId: author.id
 		});
 		expect(detail.thumbUrl).toMatch(/^\/media\/memes\/t/);
 		expect(detail.mediaUrl).toMatch(/^\/media\/memes\/o/);

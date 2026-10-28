@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { db } from './db';
 import { env } from './env';
-import { openReporterCountSelect, overThresholdSql } from './moderation';
+import { openReporterCountSelect, overThresholdSql, underReviewSql } from './moderation';
 
 export type FeedSort = 'new' | 'hot' | 'hof';
 
@@ -25,6 +25,8 @@ export interface FeedItem {
 	/** Display name when set, else the username. */
 	uploader: string;
 	uploaderRole: 'member' | 'moderator' | 'admin';
+	/** The uploader's user id for name links; null exactly when `uploader` is blanked (hidden for the viewer). */
+	uploaderId: number | null;
 	/** Thumb key of the uploader's avatar, null when they have none. */
 	uploaderAvatar: string | null;
 	/** The viewer uploaded this meme (never offer "Report" on it). */
@@ -49,8 +51,11 @@ export interface FeedOptions {
 	id?: number;
 	/** Restrict to these memes (discover hydrates its own selection); ordering is the caller's job. */
 	ids?: number[];
-	/** Profile lists: only memes uploaded by `uploaderId` / favorited by `favoriteOf` (viewer state stays the viewer's). */
-	filter?: { uploaderId?: number; favoriteOf?: number };
+	/**
+	 * Profile lists: only memes uploaded by `uploaderId` / favorited by `favoriteOf` (viewer state stays the viewer's).
+	 * `hideUnderReview` drops hidden memes from the row set instead of masking them (member pages show no placeholders).
+	 */
+	filter?: { uploaderId?: number; favoriteOf?: number; hideUnderReview?: boolean };
 }
 
 export class InvalidCursorError extends Error {
@@ -111,6 +116,7 @@ interface Row extends Record<string, unknown> {
 	created_at_raw: string;
 	uploader: string;
 	uploader_role: FeedItem['uploaderRole'];
+	uploader_id: number;
 	uploader_avatar: string | null;
 	mine: boolean;
 	tag_names: string[];
@@ -124,7 +130,7 @@ interface Row extends Record<string, unknown> {
 /**
  * One page of the feed. A single statement with lateral aggregates (no per-row queries);
  * keyset pagination on (sort key, id). Optional filters (`tag`, `id`, `ids`, `filter.uploaderId`,
- * `filter.favoriteOf`) only narrow the row set; ordering and cursors are unaffected. `created_at` travels in the cursor as Postgres' own
+ * `filter.favoriteOf`, `filter.hideUnderReview`) only narrow the row set; ordering and cursors are unaffected. `created_at` travels in the cursor as Postgres' own
  * text form so microsecond precision survives (a JS Date would truncate to milliseconds).
  */
 export async function getFeedPage(opts: FeedOptions): Promise<{
@@ -178,12 +184,17 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 			)`
 			: sql``;
 
+	const hideFilter = opts.filter?.hideUnderReview
+		? sql`AND NOT ${underReviewSql('meme', sql`m.id`, sql`m.reviewed_at`)}`
+		: sql``;
+
 	const rows = await db.execute<Row>(sql`
 		SELECT m.id, m.title, m.kind, m.object_key, m.thumb_key, m.width, m.height,
 			m.nsfw, m.spoiler, m.score, m.view_count, m.hot_score, m.created_at,
 			m.created_at::text AS created_at_raw,
 			COALESCE(u.display_name, u.username) AS uploader,
 			u.role AS uploader_role,
+			m.uploader_id AS uploader_id,
 			u.avatar_thumb_key AS uploader_avatar,
 			(m.uploader_id = ${opts.viewerId}) AS mine,
 			COALESCE(tg.names, ARRAY[]::text[]) AS tag_names,
@@ -210,7 +221,7 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 		) rc ON true
 		LEFT JOIN votes v ON v.media_id = m.id AND v.user_id = ${opts.viewerId}
 		LEFT JOIN favorites uf ON uf.media_id = m.id AND uf.user_id = ${opts.viewerId}
-		WHERE true ${after} ${tagFilter} ${idFilter} ${idsFilter} ${uploaderFilter} ${favoriteFilter}
+		WHERE true ${after} ${tagFilter} ${idFilter} ${idsFilter} ${uploaderFilter} ${favoriteFilter} ${hideFilter}
 		ORDER BY ${keyCol} DESC, m.id DESC
 		LIMIT ${limit + 1}
 	`);
@@ -240,6 +251,7 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 			uploader: hide ? '' : r.uploader,
 			// the role would identify the hidden uploader as much as the name does
 			uploaderRole: hide ? 'member' : r.uploader_role,
+			uploaderId: hide ? null : r.uploader_id,
 			uploaderAvatar: hide ? null : r.uploader_avatar,
 			mine: r.mine,
 			createdAt: new Date(r.created_at).toISOString(),

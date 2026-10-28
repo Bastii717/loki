@@ -20,6 +20,7 @@ const feedItem = (id: number, title = `Meme ${id}`): FeedItem => ({
 	viewCount: 0,
 	blurred: null,
 	uploader: 'dev',
+	uploaderId: 7,
 	uploaderRole: 'member',
 	uploaderAvatar: null,
 	mine: false,
