@@ -58,6 +58,17 @@
 		};
 	});
 
+	// The bell count has no timer: it refreshes whenever the app comes back to the foreground.
+	$effect(() => {
+		if (!data.user) return;
+		const onVisible = () => {
+			if (document.visibilityState === 'visible')
+				void invalidate('loki:notifications').catch(() => {});
+		};
+		document.addEventListener('visibilitychange', onVisible);
+		return () => document.removeEventListener('visibilitychange', onVisible);
+	});
+
 	// The server renders data-season on <html>; client navigations and invalidations keep it in sync.
 	$effect(() => {
 		const root = document.documentElement;
@@ -93,7 +104,11 @@
 </div>
 
 {#if showTabs}
-	<TabBar pathname={page.url.pathname} badge={data.openCases ?? 0} />
+	<TabBar
+		pathname={page.url.pathname}
+		badge={data.openCases ?? 0}
+		unread={data.unreadNotifications}
+	/>
 {/if}
 
 <style>

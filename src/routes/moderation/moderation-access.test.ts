@@ -18,6 +18,7 @@ import {
 	timeOut,
 	userWithSession
 } from '../../lib/server/moderation-test-utils';
+import { notify } from '../../lib/server/notifications';
 import { resetRateLimits } from '../../lib/server/rate-limit';
 import { ensureBucket } from '../../lib/server/storage-test-utils';
 import { callRoute } from '../../lib/server/test-request';
@@ -531,6 +532,31 @@ describe('open-case badge in the root layout', () => {
 			}>;
 		expect((await load(w.lockedMod.user)).openCases).toBeNull();
 		expect((await load(w.lockedAdmin.user)).openCases).toBeNull();
+	});
+});
+
+describe('unread notifications in the root layout', () => {
+	const load = (user: World['mod']['user'] | null, depends: (key: string) => void = () => {}) =>
+		rootLayout({
+			locals: { user },
+			url: new URL('http://localhost/'),
+			depends
+		} as never) as Promise<{ unreadNotifications: number }>;
+
+	it('is 0 for an anonymous request and the unread count for a member', async () => {
+		const w = await world();
+		expect((await load(null)).unreadNotifications).toBe(0);
+		expect((await load(w.member.user)).unreadNotifications).toBe(0);
+		await notify(db, { userId: w.member.user.id, kind: 'comment', actorId: w.victim.user.id });
+		expect((await load(w.member.user)).unreadNotifications).toBe(1);
+		expect((await load(w.victim.user)).unreadNotifications).toBe(0);
+		expect((await load(null)).unreadNotifications).toBe(0);
+	});
+
+	it("depends on 'loki:notifications' so the client can refresh it", async () => {
+		const depends = vi.fn();
+		await load(null, depends);
+		expect(depends).toHaveBeenCalledWith('loki:notifications');
 	});
 });
 
