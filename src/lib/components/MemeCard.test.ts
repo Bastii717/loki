@@ -28,6 +28,7 @@ function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
 		mine: false,
 		createdAt: new Date().toISOString(),
 		underReview: false,
+		awardMonth: null,
 		...overrides
 	};
 }
@@ -201,5 +202,22 @@ describe('MemeCard', () => {
 				expect(tag).not.toContain('title=');
 			}
 		});
+	});
+});
+
+describe('MemeCard award badge', () => {
+	it('shows the badge between the tags and the uploader row', () => {
+		const { body } = render(MemeCard, { props: { item: feedItem({ awardMonth: '2026-10' }) } });
+		expect(body).toContain('Meme of the Month · Oct 2026');
+		expect(body).toContain('aria-label="Meme of the Month, October 2026"');
+		const tags = order(body, 'class="tags');
+		const badge = order(body, 'Meme of the Month ·');
+		expect(badge).toBeGreaterThan(tags);
+		expect(order(body, 'class="by')).toBeGreaterThan(badge);
+	});
+
+	it('shows no badge without an award', () => {
+		const { body } = render(MemeCard, { props: { item: feedItem() } });
+		expect(body).not.toContain('Meme of the Month');
 	});
 });

@@ -31,6 +31,7 @@ function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
 		mine: false,
 		createdAt: new Date().toISOString(),
 		underReview: false,
+		awardMonth: null,
 		...overrides
 	};
 }
@@ -120,5 +121,18 @@ describe('MemeDetail name links', () => {
 		expect(first![0]).toContain('>Mo Derator</a>');
 		expect(first![0]).not.toContain('role="img"');
 		expect(body).toMatch(/<a\b[^>]*href="\/users\/6"[^>]*>Jonas<\/a>/);
+	});
+});
+
+describe('MemeDetail award badge', () => {
+	it('shows the badge in the header under the title and uploader line', () => {
+		const body = html(feedItem({ awardMonth: '2026-10' }), []);
+		expect(body).toContain('Meme of the Month · Oct 2026');
+		expect(body).toContain('aria-label="Meme of the Month, October 2026"');
+		expect(body.indexOf('Meme of the Month ·')).toBeGreaterThan(body.indexOf('<h1>'));
+	});
+
+	it('shows no badge without an award', () => {
+		expect(html(feedItem(), [])).not.toContain('Meme of the Month');
 	});
 });

@@ -39,7 +39,8 @@ const feedItem = (id: number) => ({
 	uploaderAvatar: null,
 	mine: false,
 	createdAt: '2026-10-28T10:00:00.000Z',
-	underReview: false
+	underReview: false,
+	awardMonth: null
 });
 
 const renderPage = (over: Record<string, unknown> = {}, memberOver: Record<string, unknown> = {}) =>

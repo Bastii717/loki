@@ -27,6 +27,7 @@ function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
 		mine: false,
 		createdAt: new Date().toISOString(),
 		underReview: false,
+		awardMonth: null,
 		...overrides
 	};
 }
@@ -93,5 +94,18 @@ describe('DiscoverSlide uploader', () => {
 		expect(body).not.toContain('avatar letter');
 		expect(body).not.toContain('aria-label="Moderator"');
 		expect(body).not.toContain('aria-label="Admin"');
+	});
+});
+
+describe('DiscoverSlide award badge', () => {
+	it('shows the badge in the caption under the title', () => {
+		const body = html(feedItem({ awardMonth: '2026-10' }));
+		expect(body).toContain('Meme of the Month · Oct 2026');
+		expect(body).toContain('aria-label="Meme of the Month, October 2026"');
+		expect(body.indexOf('Meme of the Month ·')).toBeGreaterThan(body.indexOf('<b>Montag</b>'));
+	});
+
+	it('shows no badge without an award', () => {
+		expect(html(feedItem())).not.toContain('Meme of the Month');
 	});
 });
