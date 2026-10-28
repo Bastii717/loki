@@ -119,6 +119,7 @@ On a desktop browser the layout stays a centered column.
 - Sign-in is Authentik OIDC only. Access is gated on group membership; a valid Authentik login alone is not enough. Member, moderator and admin roles come from groups.
 - Every route requires a session, except login and health checks.
 - Every media file sits behind auth too. The storage bucket is never public, and there is no configuration option that makes it so.
+- Every meme, member, comment, quote and template is addressed by a random 12-character public id; the sequential database ids never appear in URLs, API paths or page data, so nothing can be enumerated by counting up.
 - Backups of the database and media are encrypted and go to a separate bucket.
 
 ## Tech stack
