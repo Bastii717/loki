@@ -170,6 +170,10 @@ Three event themes switch on by date in Berlin time, without any environment var
 
 Members edit their profile at `/profile/edit`: a display name of 2 to 24 characters (changeable once every 30 days), an avatar (JPEG, PNG or WebP, up to `AVATAR_MAX_MB` MB, default 8; it is resized to 256 and 64 pixel WebP files) and a motto of up to 80 characters. Moderators and admins show a shield or shield-check badge next to their name on cards, the detail view, comments and Discover. Admins are not bound by the 30-day rule and manage profiles on **Moderation > Users** (`/moderation/users`): they can rename a member, reset a name to the username, remove an avatar and clear a motto. Every one of these changes, by members and admins alike, is written to the audit log.
 
+### Notifications
+
+Members get in-app notices (comments on their memes and threads, moderation outcomes) behind the bell in the tab bar, and switch the optional ones off at `/profile/notifications`. A daily job deletes notices whose last activity is older than 90 days, read or not; it also runs once at every start and needs no configuration.
+
 ## Releases
 
 The `Docker` workflow builds the image for every pull request (without pushing) and publishes it on pushes to `main` and on release tags:
