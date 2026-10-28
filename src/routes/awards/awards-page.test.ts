@@ -1,6 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { berlinMonth } from '../../lib/server/awards';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../../lib/server/db';
 import { awards, media } from '../../lib/server/db/schema';
 import { resetDb, setupDb } from '../../lib/server/db/test-utils';
@@ -16,6 +15,13 @@ import { load } from './+page.server';
 
 beforeAll(setupDb);
 beforeEach(resetDb);
+afterEach(() => vi.useRealTimers());
+
+/** Freezes `new Date()` only; timers stay real so database calls keep working. */
+const freeze = (iso: string) => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date(iso));
+};
 
 type Member = Awaited<ReturnType<typeof userWithSession>>;
 interface Data {
@@ -129,24 +135,33 @@ describe('awards page load', () => {
 	);
 
 	it('shows who leads this month, and nobody when no meme scores', async () => {
+		freeze('2026-10-28T10:00:00Z');
 		const viewer = await userWithSession();
 		const author = await userWithSession();
 		const id = await insertMeme(author.user.id, 'Running hot');
+		await db
+			.update(media)
+			.set({ createdAt: new Date('2026-10-20T08:00:00Z') })
+			.where(eq(media.id, id));
 		expect((await loadFor(viewer)).leading).toBeNull();
 
-		await db.update(media).set({ score: 3 }).where(eq(media.id, id));
+		await db
+			.update(media)
+			.set({ score: 3, createdAt: new Date('2026-10-20T08:00:00Z') })
+			.where(eq(media.id, id));
 		const data = await loadFor(viewer);
-		expect(data.leading).toMatchObject({ month: berlinMonth(new Date()), score: 3 });
+		expect(data.leading).toMatchObject({ month: '2026-10', score: 3 });
 		expect(data.leading?.item).toMatchObject({ id, title: 'Running hot' });
 	});
 
 	it('gives the first close as the start of next month', async () => {
 		const viewer = await userWithSession();
-		const data = await loadFor(viewer);
-		const close = new Date(data.firstClose);
-		expect(close.getTime()).toBeGreaterThan(Date.now());
-		expect(berlinMonth(new Date(close.getTime() - 1))).toBe(berlinMonth(new Date()));
-		expect(berlinMonth(close)).not.toBe(berlinMonth(new Date()));
+		// 23:30 UTC on 31 October is already 1 November in Berlin, so November is the running month
+		freeze('2026-10-31T23:30:00Z');
+		expect((await loadFor(viewer)).firstClose).toBe('2026-11-30T23:00:00.000Z');
+		// summer time: the end of June is 22:00 UTC
+		freeze('2026-06-15T12:00:00Z');
+		expect((await loadFor(viewer)).firstClose).toBe('2026-06-30T22:00:00.000Z');
 	});
 
 	it('hands a member a placeholder for a past winner hidden for review, a moderator the card', async () => {

@@ -12,8 +12,8 @@
 	import Trophy from 'lucide-svelte/icons/trophy';
 	import UserPen from 'lucide-svelte/icons/user-pen';
 	import Avatar from '#lib/components/Avatar.svelte';
+	import AwardChips from '#lib/components/AwardChips.svelte';
 	import RoleBadge from '#lib/components/RoleBadge.svelte';
-	import { formatMonthYear } from '../../lib/moderation-labels';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -77,15 +77,7 @@
 		</div>
 	</dl>
 
-	{#if data.awards.length > 0}
-		<p class="award-chips">
-			{#each data.awards as award (award.month)}
-				<a class="award-chip" href="{resolve('/awards')}?from={award.month}#{award.month}"
-					><Trophy size={12} aria-hidden="true" /> {formatMonthYear(award.month)}</a
-				>
-			{/each}
-		</p>
-	{/if}
+	<AwardChips awards={data.awards} />
 
 	<nav aria-label="Profile">
 		<ul>
@@ -182,27 +174,6 @@
 		border-radius: var(--radius);
 		background: var(--surface);
 		text-align: center;
-	}
-
-	.award-chips {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: center;
-		gap: 6px;
-		margin: -4px 0 16px;
-	}
-
-	.award-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		min-height: 28px;
-		padding: 0 10px;
-		border-radius: var(--radius-pill);
-		background: var(--accent-soft);
-		color: var(--accent-soft-text);
-		font-size: 12px;
-		font-weight: 600;
 	}
 
 	dt {

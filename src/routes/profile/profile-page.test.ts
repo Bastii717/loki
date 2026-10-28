@@ -74,7 +74,7 @@ describe('profile page', () => {
 	it('shows the awards count after Comments, without chips when there are none', () => {
 		const { body } = render(Page as never, { props: { data: pageData() } as never });
 		expect(body).toMatch(/<dt[^>]*>Comments<\/dt>[\s\S]*<dt[^>]*>Awards<\/dt>\s*<dd[^>]*>0<\/dd>/);
-		expect(body).not.toContain('award-chip');
+		expect(body).not.toContain('Meme of the Month, ');
 	});
 
 	it('shows a chip per award linking to its month on the awards page', () => {
@@ -83,7 +83,7 @@ describe('profile page', () => {
 		});
 		expect(body).toMatch(/<dt[^>]*>Awards<\/dt>\s*<dd[^>]*>2<\/dd>/);
 		expect(body).toMatch(
-			/<a[^>]*class="award-chip[^"]*"[^>]*href="\/awards\?from=2026-10#2026-10"[^>]*>[\s\S]*?lucide-trophy[\s\S]*?Oct 2026/
+			/<a[^>]*class="chip[^"]*"[^>]*href="\/awards\?from=2026-10#2026-10"[^>]*>[\s\S]*?lucide-trophy[\s\S]*?Oct 2026/
 		);
 		expect(body).toMatch(/href="\/awards\?from=2026-08#2026-08"[^>]*>[\s\S]*?Aug 2026/);
 	});
