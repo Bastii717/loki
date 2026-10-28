@@ -7,7 +7,7 @@
  * Goes through the real server modules (createMedia, applyVote, addComment), so
  * thumbnails and S3 objects are real. Refuses to touch anything that is not a private
  * address unless LOKI_SEED_FORCE=1 is set. Idempotent: every block (memes, quotes, report,
- * rules and FAQ, favorite, notifications) is skipped when its rows already exist.
+ * rules and FAQ, favorite, award, notifications) is skipped when its rows already exist.
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -63,7 +63,9 @@ const [
 	moderationMod,
 	memesMod,
 	{ nameKey },
-	{ setAvatar }
+	{ setAvatar },
+	awardsMod,
+	{ fromBerlinLocal }
 ] = await Promise.all([
 	import('sharp'),
 	import('../src/lib/server/db'),
@@ -76,9 +78,13 @@ const [
 	import('../src/lib/server/moderation'),
 	import('../src/lib/server/memes'),
 	import('../src/lib/server/profile'),
-	import('../src/lib/server/avatar')
+	import('../src/lib/server/avatar'),
+	import('../src/lib/server/awards'),
+	import('../src/lib/server/berlin-time')
 ]);
-const { users, media, comments, quotes, reports, siteContent, favorites, notifications } = schema;
+const { users, media, comments, quotes, reports, siteContent, favorites, notifications, awards } =
+	schema;
+const { AWARD_KIND, berlinMonth, monthStart } = awardsMod;
 const { applyVote } = votesMod;
 const { addComment } = commentsMod;
 const { addQuote, voteQuote } = quotesMod;
@@ -120,9 +126,17 @@ interface DemoMeme {
 	down: string[];
 	/** Hours ago the meme was "posted". */
 	hoursAgo: number;
+	/** The exact posting time; overrides `hoursAgo` (which then only orders the seeding). */
+	postedAt?: Date;
 	views: number;
 	comments: { by: string; text: string }[];
 }
+
+// The meme of last month, so the awards page has a winner: the 15th, 12:00 Berlin time.
+const THIS_MONTH = berlinMonth(new Date());
+const LAST_MONTH = berlinMonth(new Date(monthStart(THIS_MONTH).getTime() - 1));
+const WINNER_POSTED_AT = fromBerlinLocal(`${LAST_MONTH}-15T12:00`);
+const WINNER_TITLE = 'A meeting that could have been an email';
 
 const MEMES: DemoMeme[] = [
 	{
@@ -179,7 +193,7 @@ const MEMES: DemoMeme[] = [
 		]
 	},
 	{
-		title: 'A meeting that could have been an email',
+		title: WINNER_TITLE,
 		caption: ['A MEETING THAT', 'COULD HAVE BEEN', 'AN EMAIL'],
 		width: 1080,
 		height: 1350,
@@ -188,7 +202,8 @@ const MEMES: DemoMeme[] = [
 		tags: ['meeting', 'office'],
 		up: ['jonas', 'mira', 'tobi', 'anke'],
 		down: ['kemal'],
-		hoursAgo: 31,
+		hoursAgo: (Date.now() - WINNER_POSTED_AT.getTime()) / 3_600_000,
+		postedAt: WINNER_POSTED_AT,
 		views: 27,
 		comments: [{ by: 'mira', text: 'Two hours. No agenda.' }]
 	},
@@ -431,7 +446,7 @@ async function seedMemes(byName: UserMap) {
 		});
 		for (const name of m.up) await applyVote(byName.get(name)!.id, id, 1);
 		for (const name of m.down) await applyVote(byName.get(name)!.id, id, -1);
-		const postedAt = Date.now() - m.hoursAgo * 3_600_000;
+		const postedAt = m.postedAt?.getTime() ?? Date.now() - m.hoursAgo * 3_600_000;
 		await db
 			.update(media)
 			.set({ createdAt: new Date(postedAt), viewCount: m.views })
@@ -502,10 +517,38 @@ async function seedExtras(byName: UserMap) {
 		}
 	}
 
+	await seedAward();
 	await seedNotifications(byName);
 }
 
-/** Five notices for lena, one of them unread, so the bell shows 1 and the page shows both row kinds. */
+/** Last month's winner row, so the awards page, the trophy and the profile chips have data. */
+async function seedAward() {
+	const [winner] = await db
+		.select({
+			id: media.id,
+			uploaderId: media.uploaderId,
+			title: media.title,
+			score: media.score
+		})
+		.from(media)
+		.where(eq(media.title, WINNER_TITLE));
+	if (!winner) return;
+	const inserted = await db
+		.insert(awards)
+		.values({
+			kind: AWARD_KIND,
+			month: `${LAST_MONTH}-01`,
+			mediaId: winner.id,
+			uploaderId: winner.uploaderId,
+			title: winner.title,
+			score: winner.score
+		})
+		.onConflictDoNothing({ target: [awards.kind, awards.month] })
+		.returning({ id: awards.id });
+	if (inserted.length > 0) console.log(`Seeded the ${LAST_MONTH} award for #${winner.id}`);
+}
+
+/** Six notices for lena, one of them unread, so the bell shows 1 and the page shows both row kinds. */
 async function seedNotifications(byName: UserMap) {
 	const lena = byName.get('lena')!;
 	const [{ n }] = await db
@@ -519,7 +562,7 @@ async function seedNotifications(byName: UserMap) {
 		mediaByTitle.set(row.title, row.id);
 	}
 	const monday = mediaByTitle.get('Monday, 7:00 AM');
-	const meeting = mediaByTitle.get('A meeting that could have been an email');
+	const meeting = mediaByTitle.get(WINNER_TITLE);
 	const review = mediaByTitle.get('Code review says: LGTM');
 	if (!monday || !meeting || !review) {
 		console.log('Demo memes not found; not seeding notifications.');
@@ -575,7 +618,7 @@ async function seedNotifications(byName: UserMap) {
 			contentType: 'meme',
 			contentId: meeting,
 			mediaId: meeting,
-			detail: 'nsfw:A meeting that could have been an email',
+			detail: `nsfw:${WINNER_TITLE}`,
 			ageHours: 76,
 			read: true
 		},
@@ -586,6 +629,16 @@ async function seedNotifications(byName: UserMap) {
 			mediaId: meeting,
 			detail: 'Two hours. No agenda.',
 			ageHours: 98,
+			read: true
+		},
+		{
+			// the hourly job notifies a winner right after the month ends
+			kind: 'award_won',
+			contentType: 'meme',
+			contentId: meeting,
+			mediaId: meeting,
+			detail: `${LAST_MONTH}:${WINNER_TITLE}`,
+			ageHours: Math.max(2, (Date.now() - monthStart(THIS_MONTH).getTime()) / 3_600_000 + 1),
 			read: true
 		}
 	];

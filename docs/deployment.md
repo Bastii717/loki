@@ -178,6 +178,10 @@ Members get in-app notices (comments on their memes and threads, moderation outc
 
 Search needs no configuration. Migration 0010 runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` (a trusted extension, so the application role may create it when it owns the database, as in the shipped compose setup) and adds the trigram indexes. On a managed database where the application role cannot create extensions, create `pg_trgm` once by hand before deploying.
 
+### Meme of the Month
+
+Automatic: an hourly job awards each finished Berlin calendar month to its top-scored meme, and a winner is notified only when the month ended less than 31 days ago (so a first deployment does not notify for old months). Nothing to configure.
+
 ## Releases
 
 The `Docker` workflow builds the image for every pull request (without pushing) and publishes it on pushes to `main` and on release tags:

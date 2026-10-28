@@ -484,7 +484,8 @@ async function main(): Promise<void> {
 				'notifications-mobile',
 				'profile-notifications-mobile',
 				'search-mobile',
-				'member-mobile'
+				'member-mobile',
+				'awards-mobile'
 			)
 		)
 			await withContext(
@@ -515,6 +516,9 @@ async function main(): Promise<void> {
 						if (!href) throw new Error('no member link for jonas');
 						await shootPage(page, href, 'member-mobile.png', 'Member since');
 					}
+					if (wants('awards-mobile'))
+						// last month's winner from the seed, plus whoever leads the running month
+						await shootPage(page, '/awards', 'awards-mobile.png', 'Meme of the Month');
 				},
 				{ mobile: true, account: OWNER }
 			);
