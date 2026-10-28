@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNotNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm';
 import { db } from './db';
 import { awards, comments, media } from './db/schema';
 import { fromBerlinLocal } from './berlin-time';
@@ -104,7 +104,10 @@ export async function findWinner(month: string, tx: Executor = db): Promise<Winn
 export async function awardDueMonths(
 	now = new Date()
 ): Promise<{ month: string; winner: Winner | null }[]> {
-	const [oldest] = await db.select({ at: sql<Date | null>`min(${media.createdAt})` }).from(media);
+	const [oldest] = await db
+		// mapWith turns the driver value into a Date; min() over no rows is NULL and stays null
+		.select({ at: sql`min(${media.createdAt})`.mapWith(media.createdAt) as SQL<Date | null> })
+		.from(media);
 	if (!oldest?.at) return [];
 
 	const done = await db
@@ -112,7 +115,7 @@ export async function awardDueMonths(
 		.from(awards)
 		.where(eq(awards.kind, AWARD_KIND));
 	const awarded = new Set(done.map((r) => r.month));
-	const due = monthsBetween(berlinMonth(new Date(oldest.at)), berlinMonth(now)).filter(
+	const due = monthsBetween(berlinMonth(oldest.at), berlinMonth(now)).filter(
 		(m) => !awarded.has(m)
 	);
 
@@ -160,8 +163,8 @@ export interface AwardRow {
 	score: number;
 }
 
-/** Winner rows only (no-winner months are skipped); a deleted winner stays, with its title. */
-const isWinnerRow = or(isNotNull(awards.mediaId), sql`${awards.title} <> ''`);
+/** Winner rows only: winners always score above 0, no-winner months exactly 0. A deleted winner stays. */
+const isWinnerRow = sql`${awards.score} > 0`;
 
 /**
  * Awarded months, newest first. `before` lists strictly earlier months, `from` starts at that

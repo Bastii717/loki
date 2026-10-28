@@ -405,6 +405,16 @@ describe('listAwards', () => {
 		expect(rows[1].title).toBe('Deleted one');
 	});
 
+	it('keeps a winner with an empty title whose meme was deleted', async () => {
+		const user = await testUser();
+		await award('2026-08', { uploaderId: user.id, title: '', score: 2 });
+		await award('2026-09');
+		const { rows } = await listAwards({ limit: 10 });
+		expect(rows).toEqual([
+			{ month: '2026-08', mediaId: null, uploaderId: user.id, title: '', score: 2 }
+		]);
+	});
+
 	it('pages with limit and reports hasMore', async () => {
 		await seedMonths();
 		const first = await listAwards({ limit: 2 });
@@ -442,6 +452,12 @@ describe('awardsOf', () => {
 		expect(await awardsOf(other.id)).toEqual([{ month: '2026-07' }]);
 		const nobody = await testUser();
 		expect(await awardsOf(nobody.id)).toEqual([]);
+	});
+
+	it('counts a winner with an empty title whose meme was deleted', async () => {
+		const user = await testUser();
+		await award('2026-08', { uploaderId: user.id, title: '', score: 2 });
+		expect(await awardsOf(user.id)).toEqual([{ month: '2026-08' }]);
 	});
 });
 
