@@ -26,9 +26,9 @@ import { DELETE as deleteComment } from '../api/comments/[id]/+server';
 import { DELETE as deleteMeme, PATCH as patchMeme } from '../api/memes/[id]/+server';
 import { POST as caseAction } from '../api/moderation/case/+server';
 import { POST as setTimeoutRoute } from '../api/moderation/timeouts/+server';
-import { DELETE as liftTimeoutRoute } from '../api/moderation/timeouts/[userId]/+server';
+import { DELETE as liftTimeoutRoute } from '../api/moderation/timeouts/[pid]/+server';
 import { GET as searchUsers } from '../api/moderation/users/+server';
-import { POST as userProfile } from '../api/moderation/users/[id]/profile/+server';
+import { POST as userProfile } from '../api/moderation/users/[pid]/profile/+server';
 import { DELETE as deleteQuote } from '../api/quotes/[id]/+server';
 import { load as rootLayout } from '../+layout.server';
 import { load as moderationLayout } from './+layout.server';
@@ -251,29 +251,29 @@ const endpoints: Endpoint[] = [
 			path: '/api/moderation/timeouts',
 			method: 'POST',
 			session,
-			body: { userId: w.victim.user.id, days: 2, reason: 'Test' }
+			body: { userId: w.victim.publicId, days: 2, reason: 'Test' }
 		})
 	},
 	{
-		name: 'DELETE timeouts/[userId]',
+		name: 'DELETE timeouts/[pid]',
 		page: false,
 		call: (w, session) => ({
 			handler: liftTimeoutRoute,
-			path: `/api/moderation/timeouts/${w.victim.user.id}`,
+			path: `/api/moderation/timeouts/${w.victim.publicId}`,
 			method: 'DELETE',
-			params: { userId: String(w.victim.user.id) },
+			params: { pid: w.victim.publicId },
 			session
 		})
 	},
 	{
-		name: 'POST users/[id]/profile',
+		name: 'POST users/[pid]/profile',
 		page: false,
 		adminOnly: true,
 		call: (w, session) => ({
 			handler: userProfile,
-			path: `/api/moderation/users/${w.victim.user.id}/profile`,
+			path: `/api/moderation/users/${w.victim.publicId}/profile`,
 			method: 'POST',
-			params: { id: String(w.victim.user.id) },
+			params: { pid: w.victim.publicId },
 			session,
 			body: { action: 'clearMotto' }
 		})
@@ -469,7 +469,7 @@ describe('timed-out moderators lose their moderation rights', () => {
 describe('admin-only Users page', () => {
 	const call = (user: World['mod']['user']) =>
 		usersPage({ locals: { user } } as never) as Promise<{
-			users: { id: number; username: string; role: string; confirmedReports: number }[];
+			users: { publicId: string; username: string; role: string; confirmedReports: number }[];
 		}>;
 
 	it('refuses moderators even with a direct load call, serves admins the full list', async () => {
@@ -477,12 +477,15 @@ describe('admin-only Users page', () => {
 		await expect(call(w.mod.user)).rejects.toMatchObject({ status: 403 });
 		await expect(call(w.member.user)).rejects.toMatchObject({ status: 403 });
 		const { users } = await call(w.admin.user);
-		expect(users.map((u) => u.id)).toEqual(
+		expect(users.map((u) => u.publicId)).toEqual(
 			expect.arrayContaining(
-				[w.member, w.mod, w.admin, w.victim, w.lockedMod, w.lockedAdmin].map((u) => u.user.id)
+				[w.member, w.mod, w.admin, w.victim, w.lockedMod, w.lockedAdmin].map((u) => u.publicId)
 			)
 		);
-		expect(users.find((u) => u.id === w.mod.user.id)?.role).toBe('moderator');
+		expect(users.find((u) => u.publicId === w.mod.publicId)?.role).toBe('moderator');
+		// moderators identify users by public id; the usernames stay visible
+		expect(JSON.stringify(users)).not.toMatch(/"(id|userId)":\d/);
+		expect(users.find((u) => u.publicId === w.mod.publicId)?.username).toBe(w.mod.user.username);
 	});
 
 	it('shows counts, active and past timeouts and confirmed reports', async () => {
@@ -498,7 +501,7 @@ describe('admin-only Users page', () => {
 		const { users } = (await usersPage({ locals: { user: w.admin.user } } as never)) as {
 			users: Record<string, unknown>[];
 		};
-		const victim = users.find((u) => u.id === w.victim.user.id)!;
+		const victim = users.find((u) => u.publicId === w.victim.publicId)!;
 		expect(victim).toMatchObject({
 			memes: 1,
 			comments: 1,
@@ -508,6 +511,25 @@ describe('admin-only Users page', () => {
 			activeTimeout: { reason: 'dann' }
 		});
 		expect((victim.pastTimeouts as { reason: string }[]).map((t) => t.reason)).toEqual(['erst']);
+	});
+});
+
+describe('timeouts page', () => {
+	it('identifies muted users by public id, hides the internal id and sets canLift', async () => {
+		const w = await world();
+		await setTimeout_(w.admin.user, w.victim.user.id, 2, 'Streit');
+		const load = (user: World['mod']['user']) =>
+			timeoutsPage({ locals: { user } } as never) as Promise<{
+				timeouts: { publicId: string; canLift: boolean; role: string }[];
+			}>;
+		const asMod = await load(w.mod.user);
+		const victim = asMod.timeouts.find((t) => t.publicId === w.victim.publicId);
+		expect(victim).toMatchObject({ canLift: true });
+		// a moderator may not lift a moderator's timeout
+		expect(asMod.timeouts.find((t) => t.publicId === w.lockedMod.publicId)?.canLift).toBe(false);
+		const asAdmin = await load(w.admin.user);
+		expect(asAdmin.timeouts.find((t) => t.publicId === w.lockedMod.publicId)?.canLift).toBe(true);
+		expect(JSON.stringify(asMod)).not.toMatch(/"userId":/);
 	});
 });
 
@@ -555,6 +577,28 @@ describe('page data for moderators', () => {
 		const garbage = await load('?action=%27%20OR%201=1&cursor=abc');
 		expect(garbage.action).toBe('');
 		expect(garbage.entries).toHaveLength(1);
+	});
+});
+
+describe('signed-in user in the root layout', () => {
+	const load = (user: World['mod']['user'] | null) =>
+		rootLayout({
+			locals: { user },
+			url: new URL('http://localhost/'),
+			depends: () => {}
+		} as never) as Promise<{ user: Record<string, unknown> | null }>;
+
+	it('exposes the public id as `id` and never the internal one', async () => {
+		const w = await world();
+		const { user } = await load(w.mod.user);
+		expect(user).toEqual({
+			id: w.mod.publicId,
+			username: w.mod.user.username,
+			displayName: null,
+			role: 'moderator'
+		});
+		expect(JSON.stringify(user)).not.toMatch(/"(id|publicId)":\d/);
+		expect((await load(null)).user).toBeNull();
 	});
 });
 

@@ -12,11 +12,11 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	const found = await searchUsers(url.searchParams.get('q') ?? '');
 	return json({
 		users: found.map((u) => ({
-			id: u.id,
+			id: u.publicId,
 			username: u.username,
 			displayName: u.displayName,
 			role: u.role,
-			timeoutable: u.id !== actor.id && (actor.role === 'admin' || u.role === 'member')
+			timeoutable: u.publicId !== actor.publicId && (actor.role === 'admin' || u.role === 'member')
 		}))
 	});
 };

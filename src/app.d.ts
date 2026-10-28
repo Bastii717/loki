@@ -1,13 +1,13 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 import type { SeasonId } from '$lib/seasons';
-import type { SessionUser } from '$lib/server/auth/session';
+import type { SignedInUser } from '$lib/server/auth/session';
 
 declare global {
 	namespace App {
 		// interface Error {}
 		interface Locals {
-			user: SessionUser | null;
+			user: SignedInUser | null;
 			season: { id: SeasonId; source: 'auto' | 'forced' | 'preview' } | null;
 		}
 		// interface PageData {}

@@ -20,6 +20,7 @@ describe('sessions', () => {
 		expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
 		expect(await validateSession(token)).toEqual({
 			id: user.id,
+			publicId: user.publicId,
 			username: user.username,
 			displayName: null,
 			role: 'moderator'

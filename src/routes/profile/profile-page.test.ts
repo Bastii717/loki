@@ -35,6 +35,14 @@ describe('profile load', () => {
 		expect(data.awards).toEqual([]);
 	});
 
+	it('carries no internal id: no numeric id, user id or public id of the viewer', async () => {
+		const { user, publicId } = await userWithSession();
+		const data = await load({ locals: { user } } as never);
+		const json = JSON.stringify(data);
+		expect(json).not.toMatch(/"(id|userId|uploaderId)":\d/);
+		expect(json).not.toContain(publicId);
+	});
+
 	it('lists the months the member won, newest first', async () => {
 		const { user } = await userWithSession();
 		const other = await userWithSession();

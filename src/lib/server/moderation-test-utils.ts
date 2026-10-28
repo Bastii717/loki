@@ -1,4 +1,4 @@
-import { createSession, type SessionUser } from './auth/session';
+import { createSession, type SessionUser, type SignedInUser } from './auth/session';
 import { db } from './db';
 import { comments, media, quotes, reports, timeouts } from './db/schema';
 import { testUser } from './db/test-utils';
@@ -48,7 +48,13 @@ export async function timeOut(
 /** A fresh user with the given role, a live session cookie value and the user's public id. */
 export async function userWithSession(role: SessionUser['role'] = 'member') {
 	const u = await testUser({ role });
-	const user: SessionUser = { id: u.id, username: u.username, displayName: u.displayName, role };
+	const user: SignedInUser = {
+		id: u.id,
+		publicId: u.publicId,
+		username: u.username,
+		displayName: u.displayName,
+		role
+	};
 	return { user, session: await createSession(u.id), publicId: u.publicId };
 }
 
