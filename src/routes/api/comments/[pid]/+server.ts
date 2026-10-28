@@ -5,11 +5,12 @@ import {
 	deleteComment
 } from '../../../../lib/server/comments';
 import { mapModerationError } from '../../../../lib/server/moderation-http';
+import { resolveCommentId } from '../../../../lib/server/public-ids';
 import type { RequestHandler } from './$types';
 
 export const DELETE: RequestHandler = async ({ params, locals }) => {
-	const id = Number(params.id);
-	if (!Number.isSafeInteger(id) || id <= 0) error(404, 'Not found');
+	const id = await resolveCommentId(params.pid);
+	if (id === null) error(404, 'Not found');
 	try {
 		await deleteComment(locals.user!, id);
 	} catch (e) {

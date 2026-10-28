@@ -7,6 +7,12 @@ import {
 	type ReportCategory
 } from '../../../lib/server/moderation';
 import { mapModerationError } from '../../../lib/server/moderation-http';
+import {
+	isPublicId,
+	resolveCommentId,
+	resolveMediaId,
+	resolveQuoteId
+} from '../../../lib/server/public-ids';
 import type { RequestHandler } from './$types';
 
 const CONTENT_TYPES: readonly ContentType[] = ['meme', 'comment', 'quote'];
@@ -24,9 +30,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	if (typeof contentType !== 'string' || !CONTENT_TYPES.includes(contentType as ContentType)) {
 		error(400, 'contentType must be meme, comment or quote');
 	}
-	if (typeof contentId !== 'number' || !Number.isSafeInteger(contentId) || contentId <= 0) {
-		error(400, 'contentId must be a positive integer');
-	}
+	// the public id of the meme, comment or quote; a number (an internal id) is rejected like any other junk
+	if (!isPublicId(contentId)) error(400, 'Invalid content ID.');
 	if (typeof category !== 'string' || !REPORT_CATEGORIES.includes(category as ReportCategory)) {
 		error(400, 'Invalid category');
 	}
@@ -34,11 +39,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		error(400, `text must be a string of at most ${MAX_REPORT_TEXT} characters`);
 	}
 
+	const resolve =
+		contentType === 'meme'
+			? resolveMediaId
+			: contentType === 'comment'
+				? resolveCommentId
+				: resolveQuoteId;
+	const id = await resolve(contentId);
+	if (id === null) error(404, 'Not found');
+
 	try {
 		await createReport(
 			locals.user!,
 			contentType as ContentType,
-			contentId,
+			id,
 			category as ReportCategory,
 			text
 		);

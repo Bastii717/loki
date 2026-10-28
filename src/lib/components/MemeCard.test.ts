@@ -4,9 +4,17 @@ import type { FeedItem } from '../server/feed';
 import { STATUS_KEY } from '../status-context';
 import MemeCard from './MemeCard.svelte';
 
+const MEME = 'MemeAbc12345';
+const UPLOADER = 'Up1oad3rXy9Z';
+
+/** The first `<a>` element linking to `href`, or null. */
+function linkTo(html: string, href: string): RegExpMatchArray | null {
+	return html.match(new RegExp(`<a\\b[^>]*href="${href}"[^>]*>[\\s\\S]*?</a>`));
+}
+
 function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
 	return {
-		id: 1,
+		id: MEME,
 		title: 'Montag',
 		kind: 'image',
 		thumbUrl: '/media/memes/1/thumb.webp',
@@ -22,7 +30,7 @@ function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
 		viewCount: 0,
 		blurred: null,
 		uploader: 'dev',
-		uploaderId: 7,
+		uploaderId: UPLOADER,
 		uploaderRole: 'member',
 		uploaderAvatar: null,
 		mine: false,
@@ -104,6 +112,15 @@ describe('MemeCard', () => {
 		expect(body).toContain('aria-label="Downvote"');
 	});
 
+	describe('links by public id', () => {
+		it('links the card to /meme/<pid> and the name to /users/<pid>, with no numeric id in any href', () => {
+			const { body } = render(MemeCard, { props: { item: feedItem() } });
+			expect(linkTo(body, `/meme/${MEME}`)).not.toBeNull();
+			expect(linkTo(body, `/users/${UPLOADER}`)).not.toBeNull();
+			expect(body).not.toMatch(/href="\/(meme|users)\/\d+"/);
+		});
+	});
+
 	describe('uploader', () => {
 		it('shows the display name', () => {
 			const { body } = render(MemeCard, { props: { item: feedItem({ uploader: 'Hanna Lee' }) } });
@@ -112,9 +129,9 @@ describe('MemeCard', () => {
 
 		it('links the name to the member page, with the badge outside the link', () => {
 			const { body } = render(MemeCard, {
-				props: { item: feedItem({ uploaderRole: 'admin' }), feedIds: [1] }
+				props: { item: feedItem({ uploaderRole: 'admin' }), feedIds: [MEME] }
 			});
-			const link = body.match(/<a\b[^>]*href="\/users\/7"[^>]*>[\s\S]*?<\/a>/);
+			const link = linkTo(body, `/users/${UPLOADER}`);
 			expect(link, 'name link rendered').not.toBeNull();
 			expect(link![0]).toMatch(/class="name[^"]*"/);
 			expect(link![0]).toContain('>dev</a>');

@@ -30,15 +30,15 @@ async function world() {
 			objectKey: 'memes/o.webp',
 			thumbKey: 'memes/t.webp'
 		})
-		.returning({ id: media.id });
+		.returning({ id: media.id, publicId: media.publicId });
 	const [comment] = await db
 		.insert(comments)
 		.values({ mediaId: meme.id, authorId: author.id, text: 'Kommentar' })
-		.returning({ id: comments.id });
+		.returning({ id: comments.id, publicId: comments.publicId });
 	const [quote] = await db
 		.insert(quotes)
 		.values({ submittedBy: author.id, text: 'Zitat', author: 'Opa' })
-		.returning({ id: quotes.id });
+		.returning({ id: quotes.id, publicId: quotes.publicId });
 	const asUser = (u: { id: number; username: string }): SessionUser => ({
 		id: u.id,
 		username: u.username,
@@ -53,6 +53,9 @@ async function world() {
 		memeId: meme.id,
 		commentId: comment.id,
 		quoteId: quote.id,
+		memePid: meme.publicId,
+		commentPid: comment.publicId,
+		quotePid: quote.publicId,
 		asUser
 	};
 }
@@ -64,9 +67,9 @@ describe('POST /api/report', () => {
 	it('stores a report for each content type and answers 204', async () => {
 		const w = await world();
 		for (const [contentType, contentId] of [
-			['meme', w.memeId],
-			['comment', w.commentId],
-			['quote', w.quoteId]
+			['meme', w.memePid],
+			['comment', w.commentPid],
+			['quote', w.quotePid]
 		] as const) {
 			const { response } = await post(
 				{ contentType, contentId, category: 'misinformation', text: ' Quatsch ' },
@@ -77,12 +80,14 @@ describe('POST /api/report', () => {
 		const rows = await db.select().from(reports).where(eq(reports.reporterId, w.reporter.id));
 		expect(rows.map((r) => r.contentType).sort()).toEqual(['comment', 'meme', 'quote']);
 		expect(rows.every((r) => r.category === 'misinformation' && r.text === 'Quatsch')).toBe(true);
+		// the stored report keeps the internal ids
+		expect(rows.map((r) => r.contentId).sort()).toEqual([w.memeId, w.commentId, w.quoteId].sort());
 	});
 
 	it('text is optional', async () => {
 		const w = await world();
 		const { response } = await post(
-			{ contentType: 'meme', contentId: w.memeId, category: 'spam' },
+			{ contentType: 'meme', contentId: w.memePid, category: 'spam' },
 			w.reporterSession
 		);
 		expect(response.status).toBe(204);
@@ -100,24 +105,51 @@ describe('POST /api/report', () => {
 		['over-long text', { contentType: 'meme', category: 'spam', text: 'x'.repeat(501) }]
 	])('rejects %s with 400 and writes nothing', async (_name, partial) => {
 		const w = await world();
-		const { response } = await post({ contentId: w.memeId, ...partial }, w.reporterSession);
+		const { response } = await post({ contentId: w.memePid, ...partial }, w.reporterSession);
 		expect(response.status).toBe(400);
 		expect(await db.select().from(reports)).toHaveLength(0);
 	});
 
 	it.each([
-		['string id', '1'],
+		['numeric string', '1'],
 		['zero', 0],
 		['negative', -3],
 		['fraction', 1.5],
-		['null', null]
-	])('rejects a %s contentId with 400', async (_name, contentId) => {
+		['null', null],
+		['11 characters', 'AAAAAAAAAAA'],
+		['13 characters', 'AAAAAAAAAAAAA'],
+		['a dash', 'AAAAAA-AAAAA'],
+		['missing', undefined]
+	])('rejects a %s contentId with 400 Invalid content ID.', async (_name, contentId) => {
 		const w = await world();
 		const { response } = await post(
 			{ contentType: 'meme', contentId, category: 'spam' },
 			w.reporterSession
 		);
 		expect(response.status).toBe(400);
+		expect(await response.text()).toBe('Invalid content ID.');
+		expect(await db.select().from(reports)).toHaveLength(0);
+	});
+
+	it('rejects the internal numeric id of a real meme with 400', async () => {
+		const w = await world();
+		const { response } = await post(
+			{ contentType: 'meme', contentId: w.memeId, category: 'spam' },
+			w.reporterSession
+		);
+		expect(response.status).toBe(400);
+		expect(await db.select().from(reports)).toHaveLength(0);
+	});
+
+	it('resolves the public id per content type: a comment id is not a meme', async () => {
+		const w = await world();
+		const { response } = await post(
+			{ contentType: 'meme', contentId: w.commentPid, category: 'spam' },
+			w.reporterSession
+		);
+		expect(response.status).toBe(404);
+		expect(await response.text()).toBe('Not found');
+		expect(await db.select().from(reports)).toHaveLength(0);
 	});
 
 	it('rejects a non-JSON body with 400', async () => {
@@ -134,17 +166,17 @@ describe('POST /api/report', () => {
 	it('maps own content to 400, duplicate to 409, missing content to 404', async () => {
 		const w = await world();
 		const own = await post(
-			{ contentType: 'meme', contentId: w.memeId, category: 'spam' },
+			{ contentType: 'meme', contentId: w.memePid, category: 'spam' },
 			w.authorSession
 		);
 		expect(own.response.status).toBe(400);
 
-		const body = { contentType: 'comment', contentId: w.commentId, category: 'spam' };
+		const body = { contentType: 'comment', contentId: w.commentPid, category: 'spam' };
 		expect((await post(body, w.reporterSession)).response.status).toBe(204);
 		expect((await post(body, w.reporterSession)).response.status).toBe(409);
 
 		const missing = await post(
-			{ contentType: 'quote', contentId: 999999, category: 'spam' },
+			{ contentType: 'quote', contentId: 'AAAAAAAAAAAA', category: 'spam' },
 			w.reporterSession
 		);
 		expect(missing.response.status).toBe(404);
@@ -155,9 +187,9 @@ describe('POST /api/report', () => {
 		const [orphan] = await db
 			.insert(quotes)
 			.values({ submittedBy: null, text: 'alt', author: 'x' })
-			.returning({ id: quotes.id });
+			.returning({ id: quotes.id, publicId: quotes.publicId });
 		const { response } = await post(
-			{ contentType: 'quote', contentId: orphan.id, category: 'spam' },
+			{ contentType: 'quote', contentId: orphan.publicId, category: 'spam' },
 			w.reporterSession
 		);
 		expect(response.status).toBe(404);
@@ -167,7 +199,7 @@ describe('POST /api/report', () => {
 		const w = await world();
 		await timeOut(w.reporter.id, w.author.id, MUTED_UNTIL);
 		const { response } = await post(
-			{ contentType: 'meme', contentId: w.memeId, category: 'spam' },
+			{ contentType: 'meme', contentId: w.memePid, category: 'spam' },
 			w.reporterSession
 		);
 		expect(response.status).toBe(403);
@@ -180,7 +212,7 @@ describe('POST /api/report', () => {
 			handler: POST,
 			path: '/api/report',
 			method: 'POST',
-			body: { contentType: 'meme', contentId: w.memeId, category: 'spam' }
+			body: { contentType: 'meme', contentId: w.memePid, category: 'spam' }
 		});
 		expect(response.status).toBe(401);
 	});

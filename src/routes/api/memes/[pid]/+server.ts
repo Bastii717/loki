@@ -1,12 +1,14 @@
 import { error } from '@sveltejs/kit';
 import { deleteMedia, MediaPermissionError, setFlags } from '../../../../lib/server/memes';
 import { mapModerationError } from '../../../../lib/server/moderation-http';
+import { resolveMediaId } from '../../../../lib/server/public-ids';
 import { MediaNotFoundError } from '../../../../lib/server/votes';
 import type { RequestHandler } from './$types';
 
-function parseId(raw: string): number {
-	const id = Number(raw);
-	if (!Number.isSafeInteger(id) || id <= 0) error(404, 'Not found');
+/** The meme's internal id for a public id from the URL; an invalid or unknown id is a 404. */
+async function parseId(pid: string): Promise<number> {
+	const id = await resolveMediaId(pid);
+	if (id === null) error(404, 'Not found');
 	return id;
 }
 
@@ -18,7 +20,7 @@ function mapError(e: unknown): never {
 
 export const DELETE: RequestHandler = async ({ params, locals }) => {
 	try {
-		await deleteMedia(locals.user!, parseId(params.id));
+		await deleteMedia(locals.user!, await parseId(params.pid));
 	} catch (e) {
 		mapError(e);
 	}
@@ -26,7 +28,7 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 };
 
 export const PATCH: RequestHandler = async ({ params, request, locals }) => {
-	const id = parseId(params.id);
+	const id = await parseId(params.pid);
 	let body: unknown;
 	try {
 		body = await request.json();

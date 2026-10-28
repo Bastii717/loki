@@ -56,8 +56,8 @@ export async function createMedia(opts: CreateMediaOptions): Promise<{ id: numbe
 		...new Set(opts.tagNames.map(normalizeTag).filter((t): t is string => t !== null))
 	].slice(0, MAX_TAGS);
 
-	const objectKey = mediaKey(uploader.id, sniffed.ext);
-	const thumbKey = mediaKey(uploader.id, 'webp');
+	const objectKey = mediaKey(sniffed.ext);
+	const thumbKey = mediaKey('webp');
 	const uploaded: string[] = [];
 	try {
 		// register before awaiting: a PUT that fails midway may still have left the object behind

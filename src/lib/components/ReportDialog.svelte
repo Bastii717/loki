@@ -8,7 +8,7 @@
 		contentType,
 		contentId,
 		onclose
-	}: { contentType: ContentType; contentId: number; onclose: () => void } = $props();
+	}: { contentType: ContentType; contentId: string; onclose: () => void } = $props();
 
 	// Mirrors MAX_REPORT_TEXT in moderation.ts (the server module is not importable client-side).
 	const MAX_TEXT = 500;

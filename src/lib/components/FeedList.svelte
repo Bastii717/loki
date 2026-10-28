@@ -6,7 +6,7 @@
 
 	/**
 	 * A card list with infinite scroll against /api/feed, used by the profile sub-pages
-	 * (`list=mine|favorites`) and the member page (`list="user"` sends `uploader=<id>`).
+	 * (`list=mine|favorites`) and the member page (`list="user"` sends `uploader=<public id>`).
 	 */
 	let {
 		items: initialItems,
@@ -19,7 +19,7 @@
 		nextCursor: string | null;
 		list: 'mine' | 'favorites' | 'user';
 		/** The member whose memes to list; required when `list` is 'user'. */
-		uploader?: number;
+		uploader?: string;
 		empty: string;
 	} = $props();
 
@@ -36,7 +36,7 @@
 		loading = true;
 		failed = false;
 		const params = new SvelteURLSearchParams({ sort: 'new', cursor: nextCursor });
-		if (list === 'user') params.set('uploader', String(uploader));
+		if (list === 'user') params.set('uploader', uploader ?? '');
 		else params.set('list', list);
 		try {
 			const res = await fetch(`/api/feed?${params}`);

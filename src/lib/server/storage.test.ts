@@ -5,14 +5,14 @@ import { ensureBucket } from './storage-test-utils';
 describe('storage', () => {
 	beforeAll(ensureBucket);
 
-	it('mediaKey is namespaced per user and unguessable', () => {
-		const a = mediaKey(7, 'png');
-		expect(a).toMatch(/^memes\/u7\/[0-9a-f-]{36}\.png$/);
-		expect(mediaKey(7, 'png')).not.toBe(a);
+	it('mediaKey carries no user segment and is unguessable', () => {
+		const a = mediaKey('png');
+		expect(a).toMatch(/^memes\/[0-9a-f-]{36}\.png$/);
+		expect(mediaKey('png')).not.toBe(a);
 	});
 
 	it('put -> presign -> fetch returns bytes and content type', async () => {
-		const key = mediaKey(1, 'txt');
+		const key = mediaKey('txt');
 		const body = Buffer.from('hello loki');
 		await putObject(key, body, 'text/plain');
 		const res = await fetch(await getPresignedUrl(key));
@@ -23,7 +23,7 @@ describe('storage', () => {
 	});
 
 	it('rejects a tampered signature', async () => {
-		const key = mediaKey(1, 'txt');
+		const key = mediaKey('txt');
 		await putObject(key, Buffer.from('x'), 'text/plain');
 		const url = new URL(await getPresignedUrl(key));
 		const sig = url.searchParams.get('X-Amz-Signature')!;
@@ -34,7 +34,7 @@ describe('storage', () => {
 	});
 
 	it('deleteObjects removes objects', async () => {
-		const keys = [mediaKey(1, 'txt'), mediaKey(1, 'txt')];
+		const keys = [mediaKey('txt'), mediaKey('txt')];
 		for (const k of keys) await putObject(k, Buffer.from('x'), 'text/plain');
 		const urls = await Promise.all(keys.map((k) => getPresignedUrl(k)));
 		await deleteObjects(keys);

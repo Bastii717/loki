@@ -3,9 +3,17 @@ import { describe, expect, it } from 'vitest';
 import type { FeedItem } from '../server/feed';
 import DiscoverSlide from './DiscoverSlide.svelte';
 
+const MEME = 'MemeAbc12345';
+const UPLOADER = 'Up1oad3rXy9Z';
+
+/** The first `<a>` element linking to `href`, or null. */
+function linkTo(html: string, href: string): RegExpMatchArray | null {
+	return html.match(new RegExp(`<a\\b[^>]*href="${href}"[^>]*>[\\s\\S]*?</a>`));
+}
+
 function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
 	return {
-		id: 1,
+		id: MEME,
 		title: 'Montag',
 		kind: 'image',
 		thumbUrl: '/media/memes/1/thumb.webp',
@@ -21,7 +29,7 @@ function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
 		viewCount: 0,
 		blurred: null,
 		uploader: 'Hanna Lee',
-		uploaderId: 7,
+		uploaderId: UPLOADER,
 		uploaderRole: 'member',
 		uploaderAvatar: null,
 		mine: false,
@@ -41,8 +49,14 @@ describe('DiscoverSlide uploader', () => {
 		expect(html(feedItem())).toMatch(/class="name[^"]*"[^>]*>Hanna Lee<\/a>/);
 	});
 
+	it('links the slide to /meme/<pid>', () => {
+		const body = html(feedItem());
+		expect(linkTo(body, `/meme/${MEME}`)).not.toBeNull();
+		expect(body).not.toMatch(/href="\/(meme|users)\/\d+"/);
+	});
+
 	it('links the name to the member page', () => {
-		const link = html(feedItem()).match(/<a\b[^>]*href="\/users\/7"[^>]*>[\s\S]*?<\/a>/);
+		const link = linkTo(html(feedItem()), `/users/${UPLOADER}`);
 		expect(link, 'name link rendered').not.toBeNull();
 		expect(link![0]).toMatch(/class="name[^"]*"/);
 		expect(link![0]).toContain('>Hanna Lee</a>');

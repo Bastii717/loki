@@ -19,6 +19,7 @@
 	import { apiErrorMessage } from '../api-error';
 	import { lockMessage, refreshStatus, useStatus } from '../status-context';
 	import { relativeTime } from '../time';
+	import { isPublicId } from '../public-id';
 	import { createVoter } from '../vote';
 	import type { CommentItem } from '../server/comments';
 	import type { FeedItem } from '../server/feed';
@@ -37,7 +38,7 @@
 	}: {
 		item: FeedItem;
 		comments: CommentItem[];
-		viewer: { id: number; canModerate: boolean };
+		viewer: { id: string; canModerate: boolean };
 		/** Raw flags when the viewer may delete/flag this meme (uploader or moderator), else null. */
 		flags: { nsfw: boolean; spoiler: boolean } | null;
 	} = $props();
@@ -70,7 +71,7 @@
 	const scoreLabel = $derived(score > 0 ? `+${score}` : String(score));
 	// Under review and withheld by the server (members): panel only, no reveal. Mods keep the content.
 	const withheld = $derived(item.mediaUrl === null);
-	const userHref = (id: number) => resolve('/users/[id]', { id: String(id) });
+	const userHref = (pid: string) => resolve('/users/[pid]', { pid });
 
 	// While writes are locked the controls stay in the DOM (focusable, with the reason as title);
 	// activating one shows the reason in its usual error line instead of calling the API.
@@ -86,7 +87,11 @@
 	}
 
 	// ---- swipe / arrow navigation between feed neighbours
-	const feedIds = $derived(page.state.feedIds);
+	// history state is client-controlled: entries that are not public ids are dropped
+	const feedIds = $derived.by(() => {
+		const ids = page.state.feedIds?.filter(isPublicId);
+		return ids && ids.length > 0 ? ids : undefined;
+	});
 	const index = $derived(feedIds ? feedIds.indexOf(item.id) : -1);
 	const prevId = $derived(feedIds && index > 0 ? feedIds[index - 1] : null);
 	const nextId = $derived(feedIds && index >= 0 ? (feedIds[index + 1] ?? null) : null);
@@ -94,11 +99,11 @@
 	let navigating = false;
 
 	/** Returns whether a navigation started; ignored at the feed edges and while one is in flight. */
-	function go(id: number | null): boolean {
+	function go(id: string | null): boolean {
 		if (id === null || navigating) return false;
 		navigating = true;
 		// replaceState keeps "back" pointing at the feed instead of at every swiped meme
-		void goto(resolve('/meme/[id]', { id: String(id) }), {
+		void goto(resolve('/meme/[pid]', { pid: id }), {
 			replaceState: true,
 			state: { feedIds }
 		}).finally(() => (navigating = false));

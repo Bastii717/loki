@@ -12,8 +12,8 @@ declare global {
 		}
 		// interface PageData {}
 		interface PageState {
-			/** Ordered meme ids of the feed the detail view was opened from (swipe navigation). */
-			feedIds?: number[];
+			/** Ordered public meme ids of the feed the detail view was opened from (swipe navigation). */
+			feedIds?: string[];
 		}
 		// interface Platform {}
 	}

@@ -22,7 +22,7 @@
 	import UnderReviewBadge from './UnderReviewBadge.svelte';
 	import UnderReviewPanel from './UnderReviewPanel.svelte';
 
-	let { item, feedIds }: { item: FeedItem; feedIds?: number[] } = $props();
+	let { item, feedIds }: { item: FeedItem; feedIds?: string[] } = $props();
 
 	let revealed = $state(false);
 	// The thumbnail could not be loaded (object gone, media route failed): show a placeholder
@@ -32,9 +32,9 @@
 		// An error fired before hydration is not replayed, so also check the current state.
 		if (img.complete && img.naturalWidth === 0) broken = true;
 	}
-	const memeHref = $derived(resolve('/meme/[id]', { id: String(item.id) }));
+	const memeHref = $derived(resolve('/meme/[pid]', { pid: item.id }));
 	const userHref = $derived(
-		item.uploaderId === null ? null : resolve('/users/[id]', { id: String(item.uploaderId) })
+		item.uploaderId === null ? null : resolve('/users/[pid]', { pid: item.uploaderId })
 	);
 
 	// Client-side nav that hands the feed's id order to the detail view for swipe navigation.

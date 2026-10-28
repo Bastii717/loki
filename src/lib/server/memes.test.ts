@@ -65,8 +65,8 @@ describe('toggleFavorite', () => {
 
 describe('deleteMedia', () => {
 	async function stored(uploaderId: number) {
-		const objectKey = mediaKey(uploaderId, 'png');
-		const thumbKey = mediaKey(uploaderId, 'webp');
+		const objectKey = mediaKey('png');
+		const thumbKey = mediaKey('webp');
 		await putObject(objectKey, Buffer.from('o'), 'image/png');
 		await putObject(thumbKey, Buffer.from('t'), 'image/webp');
 		return addMedia(uploaderId, { objectKey, thumbKey });
@@ -313,10 +313,10 @@ describe('getFeedPage filter', () => {
 		await toggleFavorite(b.id, a1.id);
 
 		const byB = await getFeedPage({ viewerId: a.id, sort: 'new', filter: { uploaderId: b.id } });
-		expect(byB.items.map((i) => i.id)).toEqual([b2.id, b1.id]);
+		expect(byB.items.map((i) => i.id)).toEqual([b2.publicId, b1.publicId]);
 
 		const favs = await getFeedPage({ viewerId: b.id, sort: 'new', filter: { favoriteOf: a.id } });
-		expect(favs.items.map((i) => i.id)).toEqual([b1.id]);
+		expect(favs.items.map((i) => i.id)).toEqual([b1.publicId]);
 		// viewer-specific state still refers to the viewer, not the filtered user
 		expect(favs.items[0].userFavorite).toBe(false);
 	});
