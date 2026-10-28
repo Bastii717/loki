@@ -32,20 +32,28 @@ function shortenWord(measure: (text: string) => number, word: string, maxWidth: 
 		if (measure(word.slice(0, mid) + ELLIPSIS) <= maxWidth) low = mid;
 		else high = mid - 1;
 	}
-	return word.slice(0, low) + ELLIPSIS;
+	// no space before the ellipsis, whatever the cut left at the end
+	return word.slice(0, low).trimEnd() + ELLIPSIS;
 }
 
-/** Greedy word wrap at spaces. A single word wider than maxWidth is cut with an ellipsis. */
-export function wrapCaption(
+/**
+ * Greedy word wrap at spaces. A single word wider than maxWidth is cut with an ellipsis;
+ * `truncated` tells the caller that happened, so it can try a smaller font first.
+ */
+export function wrapCaptionDetailed(
 	measure: (text: string) => number,
 	text: string,
 	maxWidth: number
-): string[] {
+): { lines: string[]; truncated: boolean } {
 	const words = text.split(/\s+/).filter(Boolean);
 	const lines: string[] = [];
+	let truncated = false;
 	let current = '';
 	for (let word of words) {
-		if (measure(word) > maxWidth) word = shortenWord(measure, word, maxWidth);
+		if (measure(word) > maxWidth) {
+			word = shortenWord(measure, word, maxWidth);
+			truncated = true;
+		}
 		const candidate = current ? `${current} ${word}` : word;
 		if (!current || measure(candidate) <= maxWidth) {
 			current = candidate;
@@ -55,10 +63,22 @@ export function wrapCaption(
 		}
 	}
 	if (current) lines.push(current);
-	return lines;
+	return { lines, truncated };
 }
 
-/** Largest font size (10 % down to 4 % of the height, 2 px steps) whose wrap needs at most 3 lines. */
+/** Greedy word wrap at spaces. A single word wider than maxWidth is cut with an ellipsis. */
+export function wrapCaption(
+	measure: (text: string) => number,
+	text: string,
+	maxWidth: number
+): string[] {
+	return wrapCaptionDetailed(measure, text, maxWidth).lines;
+}
+
+/**
+ * Largest font size (10 % down to 4 % of the height, 2 px steps) whose wrap needs at most 3 lines
+ * and keeps every word whole; only at the smallest size is an overlong word cut.
+ */
 export function fitCaption(
 	measureAt: (fontSize: number, text: string) => number,
 	text: string,
@@ -69,16 +89,16 @@ export function fitCaption(
 	const min = Math.min(max, Math.max(1, Math.round(MIN_FONT_RATIO * canvasHeight)));
 	let fontSize = max;
 	for (; fontSize >= min; fontSize -= FONT_STEP) {
-		const lines = wrapCaption((t) => measureAt(fontSize, t), text, maxWidth);
-		if (lines.length <= MAX_LINES) return { fontSize, lines };
+		const { lines, truncated } = wrapCaptionDetailed((t) => measureAt(fontSize, t), text, maxWidth);
+		if (lines.length <= MAX_LINES && !truncated) return { fontSize, lines };
 	}
-	// Nothing fit: stay at the smallest size tried and cut the overflow.
+	// Nothing fit whole: stay at the smallest size tried and cut the overflow.
 	fontSize += FONT_STEP;
 	const measure = (t: string) => measureAt(fontSize, t);
 	const lines = wrapCaption(measure, text, maxWidth);
 	const kept = lines.slice(0, MAX_LINES);
 	if (lines.length > MAX_LINES) {
-		const last = kept[MAX_LINES - 1];
+		const last = kept[MAX_LINES - 1].trimEnd();
 		if (!last.endsWith(ELLIPSIS)) {
 			kept[MAX_LINES - 1] =
 				measure(last + ELLIPSIS) <= maxWidth

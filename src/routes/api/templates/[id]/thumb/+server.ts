@@ -8,7 +8,10 @@ import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async ({ params, locals }) => {
 	// The global guard already blocks anonymous requests; this keeps the route safe on its own.
 	if (!locals.user) error(401, 'Unauthorized');
-	const template = await getTemplate(parseId(params.id));
+	// admins see removed templates too (the moderation page lists them)
+	const template = await getTemplate(parseId(params.id), {
+		includeRemoved: locals.user.role === 'admin'
+	});
 	if (!template) error(404, 'Not found');
 	const { body } = await getObject(template.thumbKey);
 	return imageResponse(body, 'image/webp');

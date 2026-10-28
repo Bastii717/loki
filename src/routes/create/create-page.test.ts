@@ -219,6 +219,80 @@ describe('create page actions', () => {
 		expect(await db.select().from(media)).toHaveLength(0);
 	});
 
+	describe('remix source flags', () => {
+		const stashRemix = async (member: Member, sourceMemeId: string) => {
+			const res = await stash(member, { file: pngFile(), sourceMemeId });
+			expect(res, sourceMemeId).toMatchObject({ status: 303 });
+			return takeShared(member.user.id)!;
+		};
+
+		it('copies nsfw and spoiler from a visible image source', async () => {
+			const member = await userWithSession();
+			const author = await userWithSession();
+			const id = await insertMeme(author.user.id);
+			await db.update(media).set({ nsfw: true }).where(eq(media.id, id));
+			const shared = await stashRemix(member, String(id));
+			expect(shared.nsfw).toBe(true);
+			expect(shared.spoiler).toBeUndefined();
+
+			await db.update(media).set({ nsfw: false, spoiler: true }).where(eq(media.id, id));
+			const spoiler = await stashRemix(member, String(id));
+			expect(spoiler.nsfw).toBeUndefined();
+			expect(spoiler.spoiler).toBe(true);
+		});
+
+		it('is not fooled by a low score: only the stored flags count', async () => {
+			const member = await userWithSession();
+			const id = await insertMeme(member.user.id);
+			await db.update(media).set({ score: -100 }).where(eq(media.id, id));
+			const shared = await stashRemix(member, String(id));
+			expect(shared.nsfw).toBeUndefined();
+		});
+
+		it('ignores a gif, a hidden, an unknown or a malformed source', async () => {
+			const member = await userWithSession();
+			const author = await userWithSession();
+			const gif = await insertMeme(author.user.id);
+			await db.update(media).set({ kind: 'gif', nsfw: true }).where(eq(media.id, gif));
+			const hidden = await insertMeme(author.user.id);
+			await db.update(media).set({ nsfw: true }).where(eq(media.id, hidden));
+			await addOpenReports('meme', hidden, author.user.id, OVER_THRESHOLD);
+
+			for (const sourceMemeId of [
+				String(gif),
+				String(hidden),
+				'999999',
+				'abc',
+				'-1',
+				'0',
+				'2147483648',
+				'99999999999',
+				''
+			]) {
+				const shared = await stashRemix(member, sourceMemeId);
+				expect(shared.nsfw, sourceMemeId).toBeUndefined();
+				expect(shared.spoiler, sourceMemeId).toBeUndefined();
+			}
+		});
+
+		it('lets a moderator remix a hidden meme and keeps its flags', async () => {
+			const author = await userWithSession();
+			const id = await insertMeme(author.user.id);
+			await db.update(media).set({ nsfw: true }).where(eq(media.id, id));
+			await addOpenReports('meme', id, author.user.id, OVER_THRESHOLD);
+			const moderator = await userWithSession('moderator');
+			expect((await stashRemix(moderator, String(id))).nsfw).toBe(true);
+		});
+
+		it('stores no flags without a sourceMemeId', async () => {
+			const member = await userWithSession();
+			await stash(member, { file: pngFile() });
+			const shared = takeShared(member.user.id)!;
+			expect(shared.nsfw).toBeUndefined();
+			expect(shared.spoiler).toBeUndefined();
+		});
+	});
+
 	it('drops an unknown, removed or malformed template id and still stashes', async () => {
 		const gone = await template('Gone');
 		await removeTemplate(admin.user, gone);

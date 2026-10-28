@@ -95,11 +95,26 @@ describe('create page: editor', () => {
 
 	it('limits the preview height so the fields stay reachable', () => {
 		const source = readFileSync(new URL('./Editor.svelte', import.meta.url), 'utf8');
-		const canvasRule = source.match(/canvas\s*\{[^}]*\}/)![0];
-		expect(canvasRule).toContain('max-height: 60vh');
+		const previewRule = source.match(/\n\t\.preview\s*\{[^}]*\}/)![0];
+		expect(previewRule).toContain('--preview-max: 60vh');
+		const canvasRule = source.match(/\n\tcanvas\s*\{[^}]*\}/)![0];
+		expect(canvasRule).toContain('max-height: var(--preview-max)');
 		expect(canvasRule).toMatch(/width:\s*auto/);
 		expect(canvasRule).toContain('max-width: 100%');
-		expect(canvasRule).toContain('margin-inline: auto');
+	});
+
+	it('wraps the canvas in the .preview element the focus rule pins and shrinks', () => {
+		const out = html(editorData('template'));
+		expect(out).toMatch(/<div class="preview[^"]*"[^>]*>\s*<canvas/);
+		const source = readFileSync(new URL('./Editor.svelte', import.meta.url), 'utf8');
+		expect(source).toMatch(/main\.editor:focus-within\)\s*\.preview\s*\{[^}]*position:\s*sticky/);
+		expect(source).toContain('--preview-max: 35svh');
+	});
+
+	it('gives the preview canvas the img role with its label', () => {
+		const canvas = html(editorData('template')).match(/<canvas[^>]*>/)![0];
+		expect(canvas).toContain('role="img"');
+		expect(canvas).toContain('aria-label="Preview of Drake"');
 	});
 
 	it('derives the title from the top text with collapsed whitespace', () => {
@@ -143,6 +158,12 @@ describe('create page: editor', () => {
 		const out = html(editorData('meme'));
 		expect(out).not.toContain('name="templateId"');
 		expect(out).toContain('name="title"');
+	});
+
+	it('carries the source meme id for a meme source, and only then', () => {
+		const out = html(editorData('meme'));
+		expect(out).toMatch(/<input[^>]*type="hidden"[^>]*name="sourceMemeId"[^>]*value="5"/);
+		expect(html(editorData('template'))).not.toContain('name="sourceMemeId"');
 	});
 
 	it('links back to the template grid', () => {

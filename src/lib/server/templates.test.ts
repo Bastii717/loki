@@ -275,6 +275,10 @@ describe('removeTemplate and restoreTemplate', () => {
 		expect(await exists(row.objectKey)).toBe(true);
 		expect(await exists(row.thumbKey)).toBe(true);
 		expect(await getTemplate(row.id)).toBeNull();
+		expect(await getTemplate(row.id, { includeRemoved: false })).toBeNull();
+		expect((await getTemplate(row.id, { includeRemoved: true }))?.removedAt).toBe(
+			stored.removedAt!.toISOString()
+		);
 		expect(await listTemplates()).toEqual([]);
 		const withRemoved = await listTemplates({ includeRemoved: true });
 		expect(withRemoved).toHaveLength(1);
@@ -375,6 +379,7 @@ describe('listTemplates and getTemplate', () => {
 
 	it('returns null for an unknown id', async () => {
 		expect(await getTemplate(12345)).toBeNull();
+		expect(await getTemplate(12345, { includeRemoved: true })).toBeNull();
 	});
 
 	it('keeps the template when its creator is deleted', async () => {

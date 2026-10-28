@@ -133,6 +133,16 @@ describe('upload page entry points', () => {
 		expect(html.indexOf('href="/create"')).toBeLessThan(html.indexOf('name="file"'));
 	});
 
+	it('renders NSFW and Spoiler unchecked until a hand-over arrives', () => {
+		for (const name of ['nsfw', 'spoiler']) {
+			const input = body().match(
+				new RegExp(`<input\\b(?=[^>]*type="checkbox")(?=[^>]*name="${name}")[^>]*>`)
+			);
+			expect(input, name).not.toBeNull();
+			expect(input![0], name).not.toMatch(/\bchecked\b/);
+		}
+	});
+
 	it('carries the hand-over template id in a hidden input (empty by default)', () => {
 		const input = body().match(/<input\b(?=[^>]*type="hidden")(?=[^>]*name="templateId")[^>]*>/);
 		expect(input).not.toBeNull();

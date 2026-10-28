@@ -41,6 +41,40 @@ describe('GET /share/file hand-over headers', () => {
 	});
 });
 
+describe('GET /share/file source flag headers', () => {
+	it('adds x-shared-nsfw and x-shared-spoiler only when true', async () => {
+		const { user, session } = await userWithSession();
+		putShared(user.id, { ...png, nsfw: true });
+		const nsfw = (await callRoute({ handler: GET, path: '/share/file', session })).response;
+		expect(nsfw.headers.get('x-shared-nsfw')).toBe('1');
+		expect(nsfw.headers.has('x-shared-spoiler')).toBe(false);
+
+		putShared(user.id, { ...png, spoiler: true, nsfw: false });
+		const spoiler = (await callRoute({ handler: GET, path: '/share/file', session })).response;
+		expect(spoiler.headers.has('x-shared-nsfw')).toBe(false);
+		expect(spoiler.headers.get('x-shared-spoiler')).toBe('1');
+	});
+
+	it('omits both headers without flags', async () => {
+		const { user, session } = await userWithSession();
+		putShared(user.id, png);
+		const { response } = await callRoute({ handler: GET, path: '/share/file', session });
+		expect(response.headers.has('x-shared-nsfw')).toBe(false);
+		expect(response.headers.has('x-shared-spoiler')).toBe(false);
+	});
+
+	it('round-trips the flags through stashSharedFile', async () => {
+		const { user, session } = await userWithSession();
+		const data = await sharp({ create: { width: 2, height: 2, channels: 3, background: '#fff' } })
+			.png()
+			.toBuffer();
+		await stashSharedFile(user.id, { name: 'a.png', data, nsfw: true, spoiler: true });
+		const { response } = await callRoute({ handler: GET, path: '/share/file', session });
+		expect(response.headers.get('x-shared-nsfw')).toBe('1');
+		expect(response.headers.get('x-shared-spoiler')).toBe('1');
+	});
+});
+
 describe('GET /share/file with a malformed stored title', () => {
 	it('still answers with a decodable x-shared-title', async () => {
 		const { user, session } = await userWithSession();

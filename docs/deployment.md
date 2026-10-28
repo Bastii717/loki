@@ -184,7 +184,7 @@ Automatic: an hourly job awards each finished Berlin calendar month to its top-s
 
 ### Meme generator
 
-Template images live under `templates/` in the bucket: a 1600 px WebP plus a 320 px thumbnail per template. Removing a template in the admin library is a soft delete: it disappears from the library and the editor, but its objects stay in the bucket so memes posted from it keep their provenance, and an admin can restore it. Template uploads share the `AVATAR_MAX_MB` cap with avatars. The editor streams template and meme images through the app, so the bucket needs no CORS configuration for it.
+Template images live under `templates/` in the bucket: a 1600 px WebP plus a 320 px thumbnail per template. Removing a template in the admin library is a soft delete: it disappears from the library and the editor, but its objects stay in the bucket so memes posted from it keep their provenance, and an admin can restore it. Template uploads share the `AVATAR_MAX_MB` cap with avatars. The editor streams template and meme images through the app, so the bucket needs no CORS configuration for it. Each generated meme uses two units of the upload rate budget: the `/create` hand-over and the upload itself.
 
 ## Releases
 

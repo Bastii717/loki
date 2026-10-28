@@ -21,6 +21,8 @@
 	let uppercase = $state(true);
 	let imageReady = $state(false);
 	let fontReady = $state(false);
+	/** Bumped whenever the browser finishes loading a font, so a late Anton replaces the fallback. */
+	let fontTick = $state(0);
 	let rendering = $state(false);
 	let renderError = $state('');
 	/** Set from the loaded image only; before that the canvas keeps the CSS aspect-ratio placeholder. */
@@ -54,8 +56,13 @@
 			if (alive) fontReady = true;
 		});
 
+		// a font (or a lazily loaded subset of it) can arrive after the first draw: draw again
+		const onFontsLoaded = () => fontTick++;
+		document.fonts?.addEventListener('loadingdone', onFontsLoaded);
+
 		return () => {
 			alive = false;
+			document.fonts?.removeEventListener('loadingdone', onFontsLoaded);
 			img.onload = null;
 			img.onerror = null;
 		};
@@ -65,18 +72,24 @@
 	$effect(() => {
 		const opts = { top, bottom, uppercase };
 		void fontReady;
+		void fontTick;
 		if (!imageReady || !image || !canvas) return;
 		drawMeme(canvas, image, opts);
 	});
 </script>
 
-<canvas
-	bind:this={canvas}
-	width={size?.width}
-	height={size?.height}
-	style:aspect-ratio="{source.width} / {source.height}"
-	aria-label="Preview of {source.name}"
-></canvas>
+<div class="preview">
+	<!-- a canvas is not a native image: role="img" makes screen readers announce the label -->
+	<!-- svelte-ignore a11y_no_interactive_element_to_noninteractive_role -->
+	<canvas
+		bind:this={canvas}
+		width={size?.width}
+		height={size?.height}
+		style:aspect-ratio="{source.width} / {source.height}"
+		role="img"
+		aria-label="Preview of {source.name}"
+	></canvas>
+</div>
 
 <form
 	method="POST"
@@ -126,6 +139,8 @@
 
 	{#if source.kind === 'template'}
 		<input type="hidden" name="templateId" value={source.id} />
+	{:else}
+		<input type="hidden" name="sourceMemeId" value={source.id} />
 	{/if}
 	<input type="hidden" name="title" value={title} />
 
@@ -135,14 +150,40 @@
 </form>
 
 <style>
+	.preview {
+		--preview-max: 60vh;
+		display: flex;
+		justify-content: center;
+		max-height: var(--preview-max);
+		background: var(--bg);
+	}
+
+	/*
+	 * While a field has focus (phone keyboard open) the preview pins under the sticky header and
+	 * shrinks, so it stays in view next to the field. The canvas keeps its internal resolution.
+	 * 56px is the header height set in +page.svelte.
+	 */
+	:global(main.editor:focus-within) .preview {
+		--preview-max: 35vh;
+		position: sticky;
+		top: calc(var(--banners-height, 0px) + 56px);
+		z-index: 4;
+		padding-bottom: 6px;
+	}
+
+	@supports (height: 1svh) {
+		:global(main.editor:focus-within) .preview {
+			--preview-max: 35svh;
+		}
+	}
+
 	canvas {
 		display: block;
 		/* tall templates are letterboxed so the fields stay reachable while typing */
 		width: auto;
 		max-width: 100%;
 		height: auto;
-		max-height: 60vh;
-		margin-inline: auto;
+		max-height: var(--preview-max);
 		border-radius: var(--radius);
 		background: var(--surface);
 	}

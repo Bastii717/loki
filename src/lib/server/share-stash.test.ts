@@ -23,6 +23,13 @@ describe('share stash', () => {
 		expect(takeShared(3)).toBeNull();
 	});
 
+	it('carries the source flags only when true', () => {
+		putShared(5, { ...file, nsfw: true, spoiler: false });
+		expect(peekShared(5)).toEqual({ ...file, nsfw: true });
+		putShared(5, { ...file, spoiler: true });
+		expect(takeShared(5)).toEqual({ ...file, spoiler: true });
+	});
+
 	it('expires after the TTL', () => {
 		putShared(1, file);
 		vi.advanceTimersByTime(SHARE_TTL_MS + 1);
@@ -39,6 +46,22 @@ describe('stashSharedFile', () => {
 			.toBuffer();
 		expect(await stashSharedFile(7, { name: 'liar.svg', data: png })).toBe(true);
 		expect(peekShared(7)).toMatchObject({ name: 'liar.svg', type: 'image/png' });
+	});
+
+	it('stores the source flags only when exactly true', async () => {
+		const png = await sharp({
+			create: { width: 2, height: 2, channels: 3, background: '#fff' }
+		})
+			.png()
+			.toBuffer();
+		expect(await stashSharedFile(9, { name: 'a.png', data: png, nsfw: true, spoiler: true })).toBe(
+			true
+		);
+		expect(takeShared(9)).toMatchObject({ nsfw: true, spoiler: true });
+		expect(await stashSharedFile(9, { name: 'a.png', data: png, nsfw: false })).toBe(true);
+		const plain = takeShared(9)!;
+		expect(plain.nsfw).toBeUndefined();
+		expect(plain.spoiler).toBeUndefined();
 	});
 
 	it('rejects SVG masquerading as an image', async () => {

@@ -1,4 +1,8 @@
 import { error, fail, redirect } from '@sveltejs/kit';
+import { eq } from 'drizzle-orm';
+import type { SessionUser } from '../../lib/server/auth/session';
+import { db } from '../../lib/server/db';
+import { media } from '../../lib/server/db/schema';
 import { env } from '../../lib/server/env';
 import { getFeedItem } from '../../lib/server/feed';
 import { parseTemplateId } from '../../lib/server/media/create';
@@ -31,6 +35,29 @@ function parseId(raw: string | null): number | null {
 	return n > 0 ? n : null;
 }
 
+/** An image meme the viewer may see (same rule as the editor load), else null. */
+async function visibleImageMeme(user: SessionUser, id: number) {
+	const revealAll = canSeeUnderReview(user);
+	const item = await getFeedItem(user.id, id, revealAll);
+	if (!item || item.kind !== 'image' || (item.underReview && !revealAll)) return null;
+	return item;
+}
+
+/** The stored NSFW/spoiler flags of a remix source; none when it is unknown, not an image or hidden. */
+async function sourceFlags(
+	user: SessionUser,
+	raw: FormDataEntryValue | null
+): Promise<{ nsfw?: boolean; spoiler?: boolean }> {
+	// parseId caps at nine digits, so the id is always inside int4
+	const id = typeof raw === 'string' ? parseId(raw) : null;
+	if (id === null || !(await visibleImageMeme(user, id))) return {};
+	const [row] = await db
+		.select({ nsfw: media.nsfw, spoiler: media.spoiler })
+		.from(media)
+		.where(eq(media.id, id));
+	return row ? { nsfw: row.nsfw, spoiler: row.spoiler } : {};
+}
+
 // The hooks already require a session for this path, so there is no guard of its own.
 export const load: PageServerLoad = async ({ locals, url }): Promise<CreateData> => {
 	const user = locals.user!;
@@ -54,11 +81,8 @@ export const load: PageServerLoad = async ({ locals, url }): Promise<CreateData>
 	}
 
 	if (memeId !== null) {
-		const revealAll = canSeeUnderReview(user);
-		const item = await getFeedItem(user.id, memeId, revealAll);
-		if (!item || item.kind !== 'image' || (item.underReview && !revealAll)) {
-			error(404, 'Meme not found.');
-		}
+		const item = await visibleImageMeme(user, memeId);
+		if (!item) error(404, 'Meme not found.');
 		return {
 			mode: 'meme',
 			source: {
@@ -95,11 +119,14 @@ export const actions: Actions = {
 		// a removed or unknown template is dropped silently: the meme still posts
 		const templateId =
 			requested !== undefined && (await getTemplate(requested)) ? requested : undefined;
+		// a remix keeps the source meme's flags, looked up here and never taken from the client
+		const flags = await sourceFlags(locals.user!, form.get('sourceMemeId'));
 		const stashed = await stashSharedFile(locals.user!.id, {
 			name: 'meme.png',
 			data,
 			title: String(form.get('title') ?? ''),
-			templateId
+			templateId,
+			...flags
 		});
 		if (!stashed) return fail(415, { error: 'Unsupported file type' });
 		redirect(303, '/upload?shared=1');

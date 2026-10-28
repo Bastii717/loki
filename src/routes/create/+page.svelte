@@ -65,6 +65,9 @@
 		gap: 12px;
 		max-width: 560px;
 		margin: 0 auto;
+		box-sizing: border-box;
+		/* the editor pins its preview right below this height (56px in Editor.svelte) */
+		min-height: 56px;
 		padding: 6px var(--gutter);
 		background: var(--bg);
 	}
@@ -146,8 +149,18 @@
 		text-align: center;
 	}
 
-	/* a focused textarea stays clear of the sticky bar and the tab bar when the keyboard opens */
+	/*
+	 * A focused textarea stays clear of the sticky Post bar (the tab bar sits behind the keyboard)
+	 * and of the pinned header and preview above it.
+	 */
 	:global(html:has(main.editor)) {
-		scroll-padding-bottom: calc(var(--tabbar-height) + 96px + env(safe-area-inset-bottom));
+		scroll-padding-bottom: 72px;
+		scroll-padding-top: calc(var(--banners-height, 0px) + 56px + 35vh + 12px);
+	}
+
+	@supports (height: 1svh) {
+		:global(html:has(main.editor)) {
+			scroll-padding-top: calc(var(--banners-height, 0px) + 56px + 35svh + 12px);
+		}
 	}
 </style>

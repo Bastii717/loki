@@ -101,6 +101,22 @@ describe.each(endpoints)('GET /api/templates/[id]/%s', (name, handler, keyField,
 		expect(response.status).toBe(404);
 	});
 
+	it('serves a removed template to an admin only', async () => {
+		const { admin, member, row } = await world();
+		await removeTemplate(admin.user, row.id);
+		const call = (session: string) =>
+			callRoute({
+				handler,
+				path: path(row.id),
+				params: { id: String(row.id) },
+				session
+			});
+		const asAdmin = (await call(admin.session)).response;
+		expect(asAdmin.status).toBe(200);
+		expect(asAdmin.headers.get('content-type')).toBe('image/webp');
+		expect((await call(member.session)).response.status).toBe(404);
+	});
+
 	it('answers 401 JSON for an anonymous request', async () => {
 		const { row } = await world();
 		const { response } = await callRoute({

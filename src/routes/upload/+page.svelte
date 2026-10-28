@@ -89,6 +89,9 @@
 			const sharedTitle = res.headers.get('x-shared-title');
 			if (sharedTitle && title.trim() === '') title = decodeURIComponent(sharedTitle);
 			templateId = res.headers.get('x-shared-template') ?? '';
+			// a remix inherits the source meme's flags; the user may untick them
+			if (res.headers.get('x-shared-nsfw') === '1') nsfw = true;
+			if (res.headers.get('x-shared-spoiler') === '1') spoiler = true;
 		} catch {
 			// the user can still pick the file manually
 		}

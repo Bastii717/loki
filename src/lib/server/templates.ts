@@ -257,8 +257,15 @@ export async function listTemplates(
 	return rows.map(toRow);
 }
 
-/** One active template; null when unknown or removed. */
-export async function getTemplate(id: number): Promise<TemplateRow | null> {
-	const [row] = await templateRows(and(eq(templates.id, id), isNull(templates.removedAt)));
+/** One active template; null when unknown or removed (removed ones only with `includeRemoved`). */
+export async function getTemplate(
+	id: number,
+	opts: { includeRemoved?: boolean } = {}
+): Promise<TemplateRow | null> {
+	const [row] = await templateRows(
+		opts.includeRemoved
+			? eq(templates.id, id)
+			: and(eq(templates.id, id), isNull(templates.removedAt))
+	);
 	return row ? toRow(row) : null;
 }

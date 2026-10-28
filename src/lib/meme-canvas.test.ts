@@ -8,7 +8,8 @@ import {
 	fitCaption,
 	outputSize,
 	renderBlob,
-	wrapCaption
+	wrapCaption,
+	wrapCaptionDetailed
 } from './meme-canvas';
 
 const measureAt = (fontSize: number, text: string) => text.length * fontSize * 0.5;
@@ -107,6 +108,42 @@ describe('fitCaption', () => {
 
 	it('returns no lines for empty text', () => {
 		expect(fitCaption(measureAt, '', 300, 500).lines).toEqual([]);
+	});
+
+	it('shrinks the font until a long single word fits whole instead of cutting it', () => {
+		// 900 x 1200: max font 120, the word is 16 letters wide
+		const word = 'Donaudampfschiff';
+		const result = fitCaption(measureAt, word, 0.92 * 900, 1200);
+		expect(result.lines).toEqual([word]);
+		expect(result.lines[0]).not.toContain('…');
+		expect(result.fontSize).toBeLessThan(120);
+		expect(result.fontSize).toBeGreaterThanOrEqual(48);
+		// the next larger size would have cut the word
+		expect(
+			wrapCaptionDetailed((t) => measureAt(result.fontSize + 2, t), word, 0.92 * 900).truncated
+		).toBe(true);
+	});
+
+	it('still cuts a 100-character word without spaces, at the minimum size', () => {
+		const result = fitCaption(measureAt, 'x'.repeat(100), 0.92 * 900, 1200);
+		expect(result.fontSize).toBe(48);
+		expect(result.lines).toHaveLength(1);
+		expect(result.lines[0].endsWith('…')).toBe(true);
+		expect(result.lines[0]).not.toMatch(/\s…$/);
+	});
+});
+
+describe('wrapCaptionDetailed', () => {
+	const measure = (text: string) => text.length * 10;
+
+	it('reports whether a word had to be shortened', () => {
+		expect(wrapCaptionDetailed(measure, 'one two', 100)).toEqual({
+			lines: ['one two'],
+			truncated: false
+		});
+		const cut = wrapCaptionDetailed(measure, `hi ${'y'.repeat(50)}`, 100);
+		expect(cut.truncated).toBe(true);
+		expect(cut.lines.some((line) => line.endsWith('…'))).toBe(true);
 	});
 });
 

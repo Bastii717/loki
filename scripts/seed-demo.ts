@@ -67,7 +67,7 @@ const [
 	{ setAvatar },
 	awardsMod,
 	{ fromBerlinLocal },
-	{ putObject }
+	{ putObject, deleteObjects }
 ] = await Promise.all([
 	import('sharp'),
 	import('../src/lib/server/db'),
@@ -769,19 +769,25 @@ async function renderTemplate(t: DemoTemplate) {
  * directly (no createdBy, no audit entries) with the same keys and processing as addTemplate.
  */
 async function seedTemplates() {
-	const [{ n }] = await db
-		.select({ n: count() })
-		.from(templates)
-		.where(isNull(templates.removedAt));
+	// every row counts, removed ones included: a reseed never brings back a removed demo template
+	const [{ n }] = await db.select({ n: count() }).from(templates);
 	if (n > 0) return;
 	for (const t of TEMPLATES) {
 		const { full, thumb, width, height } = await renderTemplate(t);
 		const id = randomUUID();
 		const objectKey = `templates/${id}.webp`;
 		const thumbKey = `templates/${id}-320.webp`;
-		await putObject(objectKey, full, 'image/webp');
-		await putObject(thumbKey, thumb, 'image/webp');
-		await db.insert(templates).values({ name: t.name, objectKey, thumbKey, width, height });
+		try {
+			await putObject(objectKey, full, 'image/webp');
+			await putObject(thumbKey, thumb, 'image/webp');
+			await db.transaction(async (tx) => {
+				await tx.insert(templates).values({ name: t.name, objectKey, thumbKey, width, height });
+			});
+		} catch (e) {
+			// no row, so no object may stay behind (mirrors addTemplate's cleanup)
+			await deleteObjects([objectKey, thumbKey]).catch(() => undefined);
+			throw e;
+		}
 	}
 	console.log(`Seeded ${TEMPLATES.length} templates`);
 }
