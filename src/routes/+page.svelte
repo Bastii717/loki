@@ -7,6 +7,7 @@
 	import X from 'lucide-svelte/icons/x';
 	import { untrack } from 'svelte';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
+	import Avatar from '#lib/components/Avatar.svelte';
 	import MemeCard from '#lib/components/MemeCard.svelte';
 	import SeasonIcon from '#lib/components/SeasonIcon.svelte';
 	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
@@ -36,6 +37,9 @@
 	});
 
 	const feedIds = $derived(items.map((i) => i.id));
+
+	const myName = $derived(data.user?.displayName ?? data.user?.username ?? '');
+	const openCases = $derived(data.openCases ?? 0);
 
 	const feedQuery = (sort: string, tag: string | null) => {
 		const params = new SvelteURLSearchParams();
@@ -94,15 +98,20 @@
 			><Search size={20} aria-hidden="true" /></a
 		>
 		<ThemeToggle />
-		<form method="POST" action="/logout">
-			<button
-				type="submit"
-				class="logout"
-				title="Signed in as {data.user?.displayName ?? data.user?.username}"
-			>
-				Sign out
-			</button>
-		</form>
+		<!-- Sign out lives on the profile page; the open-cases count follows the profile here. -->
+		<a
+			href={resolve('/profile')}
+			class="me"
+			aria-label={openCases > 0
+				? `Profile, ${openCases} open ${openCases === 1 ? 'report' : 'reports'}`
+				: 'Profile'}
+			title="Signed in as {myName}"
+		>
+			<Avatar key={data.avatar?.key} thumbKey={data.avatar?.thumbKey} name={myName} size={30} />
+			{#if openCases > 0}
+				<span class="badge" aria-hidden="true">{openCases > 9 ? '9+' : openCases}</span>
+			{/if}
+		</a>
 	</div>
 </header>
 
@@ -202,14 +211,30 @@
 		letter-spacing: 0.3px;
 	}
 
-	.logout {
-		padding: 6px 10px;
-		border: 0;
+	.me {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 40px;
+		height: 40px;
+		margin-left: 2px;
 		border-radius: var(--radius-pill);
-		background: none;
-		color: var(--text-muted);
-		font-size: 13px;
-		cursor: pointer;
+	}
+
+	.badge {
+		position: absolute;
+		top: 0;
+		right: -4px;
+		min-width: 16px;
+		padding: 0 4px;
+		border-radius: var(--radius-pill);
+		background: var(--down);
+		color: #fff;
+		font-size: 10px;
+		font-weight: 700;
+		line-height: 16px;
+		text-align: center;
 	}
 
 	.feed {
