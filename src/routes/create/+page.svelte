@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SeasonEffect from '#lib/components/SeasonEffect.svelte';
 	import '@fontsource/anton';
 	import { resolve } from '$app/paths';
 	import type { ActionData, PageData } from './$types';
@@ -12,7 +13,8 @@
 </svelte:head>
 
 {#if data.mode === 'grid'}
-	<header class="top">
+	<header class="top season-host">
+		<SeasonEffect season={data.season?.id} />
 		<h1>Pick a template</h1>
 	</header>
 
@@ -40,7 +42,8 @@
 		<p class="hint">Or open any meme and tap Remix.</p>
 	</main>
 {:else}
-	<header class="top">
+	<header class="top season-host">
+		<SeasonEffect season={data.season?.id} />
 		<h1>Make a meme</h1>
 		<a href={resolve('/create')} class="change">Change template</a>
 	</header>

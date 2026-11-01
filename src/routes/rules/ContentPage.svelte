@@ -1,4 +1,6 @@
 <script lang="ts">
+	import SeasonEffect from '#lib/components/SeasonEffect.svelte';
+	import type { SeasonId } from '../../lib/seasons';
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
@@ -13,7 +15,12 @@
 		form
 	}: {
 		title: string;
-		data: { html: string; markdown: string | null; canEdit: boolean };
+		data: {
+			html: string;
+			markdown: string | null;
+			canEdit: boolean;
+			season?: { id: SeasonId } | null;
+		};
 		form: { error?: string; markdown?: string; saved?: boolean } | null;
 	} = $props();
 
@@ -42,7 +49,8 @@
 </svelte:head>
 
 <!-- Reached from the profile, so the header matches the other profile sub pages. -->
-<header class="top">
+<header class="top season-host">
+	<SeasonEffect season={data.season?.id} />
 	<a href={resolve('/profile')} class="back" aria-label="Back to profile"><ArrowLeft size={22} /></a
 	>
 	<h1>{title}</h1>

@@ -57,6 +57,17 @@ describe('feed header', () => {
 		expect(render_({ openCases: 1 })).toContain('aria-label="Profile, 1 open report"');
 	});
 
+	it('draws the season effect as the first thing inside the header, and none without a season', () => {
+		expect(render_()).not.toContain('season-fx');
+		const body = render_({ season: { id: 'advent', label: 'Advent', icon: 'snowflake' } });
+		const header = body.match(/<header class="top season-host[^"]*"[^>]*>[\s\S]*?<\/header>/);
+		expect(header, 'season host header rendered').not.toBeNull();
+		expect(header![0]).toMatch(/^<header[^>]*>(\s|<!--[^>]*-->)*<div class="season-fx snow/);
+		// the feed list below the header stays undecorated
+		expect(body.indexOf('season-fx')).toBeLessThan(body.indexOf('</header>'));
+		expect(body.lastIndexOf('season-fx')).toBeLessThan(body.indexOf('</header>'));
+	});
+
 	it('links to the awards page above the list in the Hall of Fame only', () => {
 		const html = (sort: string) =>
 			render(Page as never, { props: { data: { ...data, sort } } as never }).body;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SeasonEffect from '#lib/components/SeasonEffect.svelte';
 	import { resolve } from '$app/paths';
 	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
 	import type { PageProps } from './$types';
@@ -85,7 +86,8 @@
 	</section>
 {/snippet}
 
-<header class="top">
+<header class="top season-host">
+	<SeasonEffect season={data.season?.id} />
 	<a href={resolve('/profile')} class="back" aria-label="Back to profile"><ArrowLeft size={22} /></a
 	>
 	<h1>Stats</h1>

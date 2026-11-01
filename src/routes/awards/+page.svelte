@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SeasonEffect from '#lib/components/SeasonEffect.svelte';
 	import { resolve } from '$app/paths';
 	import MemeCard from '#lib/components/MemeCard.svelte';
 	import { formatDate, formatMonthLong, pluralize } from '../../lib/moderation-labels';
@@ -17,7 +18,8 @@
 	<title>Meme of the Month · Loki</title>
 </svelte:head>
 
-<header class="top">
+<header class="top season-host">
+	<SeasonEffect season={data.season?.id} />
 	<h1>Meme of the Month</h1>
 </header>
 

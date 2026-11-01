@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SeasonEffect from '#lib/components/SeasonEffect.svelte';
 	import { resolve } from '$app/paths';
 	import Search from 'lucide-svelte/icons/search';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
@@ -62,7 +63,8 @@
 	{/if}
 {/snippet}
 
-<header class="top">
+<header class="top season-host">
+	<SeasonEffect season={data.season?.id} />
 	<h1>Search</h1>
 </header>
 
