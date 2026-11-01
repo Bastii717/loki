@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.6.0](https://github.com/Bastii717/loki/compare/v1.5.0...v1.6.0) (2026-11-01)
+
+
+### Features
+
+* seasonal header effects: snow for Advent, bats for Halloween, confetti for Carnival and sparkles for the party theme, drawn behind the page header so memes, buttons and text stay uncovered, and parked when the device asks for reduced motion ([#43](https://github.com/Bastii717/loki/pull/43))
+
+
+### Bug Fixes
+
+* pin minimatch to 11 for GHSA-g3hv-75wg-m249 in the lint toolchain ([#44](https://github.com/Bastii717/loki/pull/44))
+
+
+### Operations
+
+* CI runs on the self-hosted runner named by the `RUNNER` repository variable, with GitHub's runner as the fallback; images are still published from GitHub's runner ([#42](https://github.com/Bastii717/loki/pull/42))
+* no migrations and no new environment variables
+
+
 ## [1.5.0](https://github.com/Bastii717/loki/compare/v1.4.0...v1.5.0) (2026-10-29)
 
 
