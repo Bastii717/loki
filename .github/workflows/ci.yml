@@ -12,9 +12,12 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every job runs on the runner whose label the repository variable RUNNER holds
+# (the self-hosted one), or on GitHub's own when it is unset. Back to GitHub's:
+# `gh variable delete RUNNER`.
 jobs:
   lint:
-    runs-on: ubuntu-26.04
+    runs-on: ${{ vars.RUNNER || 'ubuntu-26.04' }}
     timeout-minutes: 15
     steps:
       - name: Checkout repository
@@ -34,7 +37,7 @@ jobs:
         run: npm run check
 
   test:
-    runs-on: ubuntu-26.04
+    runs-on: ${{ vars.RUNNER || 'ubuntu-26.04' }}
     timeout-minutes: 20
     services:
       postgres:
@@ -52,8 +55,7 @@ jobs:
           --health-retries 10
     env:
       ORIGIN: http://localhost:5173
-      DATABASE_URL: postgres://loki:loki@localhost:5432/loki
-      S3_ENDPOINT: http://localhost:9000
+      # DATABASE_URL and S3_ENDPOINT are set by the first step below.
       S3_BUCKET: loki
       S3_ACCESS_KEY_ID: minioadmin
       S3_SECRET_ACCESS_KEY: minioadmin
@@ -70,20 +72,36 @@ jobs:
       AUTO_BLUR_SCORE: '-3'
       SESSION_ABSOLUTE_MAX_DAYS: '90'
     steps:
+      # Postgres and MinIO publish their ports on the Docker host. On GitHub's
+      # runners that is localhost; on the self-hosted one Docker runs in a
+      # separate container, and DOCKER_HOST (tcp://<host>:2376) names it.
+      - name: Point the tests at the Docker host
+        run: |
+          case "${DOCKER_HOST:-}" in
+            tcp://*) h="${DOCKER_HOST#tcp://}"; h="${h%%:*}" ;;
+            *) h=localhost ;;
+          esac
+          {
+            echo "SERVICES_HOST=$h"
+            echo "DATABASE_URL=postgres://loki:loki@$h:5432/loki"
+            echo "S3_ENDPOINT=http://$h:9000"
+          } >> "$GITHUB_ENV"
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # MinIO runs as a plain container: service containers cannot pass the
       # `server /data` command the image needs. Upstream minio images are no
       # longer publicly pullable (Docker Hub and quay.io), and Chainguard's
       # free tier only publishes `latest`, so no version pin is possible. The
-      # dev compose stack uses the same image.
+      # dev compose stack uses the same image. The self-hosted runner's Docker
+      # outlives the job, so a container a cancelled run left is removed first.
       - name: Start MinIO
         run: |
+          docker rm -f minio >/dev/null 2>&1 || true
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
             cgr.dev/chainguard/minio:latest server /data
           for i in $(seq 1 30); do
-            curl -sf http://localhost:9000/minio/health/live && exit 0
+            curl -sf "http://$SERVICES_HOST:9000/minio/health/live" && exit 0
             sleep 2
           done
           docker logs minio
@@ -97,9 +115,12 @@ jobs:
         run: npm ci
       - name: Run tests
         run: npm test
+      - name: Remove MinIO
+        if: always()
+        run: docker rm -f minio >/dev/null 2>&1 || true
 
   gitleaks:
-    runs-on: ubuntu-26.04
+    runs-on: ${{ vars.RUNNER || 'ubuntu-26.04' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -113,3 +134,7 @@ jobs:
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The action uploads its SARIF report relative to $HOME, which on the self-hosted
+          # runner is not a parent of the workspace, so the upload throws after a clean scan.
+          # Findings still fail the job and show in the log; the report file is not needed.
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'

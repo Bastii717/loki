@@ -17,9 +17,14 @@ concurrency:
   group: docker-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Pull request builds (no push) run on the runner whose label the repository
+# variable RUNNER holds (the self-hosted one; see ci.yml). Publishing always runs
+# on GitHub's own runner: the self-hosted runner's Docker outlives its jobs, so
+# a pull request's dependencies could leave a tampered base image or build cache
+# there for the next published image to pick up.
 jobs:
   build:
-    runs-on: ubuntu-26.04
+    runs-on: ${{ github.event_name == 'pull_request' && vars.RUNNER || 'ubuntu-26.04' }}
     timeout-minutes: 30
     permissions:
       contents: read
