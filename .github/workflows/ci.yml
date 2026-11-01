@@ -134,3 +134,7 @@ jobs:
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The action uploads its SARIF report relative to $HOME, which on the self-hosted
+          # runner is not a parent of the workspace, so the upload throws after a clean scan.
+          # Findings still fail the job and show in the log; the report file is not needed.
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
