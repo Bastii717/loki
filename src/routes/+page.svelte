@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SeasonEffect from '#lib/components/SeasonEffect.svelte';
 	import { resolve } from '$app/paths';
 	import Clock from 'lucide-svelte/icons/clock';
 	import Flame from 'lucide-svelte/icons/flame';
@@ -86,7 +87,8 @@
 	<title>Loki</title>
 </svelte:head>
 
-<header class="top">
+<header class="top season-host">
+	<SeasonEffect season={data.season?.id} />
 	<span class="brand-group">
 		<span class="brand">Loki</span>
 		{#if data.season}

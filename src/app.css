@@ -80,6 +80,8 @@
 	--accent-soft: rgba(242, 140, 40, 0.18);
 	--accent-soft-text: #f7b267;
 	--overlay: rgba(18, 16, 23, 0.55);
+	/* bats: a lifted violet that reads on the near-black background */
+	--fx-bat: #6b5880;
 }
 
 @media (prefers-color-scheme: light) {
@@ -93,6 +95,7 @@
 		--accent-soft: rgba(217, 115, 26, 0.12);
 		--accent-soft-text: #8f4a0c;
 		--overlay: rgba(246, 241, 234, 0.6);
+		--fx-bat: #3a2e45;
 	}
 }
 
@@ -106,6 +109,7 @@
 	--accent-soft: rgba(217, 115, 26, 0.12);
 	--accent-soft-text: #8f4a0c;
 	--overlay: rgba(246, 241, 234, 0.6);
+	--fx-bat: #3a2e45;
 }
 
 :root[data-season='advent'] {
@@ -118,6 +122,7 @@
 	--accent-soft: rgba(210, 60, 78, 0.18);
 	--accent-soft-text: #f2a1aa;
 	--overlay: rgba(15, 20, 25, 0.55);
+	--fx-snow: #ffffff;
 }
 
 @media (prefers-color-scheme: light) {
@@ -131,6 +136,7 @@
 		--accent-soft: rgba(178, 42, 60, 0.12);
 		--accent-soft-text: #8f1f2f;
 		--overlay: rgba(243, 244, 246, 0.6);
+		--fx-snow: #9fb3c8;
 	}
 }
 
@@ -144,6 +150,7 @@
 	--accent-soft: rgba(178, 42, 60, 0.12);
 	--accent-soft-text: #8f1f2f;
 	--overlay: rgba(243, 244, 246, 0.6);
+	--fx-snow: #9fb3c8;
 }
 
 :root[data-season='carnival'] {
@@ -226,6 +233,17 @@
 *::before,
 *::after {
 	box-sizing: border-box;
+}
+
+/* Headers that carry SeasonEffect: a stacking context, so the effect paints between the header's
+   background and its content. :where() keeps the specificity at zero, so a page's own
+   `position: sticky` wins over the fallback. */
+:where(.season-host) {
+	position: relative;
+}
+
+.season-host {
+	isolation: isolate;
 }
 
 body {

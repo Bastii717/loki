@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SeasonEffect from '#lib/components/SeasonEffect.svelte';
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import CheckCheck from 'lucide-svelte/icons/check-check';
@@ -31,7 +32,8 @@
 	<title>Notifications · Loki</title>
 </svelte:head>
 
-<header class="top">
+<header class="top season-host">
+	<SeasonEffect season={data.season?.id} />
 	<h1>Notifications</h1>
 	<div class="actions">
 		{#if data.unread > 0}
