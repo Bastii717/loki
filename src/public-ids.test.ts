@@ -89,6 +89,12 @@ async function seed() {
 		.select({ id: comments.id, publicId: comments.publicId })
 		.from(comments)
 		.where(eq(comments.mediaId, meme.id));
+	// a reply by the owner, so comment payloads carry a parentId and a replyToId
+	const replyItem = await addComment(owner.user.id, meme.id, 'Searchable reply', comment.id);
+	const [reply] = await db
+		.select({ id: comments.id, publicId: comments.publicId })
+		.from(comments)
+		.where(eq(comments.publicId, replyItem.id));
 
 	const quote = await insertQuoteRow(owner.user.id, 'Searchable quote');
 
@@ -132,7 +138,7 @@ async function seed() {
 	await timeOut(other.user.id, admin.user.id);
 
 	const memes = [meme, oldMeme, reportedMeme];
-	const commentRows = [comment, reportedComment];
+	const commentRows = [comment, reply, reportedComment];
 	const quoteRows = [quote, reportedQuote];
 	return {
 		owner,
@@ -141,6 +147,7 @@ async function seed() {
 		meme,
 		oldMeme,
 		comment,
+		reply,
 		quote,
 		template,
 		internal: {
@@ -171,7 +178,7 @@ function leaks(payload: string): string[] {
 			found.push(`query parameter with ${n}`);
 	}
 	const key =
-		'id|mediaId|uploaderId|authorId|userId|templateId|sourceMemeId|quoteId|commentId|submittedBy|createdBy|actorId|reporterId';
+		'id|mediaId|uploaderId|authorId|userId|templateId|sourceMemeId|quoteId|commentId|parentId|replyToId|submittedBy|createdBy|actorId|reporterId';
 	for (const n of all) {
 		// a bare number as the value of an id key; a public id is a string and never matches
 		if (new RegExp(`"(?:${key})":${n}(?![\\d.])`).test(payload)) found.push(`"id" key with ${n}`);
@@ -258,13 +265,25 @@ describe('public ids never leak the internal ids', () => {
 			name: 'meme detail (owner)',
 			run: () =>
 				runLoad(memeLoad as Load, w.owner, `/meme/${w.meme.publicId}`, { pid: w.meme.publicId }),
-			expects: () => [w.meme.publicId, w.comment.publicId, w.other.publicId, w.owner.publicId]
+			expects: () => [
+				w.meme.publicId,
+				w.comment.publicId,
+				`"replyToId":"${w.comment.publicId}"`,
+				w.other.publicId,
+				w.owner.publicId
+			]
 		},
 		{
 			name: 'meme detail (second member)',
 			run: () =>
 				runLoad(memeLoad as Load, w.other, `/meme/${w.meme.publicId}`, { pid: w.meme.publicId }),
-			expects: () => [w.meme.publicId, w.comment.publicId, w.other.publicId, w.owner.publicId]
+			expects: () => [
+				w.meme.publicId,
+				w.comment.publicId,
+				`"replyToId":"${w.comment.publicId}"`,
+				w.other.publicId,
+				w.owner.publicId
+			]
 		},
 		{
 			name: 'member page (owner)',
@@ -401,7 +420,14 @@ describe('public ids never leak the internal ids', () => {
 				json(getMemeComments, w.owner, `/api/memes/${w.meme.publicId}/comments`, {
 					params: { pid: w.meme.publicId }
 				}),
-			expects: () => [w.comment.publicId, w.other.publicId]
+			// the reply carries the comment's public id as parentId and replyToId
+			expects: () => [
+				w.comment.publicId,
+				w.reply.publicId,
+				`"parentId":"${w.comment.publicId}"`,
+				`"replyToId":"${w.comment.publicId}"`,
+				w.other.publicId
+			]
 		},
 		{
 			name: 'GET /api/discover',
@@ -430,6 +456,9 @@ describe('public ids never leak the internal ids', () => {
 		const n = w.meme.id;
 		expect(leaks(`{"id":${n}}`)).not.toEqual([]);
 		expect(leaks(`{"mediaId":${n},"x":1}`)).not.toEqual([]);
+		const c = w.comment.id;
+		expect(leaks(`{"parentId":${c},"replyToId":null}`)).not.toEqual([]);
+		expect(leaks(`{"parentId":null,"replyToId":${c}}`)).not.toEqual([]);
 		expect(leaks(`href="/meme/${n}"`)).not.toEqual([]);
 		expect(leaks(`/create?meme=${n}`)).not.toEqual([]);
 		// public ids and the bare notification row ids are fine

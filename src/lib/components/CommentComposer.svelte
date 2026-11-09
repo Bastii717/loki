@@ -102,8 +102,14 @@
 		// the server rejects more than five members; stop offering once five are picked
 		if (!query || pickedCount() >= MAX_MENTIONS) return close();
 		clearTimeout(timer);
-		// the shown list stays until the new answer replaces it (the server matches more loosely
-		// than any client-side filter could), so Enter keeps picking instead of adding a newline
+		// While narrowing the same query the shown list stays until the new answer replaces it (the
+		// server matches more loosely than any client-side filter could), so Enter keeps picking
+		// instead of adding a newline. A different `@` drops it: a fast Enter must not insert a name
+		// found for the previous query.
+		if (query.start !== queryStart) {
+			people = [];
+			active = -1;
+		}
 		queryStart = query.start;
 		const mine = ++seq;
 		timer = setTimeout(() => void search(query.q, mine), DEBOUNCE_MS);

@@ -20,7 +20,7 @@ async function parseId(pid: string): Promise<number> {
 }
 
 export const GET: RequestHandler = async ({ params, locals }) => {
-	const revealAll = locals.user !== null && canSeeUnderReview(locals.user);
+	const revealAll = canSeeUnderReview(locals.user!);
 	return json({
 		comments: await listComments(await parseId(params.pid), locals.user!.id, revealAll)
 	});
