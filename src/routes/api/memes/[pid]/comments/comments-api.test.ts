@@ -5,6 +5,7 @@ import {
 	insertMemeRow,
 	userWithSession
 } from '../../../../../lib/server/moderation-test-utils';
+import { mentionToken } from '../../../../../lib/mentions';
 import { resetRateLimits } from '../../../../../lib/server/rate-limit';
 import { callRoute } from '../../../../../lib/server/test-request';
 import { DELETE as deleteComment } from '../../../comments/[pid]/+server';
@@ -84,6 +85,35 @@ describe('comments by public id', () => {
 			session: w.viewer.session
 		});
 		expect(((await list.response.json()) as { comments: Comment[] }).comments).toEqual([]);
+	});
+
+	it('creates a reply by public id; unknown replyTo is 404; 6 mentions are 400', async () => {
+		const w = await world();
+		const c = await insertCommentRow(w.author.user.id, w.meme.id, 'root');
+		const post = (body: object) =>
+			callRoute({
+				handler: POST,
+				path: `/api/memes/${w.meme.publicId}/comments`,
+				method: 'POST',
+				params: { pid: w.meme.publicId },
+				body,
+				session: w.viewer.session
+			});
+		const ok = await post({ text: 're', replyTo: c.publicId });
+		expect(ok.response.status).toBe(201);
+		expect(await ok.response.json()).toMatchObject({ parentId: c.publicId, depth: 2 });
+		expect((await post({ text: 're', replyTo: 'aaaaaaaaaaaa' })).response.status).toBe(404);
+		const six = [
+			'aaaaaaaaaaa1',
+			'aaaaaaaaaaa2',
+			'aaaaaaaaaaa3',
+			'aaaaaaaaaaa4',
+			'aaaaaaaaaaa5',
+			'aaaaaaaaaaa6'
+		]
+			.map((id) => mentionToken(id))
+			.join(' ');
+		expect((await post({ text: six })).response.status).toBe(400);
 	});
 
 	it('answers 404 when deleting with the numeric id of a real comment', async () => {

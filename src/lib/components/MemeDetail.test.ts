@@ -53,11 +53,18 @@ function comment(overrides: Partial<CommentItem> = {}): CommentItem {
 	return {
 		id: COMMENT,
 		mediaId: MEME,
+		parentId: null,
+		replyToId: null,
+		depth: 1,
+		deleted: false,
 		authorId: AUTHOR5,
 		author: 'Mo Derator',
 		authorRole: 'member',
 		authorAvatar: null,
 		text: 'Nice one',
+		mentions: {},
+		score: 0,
+		userVote: 0,
 		underReview: false,
 		createdAt: new Date().toISOString(),
 		...overrides

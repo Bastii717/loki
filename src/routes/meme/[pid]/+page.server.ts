@@ -27,7 +27,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	if (!row) error(404, 'Meme not found');
 	const [item, comments] = await Promise.all([
 		getFeedItem(user.id, canModerate, params.pid),
-		listComments(row.id, canModerate)
+		listComments(row.id, user.id, canModerate)
 	]);
 	if (!item) error(404, 'Meme not found');
 	const canManage = row.uploaderId === user.id || canModerate;

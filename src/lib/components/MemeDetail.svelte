@@ -259,7 +259,7 @@
 				commentError = await apiErrorMessage(res, 'Could not send the comment.');
 				return;
 			}
-			comments.unshift((await res.json()) as CommentItem);
+			comments.push((await res.json()) as CommentItem);
 			commentCount += 1;
 			text = '';
 		} catch {
