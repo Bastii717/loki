@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
 	boolean,
+	check,
 	date,
 	doublePrecision,
 	index,
@@ -184,13 +185,42 @@ export const comments = pgTable(
 			.notNull()
 			.references(() => users.id),
 		text: text('text').notNull(),
+		/** Thread parent (a top-level comment); null for top-level comments. Deleting it deletes the thread. */
+		parentId: integer('parent_id').references((): AnyPgColumn => comments.id, {
+			onDelete: 'cascade'
+		}),
+		/** The comment this one answers (any depth); nulled when that comment is deleted. */
+		replyToId: integer('reply_to_id').references((): AnyPgColumn => comments.id, {
+			onDelete: 'set null'
+		}),
+		/** Nesting level, top level = 1. */
+		depth: smallint('depth').notNull().default(1),
+		/** Soft delete for comments that still have replies; the text is blanked. */
+		deletedAt: timestamp('deleted_at', { withTimezone: true }),
 		reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
 		createdAt: createdAt()
 	},
 	(t) => [
 		uniqueIndex('comments_public_id_idx').on(t.publicId),
-		index('comments_text_trgm_idx').using('gin', sql`${t.text} gin_trgm_ops`)
+		index('comments_text_trgm_idx').using('gin', sql`${t.text} gin_trgm_ops`),
+		index('comments_media_created_idx').on(t.mediaId, t.createdAt, t.id),
+		index('comments_parent_idx').on(t.parentId),
+		check('comments_depth_check', sql`${t.depth} BETWEEN 1 AND 3`)
 	]
+);
+
+export const commentVotes = pgTable(
+	'comment_votes',
+	{
+		userId: integer('user_id')
+			.notNull()
+			.references(() => users.id),
+		commentId: integer('comment_id')
+			.notNull()
+			.references(() => comments.id, { onDelete: 'cascade' }),
+		value: smallint('value').notNull()
+	},
+	(t) => [primaryKey({ columns: [t.userId, t.commentId] })]
 );
 
 export const mediaViews = pgTable(
@@ -384,6 +414,8 @@ export const notificationPrefs = pgTable('notification_prefs', {
 		.references(() => users.id, { onDelete: 'cascade' }),
 	comments: boolean('comments').notNull().default(true),
 	threadComments: boolean('thread_comments').notNull().default(true),
+	replies: boolean('replies').notNull().default(true),
+	mentions: boolean('mentions').notNull().default(true),
 	reportOutcomes: boolean('report_outcomes').notNull().default(true)
 });
 
