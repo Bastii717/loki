@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import { apiErrorMessage } from '../api-error';
-	import { encodeMentions, MAX_MENTIONS } from '../mentions';
+	import { encodeMentions, MAX_COMMENT_LENGTH, MAX_MENTIONS, mentionQuery } from '../mentions';
 	import type { CommentItem } from '../server/comments';
 	import Avatar from './Avatar.svelte';
 
@@ -48,8 +48,6 @@
 
 	const FALLBACK = 'Could not send the comment.';
 	const DEBOUNCE_MS = 150;
-	/** `@` at the start or after whitespace, then the word up to the caret. */
-	const MENTION_QUERY = /(?:^|\s)@([^\s@]{1,50})$/;
 
 	const uid = $props.id();
 	const listId = `${uid}-people`;
@@ -93,8 +91,7 @@
 		if (!textarea || textarea.selectionStart !== textarea.selectionEnd) return null;
 		const caret = textarea.selectionStart;
 		// the element's value, not `text`: this runs from the same input event that updates the binding
-		const m = MENTION_QUERY.exec(textarea.value.slice(0, caret));
-		return m ? { start: caret - m[1].length - 1, q: m[1] } : null;
+		return mentionQuery(textarea.value.slice(0, caret));
 	}
 
 	function oninput() {
@@ -102,10 +99,10 @@
 		// the server rejects more than five members; stop offering once five are picked
 		if (!query || pickedCount() >= MAX_MENTIONS) return close();
 		clearTimeout(timer);
-		// While narrowing the same query the shown list stays until the new answer replaces it (the
-		// server matches more loosely than any client-side filter could), so Enter keeps picking
-		// instead of adding a newline. A different `@` drops it: a fast Enter must not insert a name
-		// found for the previous query.
+		// While the query only grows at the same `@` (a second word too: "Lena K.") the shown list
+		// stays until the new answer replaces it (the server matches more loosely than any client-side
+		// filter could), so Enter keeps picking instead of adding a newline. A different `@` drops it:
+		// a fast Enter must not insert a name found for the previous query.
 		if (query.start !== queryStart) {
 			people = [];
 			active = -1;
@@ -200,6 +197,12 @@
 		e.preventDefault();
 		const value = text.trim();
 		if (!value || sending || blocked((m) => (error = m))) return;
+		const encoded = encodeMentions(value, picks);
+		// the server counts the encoded text, where each mention is a longer token than the name
+		if (encoded.length > MAX_COMMENT_LENGTH) {
+			error = `Too long: a mention is stored as a longer reference, so this comment is ${encoded.length} of ${MAX_COMMENT_LENGTH} characters. Please shorten it.`;
+			return;
+		}
 		close();
 		sending = true;
 		error = '';
@@ -208,7 +211,7 @@
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
-					text: encodeMentions(value, picks),
+					text: encoded,
 					...(replyTo !== null ? { replyTo } : {})
 				})
 			});
@@ -240,7 +243,7 @@
 			aria-expanded={open}
 			aria-controls={listId}
 			aria-activedescendant={open && active >= 0 ? optionId(active) : undefined}
-			maxlength="2000"
+			maxlength={MAX_COMMENT_LENGTH}
 			rows="2"
 			{oninput}
 			{onkeydown}

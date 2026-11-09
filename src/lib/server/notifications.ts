@@ -47,21 +47,20 @@ const PREF_FOR_KIND: Partial<Record<NotificationKind, keyof NotificationPrefs>> 
 	report_resolved: 'reportOutcomes'
 };
 
-/** Kinds that fold into an existing unread row instead of adding a new one. */
-const COALESCING_KINDS: readonly NotificationKind[] = [
-	'comment',
-	'thread_comment',
-	'comment_reply',
-	'mention'
-];
-
-/** Kinds that lead to a comment on a meme page; their `detail` is a raw excerpt with mention tokens. */
+/**
+ * Kinds that lead to a comment on a meme page: their `detail` is a raw excerpt with mention tokens
+ * (rendered as current names when listed), and they fold into the recipient's unread row of that kind
+ * for the same meme. One list, so folding and rendering can never drift apart.
+ */
 const COMMENT_KINDS: readonly NotificationKind[] = [
 	'comment',
 	'thread_comment',
 	'comment_reply',
 	'mention'
 ];
+
+/** Kinds that fold into an existing unread row instead of adding a new one. */
+const COALESCING_KINDS: readonly NotificationKind[] = COMMENT_KINDS;
 
 /** Where each profile-change notice leads. */
 const PROFILE_KINDS: readonly NotificationKind[] = [
@@ -136,7 +135,14 @@ export async function notify(tx: Executor, input: NotifyInput): Promise<void> {
 	}
 
 	if (COALESCING_KINDS.includes(kind)) {
-		// FOR UPDATE: two commenters at once must fold into one row, not both insert or both read count 1
+		// FOR UPDATE below cannot lock a row that does not exist yet, so two concurrent first notices
+		// would both insert. This transaction-scoped lock on (recipient, kind, meme) serialises them.
+		// Recipients are notified in ascending user id order, so concurrent addComment transactions
+		// take these locks in the same order and cannot deadlock.
+		await tx.execute(
+			sql`SELECT pg_advisory_xact_lock(hashtextextended(${`notify:${userId}:${kind}`}, ${mediaId ?? 0}))`
+		);
+		// FOR UPDATE: two commenters at once must fold into one row, not both read count 1
 		const [open] = await tx
 			.select({ id: notifications.id })
 			.from(notifications)

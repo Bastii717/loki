@@ -1,6 +1,12 @@
 /** @-mentions are stored as `@[u:<public id>]` tokens and rendered as the member's board name. Client-safe. */
 export const MAX_MENTIONS = 5;
 
+/**
+ * Longest comment the server accepts. It counts the encoded text, where every mention is a
+ * 17-character `@[u:…]` token, so a comment with mentions can exceed it while the visible text does not.
+ */
+export const MAX_COMMENT_LENGTH = 2000;
+
 const TOKEN_RE = /@\[u:([0-9A-Za-z]{12})\]/g;
 
 export const mentionToken = (publicId: string): string => `@[u:${publicId}]`;
@@ -45,4 +51,15 @@ export function encodeMentions(text: string, picked: { id: string; name: string 
 		out = out.replace(re, () => mentionToken(p.id));
 	}
 	return out;
+}
+
+/**
+ * The `@query` being completed at the caret: index of the `@` and the query text. Board names may
+ * contain a space, so the query may span two words ("Lena K."); null when the text before the caret
+ * is not one (or it exceeds 50 characters, the API's limit).
+ */
+export function mentionQuery(beforeCaret: string): { start: number; q: string } | null {
+	const m = /(?:^|\s)@([^\s@]{1,50}(?: [^\s@]{0,50})?)$/.exec(beforeCaret);
+	if (!m || m[1].length > 50) return null;
+	return { start: beforeCaret.length - m[1].length - 1, q: m[1] };
 }

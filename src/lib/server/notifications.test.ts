@@ -240,6 +240,30 @@ describe('notify', () => {
 		expect(all[0].createdAt).toEqual(before.createdAt);
 	});
 
+	it('folds concurrent first notices for one meme into one row', async () => {
+		const user = await testUser();
+		const actors = await Promise.all([1, 2, 3, 4, 5].map(() => testUser()));
+		const mediaId = await insertMeme(user.id);
+		await Promise.all(
+			actors.map((actor, i) =>
+				db.transaction((tx) =>
+					notify(tx, {
+						userId: user.id,
+						kind: 'mention',
+						actorId: actor.id,
+						mediaId,
+						contentType: 'comment',
+						contentId: i + 1,
+						detail: 'x'
+					})
+				)
+			)
+		);
+		const all = await rows();
+		expect(all).toHaveLength(1);
+		expect(all[0]).toMatchObject({ userId: user.id, kind: 'mention', count: 5 });
+	});
+
 	it('coalesces thread_comment too', async () => {
 		const user = await testUser();
 		const actor = await testUser();

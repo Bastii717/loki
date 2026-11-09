@@ -11,12 +11,10 @@ import {
 import { notify, storedCommentExcerpt, type NotificationKind } from './notifications';
 import type { SessionUser } from './auth/session';
 import { MediaNotFoundError, type VoteValue } from './votes';
-import { MAX_MENTIONS, mentionIds } from '../mentions';
+import { MAX_COMMENT_LENGTH, MAX_MENTIONS, mentionIds } from '../mentions';
 import { mentionNames, resolveMentions, TooManyMentionsError } from './mentions';
 
-export { TooManyMentionsError };
-
-export const MAX_COMMENT_LENGTH = 2000;
+export { TooManyMentionsError, MAX_COMMENT_LENGTH };
 
 export class CommentTextError extends Error {
 	constructor() {

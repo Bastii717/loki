@@ -3,6 +3,7 @@ import {
 	encodeMentions,
 	MAX_MENTIONS,
 	mentionIds,
+	mentionQuery,
 	mentionToken,
 	renderMentionsPlain,
 	splitMentions
@@ -86,5 +87,37 @@ describe('mentions', () => {
 		expect(encodeMentions('@a.b and @axb', [{ id: 'aaaaaaaaaaaa', name: 'a.b' }])).toBe(
 			'@[u:aaaaaaaaaaaa] and @axb'
 		);
+	});
+});
+
+describe('mentionQuery', () => {
+	it('finds the query after an @ at a word boundary', () => {
+		expect(mentionQuery('hi @Le')).toEqual({ start: 3, q: 'Le' });
+	});
+
+	it('spans a second word, so multi-word names can be narrowed', () => {
+		expect(mentionQuery('@Lena K')).toEqual({ start: 0, q: 'Lena K' });
+	});
+
+	it('keeps the query open on a trailing space after the first word', () => {
+		expect(mentionQuery('@Lena ')).toEqual({ start: 0, q: 'Lena ' });
+	});
+
+	it('ends after a space following the second word (as after a pick)', () => {
+		expect(mentionQuery('@Lena K. ')).toBeNull();
+	});
+
+	it('needs whitespace or the start before the @', () => {
+		expect(mentionQuery('a@b')).toBeNull();
+	});
+
+	it('ends at a third word', () => {
+		expect(mentionQuery('@Lena thanks everyone')).toBeNull();
+	});
+
+	it('gives up beyond 50 characters', () => {
+		expect(mentionQuery(`@${'a'.repeat(50)}`)).toEqual({ start: 0, q: 'a'.repeat(50) });
+		expect(mentionQuery(`@${'a'.repeat(25)} ${'b'.repeat(25)}`)).toBeNull();
+		expect(mentionQuery(`@${'a'.repeat(51)}`)).toBeNull();
 	});
 });
