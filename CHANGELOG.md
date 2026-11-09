@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.8.1](https://github.com/Bastii717/loki/compare/v1.8.0...v1.8.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* comment sorting: Top always matches the scores on screen (votes update the list live; the order still never jumps while voting), New lists newest first (replies stay chronological, ties under Top go to the newer comment), and notification links to the comment section no longer clip the sort toggle under the sticky bar ([#50](https://github.com/Bastii717/loki/pull/50))
+
+
+### Operations
+
+* no migrations and no new environment variables
+
+
 ## [1.8.0](https://github.com/Bastii717/loki/compare/v1.7.0...v1.8.0) (2026-11-09)
 
 
