@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.7.0](https://github.com/Bastii717/loki/compare/v1.6.0...v1.7.0) (2026-11-09)
+
+
+### Features
+
+* comments 2.0: threaded replies up to three levels deep (a deleted comment with replies stays as a "[deleted]" placeholder), up- and downvotes on comments, a Top/New sort toggle remembered per browser, @mentions with a member picker that store a stable reference and always show the member's current name, and "replied to your comment" / "mentioned you" notices with deep links and two new notification switches ([#48](https://github.com/Bastii717/loki/pull/48))
+
+
+### Operations
+
+* migrations 0014 and 0015 run at boot: comment threads and votes, the `mention_text()` SQL function and two indexes — **forward-only**: take a database backup before updating, going back to 1.6.0 needs a restore
+* comments on the meme page now default to Top (by score) instead of newest first
+* no new environment variables
+
+
 ## [1.6.0](https://github.com/Bastii717/loki/compare/v1.5.0...v1.6.0) (2026-11-01)
 
 
