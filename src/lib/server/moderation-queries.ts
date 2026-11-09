@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNull, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from './db';
 import { comments, media, quotes, reports, templates, timeouts, users } from './db/schema';
@@ -207,13 +207,14 @@ async function previews(cases: { contentType: ContentType; contentId: number }[]
 			: db
 					.select({
 						id: comments.id,
-						text: comments.text,
+						text: sql<string>`mention_text(${comments.text})`,
 						mediaPublicId: media.publicId,
 						underReview: underReviewSql('comment', comments.id, comments.reviewedAt)
 					})
 					.from(comments)
 					.innerJoin(media, eq(media.id, comments.mediaId))
-					.where(inArray(comments.id, commentIds)),
+					// a tombstone has no text left: no preview, so the case renders as gone
+					.where(and(inArray(comments.id, commentIds), isNull(comments.deletedAt))),
 		quoteIds.length === 0
 			? []
 			: db
@@ -501,7 +502,7 @@ export async function listUserOverview(): Promise<UserOverview[]> {
 	}>(sql`
 		SELECT u.id, u.public_id, u.username, u.display_name, u.avatar_thumb_key, u.motto, u.role, u.created_at,
 			(SELECT count(*)::int FROM media m WHERE m.uploader_id = u.id) AS memes,
-			(SELECT count(*)::int FROM comments c WHERE c.author_id = u.id) AS comments,
+			(SELECT count(*)::int FROM comments c WHERE c.author_id = u.id AND c.deleted_at IS NULL) AS comments,
 			(SELECT count(*)::int FROM quotes q WHERE q.submitted_by = u.id) AS quotes,
 			(SELECT count(*)::int FROM reports r
 				WHERE r.author_id = u.id AND r.outcome = 'actioned') AS confirmed_reports,

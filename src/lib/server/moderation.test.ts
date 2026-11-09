@@ -158,6 +158,21 @@ describe('createReport', () => {
 		expect(rows[1].excerpt).toBe(long.slice(0, 200));
 	});
 
+	it('renders mentions in the comment excerpt and refuses to report a tombstone', async () => {
+		const author = await userWithRole();
+		const reporter = await userWithRole();
+		const named = await testUser({ displayName: 'Mira' });
+		const memeId = await addMeme(author.id);
+		const commentId = await addComment(author.id, memeId, `ping @[u:${named.publicId}] ok`);
+		await createReport(reporter, 'comment', commentId, 'spam');
+		const [row] = await db.select().from(reports);
+		expect(row.excerpt).toBe('ping @Mira ok');
+
+		const dead = await addComment(author.id, memeId, '');
+		await db.update(comments).set({ deletedAt: new Date() }).where(eq(comments.id, dead));
+		await expectReportError(createReport(reporter, 'comment', dead, 'spam'), 'notfound');
+	});
+
 	it('rejects own content of every type', async () => {
 		const me = await userWithRole();
 		const memeId = await addMeme(me.id);

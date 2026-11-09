@@ -1,12 +1,15 @@
 import { and, desc, eq, inArray, isNull, lt, sql, type SQL } from 'drizzle-orm';
+import { mentionToken, splitMentions } from '../mentions';
 import { NOTIFICATION_CATEGORY } from '../notification-labels';
 import { db } from './db';
-import { media, notificationPrefs, notifications, quotes, users } from './db/schema';
+import { comments, media, notificationPrefs, notifications, quotes, users } from './db/schema';
 import { underReviewSql, type ContentType, type Executor } from './moderation';
 
 export const NOTIFICATION_KINDS = [
 	'comment',
 	'thread_comment',
+	'comment_reply',
+	'mention',
 	'content_deleted',
 	'content_flagged',
 	'content_released',
@@ -22,12 +25,16 @@ export const NOTIFICATION_KINDS = [
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 export const EXCERPT_LENGTH = 80;
+/** Raw characters a comment notice keeps: room for ~80 once the mention tokens render as names. */
+export const STORED_EXCERPT_LENGTH = 400;
 const PAGE_SIZE = 50;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type NotificationPrefs = {
 	comments: boolean;
 	threadComments: boolean;
+	replies: boolean;
+	mentions: boolean;
 	reportOutcomes: boolean;
 };
 
@@ -35,11 +42,25 @@ export type NotificationPrefs = {
 const PREF_FOR_KIND: Partial<Record<NotificationKind, keyof NotificationPrefs>> = {
 	comment: 'comments',
 	thread_comment: 'threadComments',
+	comment_reply: 'replies',
+	mention: 'mentions',
 	report_resolved: 'reportOutcomes'
 };
 
+/**
+ * Kinds that lead to a comment on a meme page: their `detail` is a raw excerpt with mention tokens
+ * (rendered as current names when listed), and they fold into the recipient's unread row of that kind
+ * for the same meme. One list, so folding and rendering can never drift apart.
+ */
+const COMMENT_KINDS: readonly NotificationKind[] = [
+	'comment',
+	'thread_comment',
+	'comment_reply',
+	'mention'
+];
+
 /** Kinds that fold into an existing unread row instead of adding a new one. */
-const COALESCING_KINDS: readonly NotificationKind[] = ['comment', 'thread_comment'];
+const COALESCING_KINDS: readonly NotificationKind[] = COMMENT_KINDS;
 
 /** Where each profile-change notice leads. */
 const PROFILE_KINDS: readonly NotificationKind[] = [
@@ -49,10 +70,35 @@ const PROFILE_KINDS: readonly NotificationKind[] = [
 	'motto_cleared'
 ];
 
-/** First 80 characters of a comment, trimmed, with every run of whitespace (line breaks too) as one space. */
+/** First 80 characters of a (rendered) comment, trimmed, with every run of whitespace (line breaks too) as one space. */
 export function commentExcerpt(text: string): string {
 	const flat = text.replace(/\s+/g, ' ').trim();
 	return [...flat].slice(0, EXCERPT_LENGTH).join('').trim();
+}
+
+/**
+ * What a comment notice stores as `detail`: the raw text with its mention tokens (they render as the
+ * current names when listed), whitespace collapsed, at most STORED_EXCERPT_LENGTH characters and
+ * never ending inside a token.
+ */
+export function storedCommentExcerpt(text: string): string {
+	const flat = text.replace(/\s+/g, ' ').trim();
+	let out = '';
+	let room = STORED_EXCERPT_LENGTH;
+	for (const part of splitMentions(flat)) {
+		if (part.kind === 'mention') {
+			const token = mentionToken(part.id);
+			if (token.length > room) break;
+			out += token;
+			room -= token.length;
+		} else {
+			const chars = [...part.text].slice(0, room);
+			out += chars.join('');
+			room -= chars.length;
+		}
+		if (room === 0) break;
+	}
+	return out.trim();
 }
 
 export interface NotifyInput {
@@ -68,8 +114,8 @@ export interface NotifyInput {
 /**
  * Writes a notice for `userId`. Pass the caller's transaction so a failed action leaves no stray
  * notice. Writes nothing when the recipient is the actor or has switched the kind off (the actor is
- * stored for activity kinds only, moderation kinds store none); folds
- * `comment` and `thread_comment` into the recipient's unread notice of that kind for the same meme.
+ * stored for activity kinds only, moderation kinds store none); folds the comment kinds into the
+ * recipient's unread notice of that kind for the same meme (the row then points at the latest comment).
  */
 export async function notify(tx: Executor, input: NotifyInput): Promise<void> {
 	const { userId, kind } = input;
@@ -89,7 +135,14 @@ export async function notify(tx: Executor, input: NotifyInput): Promise<void> {
 	}
 
 	if (COALESCING_KINDS.includes(kind)) {
-		// FOR UPDATE: two commenters at once must fold into one row, not both insert or both read count 1
+		// FOR UPDATE below cannot lock a row that does not exist yet, so two concurrent first notices
+		// would both insert. This transaction-scoped lock on (recipient, kind, meme) serialises them.
+		// Recipients are notified in ascending user id order, so concurrent addComment transactions
+		// take these locks in the same order and cannot deadlock.
+		await tx.execute(
+			sql`SELECT pg_advisory_xact_lock(hashtextextended(${`notify:${userId}:${kind}`}, ${mediaId ?? 0}))`
+		);
+		// FOR UPDATE: two commenters at once must fold into one row, not both read count 1
 		const [open] = await tx
 			.select({ id: notifications.id })
 			.from(notifications)
@@ -111,6 +164,8 @@ export async function notify(tx: Executor, input: NotifyInput): Promise<void> {
 					count: sql`${notifications.count} + 1`,
 					actorId,
 					detail,
+					contentType: input.contentType ?? null,
+					contentId: input.contentId ?? null,
 					updatedAt: sql`now()`
 				})
 				.where(eq(notifications.id, open.id));
@@ -191,7 +246,9 @@ export async function listNotifications(
 			mediaPublicId: media.publicId,
 			title: media.title,
 			titleHidden: underReviewSql('meme', media.id, media.reviewedAt),
-			detail: notifications.detail,
+			// comment notices store raw tokens: rendered here, so a name change shows everywhere
+			detail: sql<string>`CASE WHEN ${inArray(notifications.kind, [...COMMENT_KINDS])}
+				THEN mention_text(${notifications.detail}) ELSE ${notifications.detail} END`,
 			count: notifications.count,
 			readAt: notifications.readAt,
 			updatedAt: notifications.updatedAt
@@ -220,7 +277,10 @@ export async function listNotifications(
 		mediaId: r.mediaPublicId,
 		// never text the recipient could not see on the meme's page
 		title: r.titleHidden ? null : r.title,
-		detail: r.detail,
+		// cut after rendering, so the excerpt is 80 visible characters whatever the names' lengths
+		detail: COMMENT_KINDS.includes(r.kind as NotificationKind)
+			? commentExcerpt(r.detail)
+			: r.detail,
 		count: r.count,
 		read: r.readAt !== null,
 		updatedAt: r.updatedAt.toISOString()
@@ -256,6 +316,17 @@ export async function openNotification(userId: number, id: number): Promise<stri
 	if (kind === 'award_won') {
 		return row.mediaPublicId !== null ? `/meme/${row.mediaPublicId}` : '/awards';
 	}
+	if (COMMENT_KINDS.includes(kind) && row.mediaPublicId !== null) {
+		// a comment that is gone or only a tombstone has nothing to scroll to
+		const [comment] =
+			row.contentType === 'comment' && row.contentId !== null
+				? await db
+						.select({ publicId: comments.publicId })
+						.from(comments)
+						.where(and(eq(comments.id, row.contentId), isNull(comments.deletedAt)))
+				: [];
+		return `/meme/${row.mediaPublicId}#${comment ? `c-${comment.publicId}` : 'comments'}`;
+	}
 	if (row.mediaPublicId !== null) return `/meme/${row.mediaPublicId}`;
 	if (row.contentType === 'quote' && row.contentId !== null) {
 		const [quote] = await db
@@ -279,17 +350,29 @@ export async function getPrefs(userId: number): Promise<NotificationPrefs> {
 		.select({
 			comments: notificationPrefs.comments,
 			threadComments: notificationPrefs.threadComments,
+			replies: notificationPrefs.replies,
+			mentions: notificationPrefs.mentions,
 			reportOutcomes: notificationPrefs.reportOutcomes
 		})
 		.from(notificationPrefs)
 		.where(eq(notificationPrefs.userId, userId));
-	return row ?? { comments: true, threadComments: true, reportOutcomes: true };
+	return (
+		row ?? {
+			comments: true,
+			threadComments: true,
+			replies: true,
+			mentions: true,
+			reportOutcomes: true
+		}
+	);
 }
 
 export async function setPrefs(userId: number, prefs: NotificationPrefs): Promise<void> {
 	const values = {
 		comments: prefs.comments,
 		threadComments: prefs.threadComments,
+		replies: prefs.replies,
+		mentions: prefs.mentions,
 		reportOutcomes: prefs.reportOutcomes
 	};
 	await db

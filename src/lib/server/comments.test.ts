@@ -1,22 +1,27 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from './db';
-import { comments, media, mediaViews, notifications } from './db/schema';
+import { comments, media, mediaViews, notifications, users } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import {
 	addComment,
 	CommentNotFoundError,
 	CommentPermissionError,
 	CommentTextError,
+	CommentVoteOwnError,
 	deleteComment,
 	listComments,
-	markSeen
+	markSeen,
+	voteComment
 } from './comments';
 import { MediaNotFoundError } from './votes';
 import { addOpenReports, OVER_THRESHOLD, timeOut } from './moderation-test-utils';
 import { env } from './env';
 import { resolveReports, TimeoutActiveError } from './moderation';
-import { setPrefs } from './notifications';
+import { listNotifications, setPrefs } from './notifications';
+import { TooManyMentionsError } from './mentions';
+import { mentionToken } from '../mentions';
+import { commentVotes } from './db/schema';
 import { isPublicId, publicIdOfMedia, resolveCommentId } from './public-ids';
 
 beforeAll(setupDb);
@@ -41,22 +46,22 @@ async function addMedia(uploaderId: number): Promise<number> {
 const cid = async (c: { id: string }) => (await resolveCommentId(c.id))!;
 
 describe('comments', () => {
-	it('adds trimmed comments and lists newest first with author data', async () => {
+	it('adds trimmed comments and lists oldest first with author data', async () => {
 		const u = await testUser();
 		const id = await addMedia(u.id);
 		const first = await addComment(u.id, id, '  erster  ');
 		expect(first.text).toBe('erster');
 		await addComment(u.id, id, 'zweiter');
-		const list = await listComments(id);
-		expect(list.map((c) => c.text)).toEqual(['zweiter', 'erster']);
-		expect(list[0]).toMatchObject({ authorId: u.publicId, author: u.username });
+		const list = await listComments(id, u.id);
+		expect(list.map((c) => c.text)).toEqual(['erster', 'zweiter']);
+		expect(list[1]).toMatchObject({ authorId: u.publicId, author: u.username });
 	});
 
 	it('exposes public ids only: id, mediaId and authorId, no internal id in the JSON', async () => {
 		const u = await testUser();
 		const id = await addMedia(u.id);
 		const added = await addComment(u.id, id, 'hi');
-		const [listed] = await listComments(id);
+		const [listed] = await listComments(id, u.id);
 		for (const item of [added, listed]) {
 			expect(isPublicId(item.id)).toBe(true);
 			expect(item.mediaId).toBe(await publicIdOfMedia(id));
@@ -80,7 +85,7 @@ describe('comments', () => {
 		const added = await addComment(named.id, id, 'von Ronja');
 		expect(added).toMatchObject({ author: 'Ronja', authorRole: 'admin' });
 		await addComment(plain.id, id, 'von ohne');
-		const list = await listComments(id);
+		const list = await listComments(id, named.id);
 		expect(list.find((c) => c.authorId === named.publicId)).toMatchObject({
 			author: 'Ronja',
 			authorRole: 'admin',
@@ -178,6 +183,177 @@ describe('comments', () => {
 	});
 });
 
+const asUser = (
+	u: { id: number; username: string },
+	role: 'member' | 'moderator' | 'admin' = 'member'
+) => ({
+	id: u.id,
+	username: u.username,
+	displayName: null,
+	role
+});
+
+describe('threads', () => {
+	it('lists oldest first with parent, depth, score and own vote', async () => {
+		const a = await testUser();
+		const b = await testUser();
+		const id = await addMedia(a.id);
+		const first = await addComment(a.id, id, 'one');
+		const second = await addComment(b.id, id, 'two', await cid(first));
+		await db.insert(commentVotes).values({ userId: b.id, commentId: await cid(first), value: 1 });
+		const forB = await listComments(id, b.id);
+		expect(forB.map((c) => c.text)).toEqual(['one', 'two']);
+		expect(forB[0]).toMatchObject({
+			parentId: null,
+			replyToId: null,
+			depth: 1,
+			score: 1,
+			userVote: 1
+		});
+		expect(forB[1]).toMatchObject({
+			id: second.id,
+			parentId: first.id,
+			replyToId: first.id,
+			depth: 2,
+			score: 0,
+			userVote: 0,
+			deleted: false
+		});
+		expect((await listComments(id, a.id))[0]).toMatchObject({ score: 1, userVote: 0 });
+	});
+
+	it('nests replies up to depth 3 and keeps deeper replies on level 3', async () => {
+		const u = await testUser();
+		const id = await addMedia(u.id);
+		const a = await addComment(u.id, id, 'a');
+		const b = await addComment(u.id, id, 'b', await cid(a));
+		const c = await addComment(u.id, id, 'c', await cid(b));
+		expect(c).toMatchObject({ depth: 3, parentId: b.id, replyToId: b.id });
+		const d = await addComment(u.id, id, 'd', await cid(c));
+		expect(d).toMatchObject({ depth: 3, parentId: b.id, replyToId: c.id });
+	});
+
+	it('rejects a reply to a tombstone or a comment on another meme', async () => {
+		const u = await testUser();
+		const id = await addMedia(u.id);
+		const other = await addMedia(u.id);
+		const a = await addComment(u.id, id, 'a');
+		await addComment(u.id, id, 'b', await cid(a));
+		await deleteComment(asUser(u), await cid(a));
+		await expect(addComment(u.id, id, 'x', await cid(a))).rejects.toBeInstanceOf(
+			CommentNotFoundError
+		);
+		const live = await addComment(u.id, id, 'live');
+		await expect(addComment(u.id, other, 'x', await cid(live))).rejects.toBeInstanceOf(
+			CommentNotFoundError
+		);
+	});
+
+	it('rejects more than 5 mentioned members', async () => {
+		const u = await testUser();
+		const members = await Promise.all(Array.from({ length: 6 }, () => testUser()));
+		const id = await addMedia(u.id);
+		const tokens = members.map((m) => mentionToken(m.publicId));
+		await expect(addComment(u.id, id, tokens.join(' '))).rejects.toBeInstanceOf(
+			TooManyMentionsError
+		);
+		await expect(addComment(u.id, id, tokens.slice(0, 5).join(' '))).resolves.toBeTruthy();
+		await expect(addComment(u.id, id, Array(6).fill(tokens[0]).join(' '))).resolves.toBeTruthy();
+	});
+
+	it('returns mention names for tokens in the text', async () => {
+		const u = await testUser();
+		const lena = await testUser({ displayName: 'Lena K.', displayNameKey: 'lena k.' });
+		const id = await addMedia(u.id);
+		const unknown = mentionToken('zzzzzzzzzzzz');
+		const added = await addComment(u.id, id, `hi ${mentionToken(lena.publicId)} ${unknown}`);
+		expect(added.mentions).toEqual({ [lena.publicId]: 'Lena K.' });
+		expect((await listComments(id, u.id))[0].mentions).toEqual({ [lena.publicId]: 'Lena K.' });
+	});
+});
+
+describe('tombstones', () => {
+	it('leaves a tombstone when a comment with replies is deleted', async () => {
+		const a = await testUser();
+		const b = await testUser();
+		const id = await addMedia(a.id);
+		const parent = await addComment(a.id, id, 'secret');
+		await addComment(b.id, id, 'reply', await cid(parent));
+		await db.insert(commentVotes).values({ userId: b.id, commentId: await cid(parent), value: 1 });
+		const [r] = await addOpenReports('comment', await cid(parent), a.id, 1);
+		await deleteComment(asUser(a), await cid(parent));
+
+		const [tomb] = await listComments(id, b.id);
+		expect(tomb).toMatchObject({
+			id: parent.id,
+			deleted: true,
+			text: null,
+			author: '',
+			authorId: '',
+			authorAvatar: null,
+			score: 0,
+			userVote: 0,
+			underReview: false
+		});
+		const [row] = await db
+			.select()
+			.from(comments)
+			.where(eq(comments.id, await cid(parent)));
+		expect(row.text).toBe('');
+		expect(await db.select().from(commentVotes)).toHaveLength(1);
+		expect(
+			(await db.select().from(notifications).where(eq(notifications.userId, r))).map((n) => n.kind)
+		).toContain('report_resolved');
+	});
+
+	it('removes a comment without replies', async () => {
+		const u = await testUser();
+		const id = await addMedia(u.id);
+		const c = await addComment(u.id, id, 'x');
+		await deleteComment(asUser(u), await cid(c));
+		expect(await db.select().from(comments)).toHaveLength(0);
+	});
+
+	it('removes a chain of tombstones when the last reply goes', async () => {
+		const u = await testUser();
+		const id = await addMedia(u.id);
+		const a = await addComment(u.id, id, 'a');
+		const b = await addComment(u.id, id, 'b', await cid(a));
+		const c = await addComment(u.id, id, 'c', await cid(b));
+		await deleteComment(asUser(u), await cid(a));
+		await deleteComment(asUser(u), await cid(b));
+		expect(await db.select().from(comments)).toHaveLength(3);
+		await deleteComment(asUser(u), await cid(c));
+		expect(await db.select().from(comments)).toHaveLength(0);
+	});
+
+	it('keeps a level-3 tombstone while a sibling answers it, then removes it', async () => {
+		const u = await testUser();
+		const id = await addMedia(u.id);
+		const a = await addComment(u.id, id, 'a');
+		const b = await addComment(u.id, id, 'b', await cid(a));
+		const c = await addComment(u.id, id, 'c', await cid(b));
+		const d = await addComment(u.id, id, 'd', await cid(c));
+		await deleteComment(asUser(u), await cid(c));
+		expect((await db.select().from(comments)).map((r) => r.publicId)).toContain(c.id);
+		await deleteComment(asUser(u), await cid(d));
+		expect((await db.select().from(comments)).map((r) => r.publicId).sort()).toEqual(
+			[a.id, b.id].sort()
+		);
+	});
+
+	it('a tombstone cannot be deleted again', async () => {
+		const u = await testUser();
+		const id = await addMedia(u.id);
+		const a = await addComment(u.id, id, 'a');
+		await addComment(u.id, id, 'b', await cid(a));
+		await deleteComment(asUser(u), await cid(a));
+		await expect(deleteComment(asUser(u), await cid(a))).rejects.toBeInstanceOf(
+			CommentNotFoundError
+		);
+	});
+});
+
 describe('markSeen', () => {
 	it('is idempotent: one mediaViews row and viewCount 1 after two calls', async () => {
 		const u = await testUser();
@@ -221,9 +397,9 @@ describe('listComments under review', () => {
 	}
 
 	it('nulls only the over-threshold comment text for members', async () => {
-		const { mid, visible, reported } = await setup(OVER_THRESHOLD);
-		// listComments takes no viewer: the author sees the same as anyone else
-		const list = await listComments(mid);
+		const { author, mid, visible, reported } = await setup(OVER_THRESHOLD);
+		// the author sees the same as anyone else
+		const list = await listComments(mid, author.id);
 		expect(list.find((c) => c.id === visible.id)).toMatchObject({
 			text: 'harmlos',
 			underReview: false
@@ -233,8 +409,8 @@ describe('listComments under review', () => {
 	});
 
 	it('moderators (revealAll) get the text, still flagged', async () => {
-		const { mid, reported } = await setup(OVER_THRESHOLD);
-		const list = await listComments(mid, true);
+		const { author, mid, reported } = await setup(OVER_THRESHOLD);
+		const list = await listComments(mid, author.id, true);
 		expect(list.find((c) => c.id === reported.id)).toMatchObject({
 			text: 'boese',
 			underReview: true
@@ -242,8 +418,8 @@ describe('listComments under review', () => {
 	});
 
 	it('exactly at the threshold the text is visible', async () => {
-		const { mid, reported } = await setup(env.REPORT_REVIEW_THRESHOLD);
-		const list = await listComments(mid);
+		const { author, mid, reported } = await setup(env.REPORT_REVIEW_THRESHOLD);
+		const list = await listComments(mid, author.id);
 		expect(list.find((c) => c.id === reported.id)).toMatchObject({
 			text: 'boese',
 			underReview: false
@@ -260,7 +436,7 @@ describe('listComments under review', () => {
 			'dismissed'
 		);
 		await addOpenReports('comment', await cid(reported), author.id, OVER_THRESHOLD);
-		const list = await listComments(mid);
+		const list = await listComments(mid, author.id);
 		expect(list.find((c) => c.id === reported.id)).toMatchObject({
 			text: 'boese',
 			underReview: false
@@ -363,11 +539,210 @@ describe('addComment notices', () => {
 		const lena = await testUser();
 		const id = await addMedia(owner.id);
 		await addComment(lena.id, id, 'before');
-		await setPrefs(owner.id, { comments: false, threadComments: true, reportOutcomes: true });
+		await setPrefs(owner.id, {
+			comments: false,
+			threadComments: true,
+			replies: true,
+			mentions: true,
+			reportOutcomes: true
+		});
 		await addComment(lena.id, id, 'after');
 		const rows = await noticesOf(owner.id);
 		expect(rows).toHaveLength(1);
 		expect(rows[0]).toMatchObject({ count: 1, detail: 'before' });
+	});
+
+	it('one notice per person: mention beats reply, comment and thread', async () => {
+		const u = await testUser(); // uploader
+		const e = await testUser(); // earlier commenter
+		const r = await testUser(); // reply target author
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		await addComment(e.id, id, 'early');
+		const target = await addComment(r.id, id, 'target');
+		await db.delete(notifications);
+		const text = `hey ${mentionToken(u.publicId)} ${mentionToken(e.publicId)} ${mentionToken(e.publicId)}`;
+		await addComment(actor.id, id, text, await cid(target));
+		expect((await noticesOf(u.id)).map((n) => n.kind)).toEqual(['mention']);
+		expect((await noticesOf(e.id)).map((n) => n.kind)).toEqual(['mention']);
+		expect((await noticesOf(r.id)).map((n) => n.kind)).toEqual(['comment_reply']);
+		expect(await noticesOf(actor.id)).toHaveLength(0);
+		// stored with the tokens, listed with the names
+		const [n] = await noticesOf(u.id);
+		expect(n.detail).toBe(text);
+		const { items } = await listNotifications(u.id, {});
+		expect(items[0].detail).toBe(`hey @${u.username} @${e.username} @${e.username}`);
+	});
+
+	it("replies at depth 3 notify the answered author, not the parent's", async () => {
+		const u = await testUser();
+		const a = await testUser();
+		const b = await testUser();
+		const c = await testUser();
+		const id = await addMedia(u.id);
+		const top = await addComment(a.id, id, 'top');
+		const mid = await addComment(b.id, id, 'mid', await cid(top));
+		const deep = await addComment(a.id, id, 'deep', await cid(mid));
+		const sibling = await addComment(b.id, id, 'sibling', await cid(deep));
+		await db.delete(notifications);
+		// c answers deep (author a), which sits at level 3 under mid (author b): a is answered, b is only a thread member
+		await addComment(c.id, id, 'answer to deep', await cid(deep));
+		expect((await noticesOf(a.id)).map((n) => n.kind)).toEqual(['comment_reply']);
+		expect((await noticesOf(b.id)).map((n) => n.kind)).toEqual(['thread_comment']);
+		await db.delete(notifications);
+		await addComment(c.id, id, 'answer to sibling', await cid(sibling));
+		expect((await noticesOf(b.id)).map((n) => n.kind)).toEqual(['comment_reply']);
+		expect((await noticesOf(a.id)).map((n) => n.kind)).toEqual(['thread_comment']);
+	});
+
+	it('the answered author gets one comment_reply even when the text mentions them', async () => {
+		const u = await testUser();
+		const r = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		const target = await addComment(r.id, id, 'target');
+		await db.delete(notifications);
+		await addComment(actor.id, id, `${mentionToken(r.publicId)} agreed`, await cid(target));
+		expect((await noticesOf(r.id)).map((n) => n.kind)).toEqual(['comment_reply']);
+	});
+
+	it('a self-mention writes no notice for the actor', async () => {
+		const u = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		await addComment(actor.id, id, `me ${mentionToken(actor.publicId)}`);
+		expect(await noticesOf(actor.id)).toHaveLength(0);
+	});
+
+	it('the uploader as reply target gets comment_reply, not comment', async () => {
+		const u = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		const target = await addComment(u.id, id, 'mine');
+		await addComment(actor.id, id, 'answer', await cid(target));
+		expect((await noticesOf(u.id)).map((n) => n.kind)).toEqual(['comment_reply']);
+	});
+
+	it('a mentioned uploader with mentions off gets nothing, not a comment notice', async () => {
+		const u = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		await setPrefs(u.id, {
+			comments: true,
+			threadComments: true,
+			replies: true,
+			mentions: false,
+			reportOutcomes: true
+		});
+		await addComment(actor.id, id, `hi ${mentionToken(u.publicId)}`);
+		expect(await noticesOf(u.id)).toHaveLength(0);
+	});
+
+	it('switched-off top kind means nothing for that comment', async () => {
+		const u = await testUser();
+		const r = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		const target = await addComment(r.id, id, 'target');
+		await db.delete(notifications);
+		await setPrefs(r.id, {
+			comments: true,
+			threadComments: true,
+			replies: false,
+			mentions: true,
+			reportOutcomes: true
+		});
+		await addComment(actor.id, id, 'reply', await cid(target));
+		expect(await noticesOf(r.id)).toHaveLength(0);
+	});
+
+	it('ignores tokens of unknown members', async () => {
+		const u = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		await addComment(actor.id, id, 'hi @[u:AAAAAAAAAAAA]');
+		const rows = await db.select().from(notifications);
+		expect(rows.map((n) => n.kind)).toEqual(['comment']);
+		const { items } = await listNotifications(u.id, {});
+		expect(items[0].detail).toBe('hi @unknown member');
+	});
+
+	it('lists the current name of a mentioned member, after a rename and after a reset', async () => {
+		const u = await testUser();
+		const lena = await testUser({ displayName: 'Lena', displayNameKey: 'lena' });
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		await addComment(actor.id, id, `hi ${mentionToken(lena.publicId)}!`);
+		const detailsFor = async (userId: number) =>
+			(await listNotifications(userId, {})).items.map((n) => n.detail);
+		expect(await detailsFor(u.id)).toEqual(['hi @Lena!']);
+
+		await db
+			.update(users)
+			.set({ displayName: 'Lena K.', displayNameKey: 'lena k.' })
+			.where(eq(users.id, lena.id));
+		expect(await detailsFor(u.id)).toEqual(['hi @Lena K.!']);
+		expect(await detailsFor(lena.id)).toEqual(['hi @Lena K.!']);
+
+		// a moderator's name reset falls back to the username, also in other members' notices
+		await db
+			.update(users)
+			.set({ displayName: null, displayNameKey: null })
+			.where(eq(users.id, lena.id));
+		expect(await detailsFor(u.id)).toEqual([`hi @${lena.username}!`]);
+	});
+
+	it('cuts the listed excerpt to 80 characters after the names render', async () => {
+		const u = await testUser();
+		const name = 'N'.repeat(30);
+		const lena = await testUser({ displayName: name, displayNameKey: 'n'.repeat(30) });
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		await addComment(actor.id, id, `${mentionToken(lena.publicId)}\n\n${'a'.repeat(100)}`);
+		const [n] = (await listNotifications(u.id, {})).items;
+		// '@' + 30 + ' ' = 32 characters of name, then 48 of text
+		expect(n.detail).toBe(`@${name} ${'a'.repeat(48)}`);
+		expect([...n.detail]).toHaveLength(80);
+	});
+
+	it('fills the listed excerpt even when the raw text is mostly tokens', async () => {
+		const u = await testUser();
+		const m = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		const raw = Array.from({ length: 30 }, () => mentionToken(m.publicId)).join(' ');
+		await addComment(actor.id, id, raw);
+		const [n] = (await listNotifications(u.id, {})).items;
+		expect(n.detail).not.toContain('@[u:');
+		const rendered = Array.from({ length: 30 }, () => `@${m.username}`).join(' ');
+		expect(n.detail).toBe([...rendered].slice(0, 80).join('').trim());
+	});
+
+	it('never lists a raw token, for any comment notice kind', async () => {
+		const u = await testUser();
+		const r = await testUser();
+		const e = await testUser();
+		const m = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		await addComment(e.id, id, 'early');
+		const target = await addComment(r.id, id, 'target');
+		await db.delete(notifications);
+		await addComment(
+			actor.id,
+			id,
+			`${'x '.repeat(5)}${mentionToken(m.publicId)} ${mentionToken(r.publicId)}`,
+			await cid(target)
+		);
+		const kinds = new Set<string>();
+		for (const who of [u, r, e, m]) {
+			for (const n of (await listNotifications(who.id, {})).items) {
+				kinds.add(n.kind);
+				expect(n.detail).not.toContain('@[u:');
+				expect(n.detail).toContain(`@${m.username}`);
+			}
+		}
+		expect([...kinds].sort()).toEqual(['comment', 'comment_reply', 'mention', 'thread_comment']);
 	});
 
 	it('leaves neither a comment nor a notice behind when the meme does not exist', async () => {
@@ -426,5 +801,84 @@ describe('deleteComment report notices', () => {
 			{ kind: 'report_resolved', mediaId: memeId, detail: 'removed:x' }
 		]);
 		expect(await noticesOf(author.id)).toHaveLength(0);
+	});
+});
+
+describe('voteComment', () => {
+	it('toggles, switches and clears across users', async () => {
+		const a = await testUser();
+		const b = await testUser();
+		const c = await testUser();
+		const id = await addMedia(a.id);
+		const cm = await cid(await addComment(a.id, id, 'hi'));
+		expect(await voteComment(b.id, cm, 1)).toEqual({ score: 1, userVote: 1 });
+		expect(await voteComment(c.id, cm, 1)).toEqual({ score: 2, userVote: 1 });
+		expect(await voteComment(c.id, cm, -1)).toEqual({ score: 0, userVote: -1 });
+		expect(await voteComment(b.id, cm, 0)).toEqual({ score: -1, userVote: 0 });
+		const [item] = await listComments(id, c.id);
+		expect(item).toMatchObject({ score: -1, userVote: -1 });
+	});
+
+	it('rejects votes on the own comment', async () => {
+		const a = await testUser();
+		const id = await addMedia(a.id);
+		const cm = await cid(await addComment(a.id, id, 'hi'));
+		await expect(voteComment(a.id, cm, 1)).rejects.toBeInstanceOf(CommentVoteOwnError);
+	});
+
+	it('throws for a missing comment and for a tombstone', async () => {
+		const a = await testUser();
+		const b = await testUser();
+		const id = await addMedia(a.id);
+		await expect(voteComment(b.id, 999999, 1)).rejects.toBeInstanceOf(CommentNotFoundError);
+		const parent = await addComment(a.id, id, 'secret');
+		await addComment(b.id, id, 'reply', await cid(parent));
+		await deleteComment(asUser(a), await cid(parent));
+		await expect(voteComment(b.id, await cid(parent), 1)).rejects.toBeInstanceOf(
+			CommentNotFoundError
+		);
+	});
+
+	it('is blocked for a timed-out member', async () => {
+		const a = await testUser();
+		const b = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const id = await addMedia(a.id);
+		const cm = await cid(await addComment(a.id, id, 'hi'));
+		await timeOut(b.id, mod.id);
+		await expect(voteComment(b.id, cm, 1)).rejects.toBeInstanceOf(TimeoutActiveError);
+	});
+
+	it('treats a comment under review as missing for members; moderators may vote', async () => {
+		const a = await testUser();
+		const b = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const id = await addMedia(a.id);
+		const cm = await cid(await addComment(a.id, id, 'hi'));
+		await addOpenReports('comment', cm, a.id, OVER_THRESHOLD);
+		await expect(voteComment(b.id, cm, 1)).rejects.toBeInstanceOf(CommentNotFoundError);
+		await expect(voteComment(b.id, cm, 0)).rejects.toBeInstanceOf(CommentNotFoundError);
+		expect(await db.select().from(commentVotes)).toHaveLength(0);
+		expect(await voteComment(mod.id, cm, 1, true)).toEqual({ score: 1, userVote: 1 });
+	});
+
+	it('treats a comment on a meme under review as missing for members; moderators may vote', async () => {
+		const a = await testUser();
+		const b = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const id = await addMedia(a.id);
+		const cm = await cid(await addComment(a.id, id, 'hi'));
+		await addOpenReports('meme', id, a.id, OVER_THRESHOLD);
+		await expect(voteComment(b.id, cm, 1)).rejects.toBeInstanceOf(CommentNotFoundError);
+		expect(await voteComment(mod.id, cm, -1, true)).toEqual({ score: -1, userVote: -1 });
+	});
+
+	it('lets members vote again once the reports stay at the threshold', async () => {
+		const a = await testUser();
+		const b = await testUser();
+		const id = await addMedia(a.id);
+		const cm = await cid(await addComment(a.id, id, 'hi'));
+		await addOpenReports('comment', cm, a.id, env.REPORT_REVIEW_THRESHOLD);
+		expect(await voteComment(b.id, cm, 1)).toEqual({ score: 1, userVote: 1 });
 	});
 });

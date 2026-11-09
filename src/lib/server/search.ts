@@ -274,7 +274,14 @@ export async function searchComments(
 	page: Page
 ): Promise<{ items: CommentHit[]; total: number }> {
 	const from = sql`comments c JOIN media m ON m.id = c.media_id JOIN users u ON u.id = c.author_id`;
-	const where = sql`${matchLong(text, sql`c.text`)} ${
+	const shown = sql`mention_text(c.text)`;
+	// mention_text is plpgsql with a users lookup per token: only comments that contain a token go
+	// through it; the rest match on the raw column, which the trigram index serves. Same semantics:
+	// a token comment matches on its rendered text only.
+	const where = sql`c.deleted_at IS NULL AND (
+		(c.text NOT LIKE '%@[u:%' AND ${matchLong(text, sql`c.text`)})
+		OR (c.text LIKE '%@[u:%' AND ${matchLong(text, shown)})
+	) ${
 		revealAll
 			? sql``
 			: sql`AND NOT ${underReviewSql('comment', sql`c.id`, sql`c.reviewed_at`)}
@@ -296,9 +303,9 @@ export async function searchComments(
 				SELECT c.public_id, m.public_id AS media_public_id, m.title AS media_title,
 					COALESCE(u.display_name, u.username) AS author, u.public_id AS author_public_id,
 					u.role AS author_role, u.avatar_thumb_key AS author_avatar,
-					c.text, c.created_at
+					${shown} AS text, c.created_at
 				FROM ${from} WHERE ${where}
-				ORDER BY word_similarity(${text}, c.text) DESC, c.created_at DESC, c.id DESC
+				ORDER BY word_similarity(${text}, ${shown}) DESC, c.created_at DESC, c.id DESC
 				${limitOffset(page)}
 			`);
 		return { rows, total: await cappedCount(q, from, where) };

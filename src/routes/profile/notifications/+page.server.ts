@@ -16,6 +16,8 @@ export const actions: Actions = {
 		await setPrefs(locals.user!.id, {
 			comments: data.has('comments'),
 			threadComments: data.has('threadComments'),
+			replies: data.has('replies'),
+			mentions: data.has('mentions'),
 			reportOutcomes: data.has('reportOutcomes')
 		});
 		return { saved: true };

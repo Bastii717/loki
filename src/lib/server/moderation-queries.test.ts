@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { SessionUser } from './auth/session';
 import { db } from './db';
 import { comments, media, quotes, reports, templates, timeouts } from './db/schema';
@@ -151,6 +151,16 @@ describe('listOpenCases', () => {
 		expect(done.reports.map((r) => r.reporterDisplay)).toEqual(['Melder', 'rep2']);
 	});
 
+	it('renders mentions in a comment preview', async () => {
+		const author = await testUser();
+		const named = await testUser({ displayName: 'Mira' });
+		const memeId = await meme(author.id);
+		const commentId = await comment(author.id, memeId, `ping @[u:${named.publicId}] ok`);
+		await addOpenReports('comment', commentId, author.id, 1);
+		const { cases } = await listOpenCases();
+		expect(cases[0].preview).toMatchObject({ type: 'comment', text: 'ping @Mira ok' });
+	});
+
 	it('shows comments and quotes with their text, and flags over-threshold ones as under review', async () => {
 		const author = await testUser();
 		const memeId = await meme(author.id);
@@ -180,6 +190,20 @@ describe('listOpenCases', () => {
 		const { cases } = await listOpenCases();
 		expect(cases).toHaveLength(1);
 		expect(cases[0]).toMatchObject({ preview: null, excerpt: 'Weg', underReview: false });
+	});
+
+	it('shows no preview for a tombstoned comment', async () => {
+		const author = await testUser();
+		const memeId = await meme(author.id);
+		const commentId = await comment(author.id, memeId);
+		await addOpenReports('comment', commentId, author.id, 1);
+		// directly, not via deleteComment, so the reports stay open
+		await db.execute(
+			sql`UPDATE comments SET deleted_at = now(), text = '' WHERE id = ${commentId}`
+		);
+		const { cases } = await listOpenCases();
+		expect(cases).toHaveLength(1);
+		expect(cases[0]).toMatchObject({ contentType: 'comment', preview: null });
 	});
 
 	it('ignores resolved reports, orders oldest case first and paginates by cursor', async () => {
@@ -312,6 +336,9 @@ describe('listUserOverview', () => {
 		const m1 = await meme(bad.id);
 		const m2 = await meme(bad.id);
 		await comment(bad.id, m1);
+		await db
+			.insert(comments)
+			.values({ authorId: bad.id, mediaId: m1, text: '', deletedAt: new Date() });
 		await quote(bad.id);
 		await quote(bad.id);
 		await quote(clean.id);

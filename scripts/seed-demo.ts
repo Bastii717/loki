@@ -12,7 +12,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { and, count, eq, isNull } from 'drizzle-orm';
+import { and, count, eq, isNotNull, isNull, max, ne } from 'drizzle-orm';
 import type { NotificationKind } from '../src/lib/server/notifications';
 
 const MIN_MEMES = 6;
@@ -67,7 +67,8 @@ const [
 	{ setAvatar },
 	awardsMod,
 	{ fromBerlinLocal },
-	{ putObject, deleteObjects }
+	{ putObject, deleteObjects },
+	mentionsMod
 ] = await Promise.all([
 	import('sharp'),
 	import('../src/lib/server/db'),
@@ -83,7 +84,8 @@ const [
 	import('../src/lib/server/avatar'),
 	import('../src/lib/server/awards'),
 	import('../src/lib/server/berlin-time'),
-	import('../src/lib/server/storage')
+	import('../src/lib/server/storage'),
+	import('../src/lib/mentions')
 ]);
 const {
 	users,
@@ -99,7 +101,8 @@ const {
 } = schema;
 const { AWARD_KIND, berlinMonth, findWinner, monthStart } = awardsMod;
 const { applyVote } = votesMod;
-const { addComment } = commentsMod;
+const { addComment, deleteComment, voteComment } = commentsMod;
+const { mentionToken } = mentionsMod;
 const { addQuote, voteQuote } = quotesMod;
 const { createReport } = moderationMod;
 const { toggleFavorite } = memesMod;
@@ -117,6 +120,8 @@ const AUTHORS: DemoUser[] = [
 	{ sub: 'demo-jonas', username: 'jonas', displayName: 'Jonas' },
 	{ sub: 'demo-noah', username: 'noah', displayName: 'Noah', motto: 'It works on my machine.' }
 ];
+// The admin the dev mock login signs in as (sub "demo-dev"); seeded so threads can mention them.
+const DEV_USER: DemoUser = { sub: 'demo-dev', username: 'dev', displayName: 'Dev' };
 const VOTERS: DemoUser[] = [
 	{ sub: 'demo-mira', username: 'mira', displayName: 'Mira' },
 	{ sub: 'demo-tobi', username: 'tobi', displayName: 'Tobi' },
@@ -428,12 +433,16 @@ async function main() {
 	if (previewDir) return preview(previewDir);
 
 	const byName = new Map<string, Awaited<ReturnType<typeof ensureUser>>>();
-	for (const u of [...AUTHORS, ...VOTERS]) byName.set(u.username, await ensureUser(u));
+	for (const u of [...AUTHORS, ...VOTERS, DEV_USER]) byName.set(u.username, await ensureUser(u));
+	await db.update(users).set({ role: 'admin' }).where(eq(users.sub, DEV_USER.sub));
 	console.log(`Users ready: ${[...byName.keys()].join(', ')}`);
 	await ensureAvatar(byName.get('lena')!);
 
 	await seedMemes(byName);
 	await seedExtras(byName);
+	// after the extras: the replies and mentions here notify lena and dev for real, and
+	// seedNotifications only fills an empty inbox
+	await seedThreads(byName);
 	await seedTemplates();
 	console.log('Done.');
 }
@@ -481,6 +490,150 @@ async function seedMemes(byName: UserMap) {
 	// itself (seedNotifications), so those organic notices go.
 	await db.delete(notifications);
 	await jobs.recomputeHotScores();
+}
+
+/**
+ * Threaded comments on three memes: replies two and three levels deep, comment votes, mentions
+ * of lena and dev, and one tombstone that still has live replies. Skipped once any reply exists.
+ */
+async function seedThreads(byName: UserMap) {
+	const [{ n }] = await db
+		.select({ n: count() })
+		.from(comments)
+		.where(isNotNull(comments.parentId));
+	if (n > 0) {
+		console.log('Threads already seeded; skipping.');
+		return;
+	}
+	const [lena, dev] = [byName.get('lena')!, byName.get('dev')!];
+	const [lenaRow] = await db
+		.select({ publicId: users.publicId })
+		.from(users)
+		.where(eq(users.id, lena.id));
+	const [devRow] = await db
+		.select({ publicId: users.publicId })
+		.from(users)
+		.where(eq(users.id, dev.id));
+	const lenaTag = mentionToken(lenaRow.publicId);
+	const devTag = mentionToken(devRow.publicId);
+
+	const memeByTitle = new Map<string, { id: number; publicId: string }>();
+	for (const r of await db
+		.select({ id: media.id, publicId: media.publicId, title: media.title })
+		.from(media)) {
+		memeByTitle.set(r.title, { id: r.id, publicId: r.publicId });
+	}
+	const meme = (title: string) => {
+		const m = memeByTitle.get(title);
+		if (!m) throw new Error(`Demo meme "${title}" not found; cannot seed threads.`);
+		return m;
+	};
+
+	/** Posts a comment (optionally a reply), backdates it, applies votes; returns its internal and public id. */
+	async function post(
+		mediaId: number,
+		by: string,
+		text: string,
+		replyTo: { id: number } | null,
+		votes: { up?: string[]; down?: string[] } = {}
+	) {
+		const item = await addComment(byName.get(by)!.id, mediaId, text, replyTo?.id ?? null);
+		const [row] = await db
+			.select({ id: comments.id })
+			.from(comments)
+			.where(eq(comments.publicId, item.id));
+		// 17 minutes after the meme's latest other comment (or the meme itself), never in the future;
+		// each post sees the previous one's backdated time, so a thread stays in order
+		const [latest] = await db
+			.select({ at: max(comments.createdAt) })
+			.from(comments)
+			.where(and(eq(comments.mediaId, mediaId), ne(comments.id, row.id)));
+		const [m] = await db
+			.select({ createdAt: media.createdAt })
+			.from(media)
+			.where(eq(media.id, mediaId));
+		const base = (latest?.at ?? m.createdAt).getTime();
+		const at = Math.min(base + 17 * 60_000, Date.now() - 60_000);
+		await db
+			.update(comments)
+			.set({ createdAt: new Date(at) })
+			.where(eq(comments.id, row.id));
+		for (const name of votes.up ?? []) await voteComment(byName.get(name)!.id, row.id, 1);
+		for (const name of votes.down ?? []) await voteComment(byName.get(name)!.id, row.id, -1);
+		return { id: row.id, publicId: item.id };
+	}
+	const existing = async (mediaId: number, text: string) => {
+		const [r] = await db
+			.select({ id: comments.id, publicId: comments.publicId })
+			.from(comments)
+			.where(and(eq(comments.mediaId, mediaId), eq(comments.text, text)));
+		if (!r) throw new Error(`Seed comment "${text}" not found.`);
+		return r;
+	};
+
+	// 1. Monday: a chain down to level 3, plus a sibling that stays on level 3.
+	const monday = meme('Monday, 7:00 AM');
+	const mondayRoot = await existing(monday.id, 'This is me, every single Monday.');
+	await voteComment(byName.get('lena')!.id, mondayRoot.id, 1);
+	await voteComment(byName.get('mira')!.id, mondayRoot.id, 1);
+	const m1 = await post(
+		monday.id,
+		'mira',
+		`Mondays should be opt-in. ${lenaTag}, you agree?`,
+		mondayRoot,
+		{
+			up: ['jonas', 'tobi']
+		}
+	);
+	const m2 = await post(monday.id, 'lena', 'Opt-in Mondays: I would sign that petition.', m1, {
+		up: ['mira', 'anke']
+	});
+	const m3 = await post(
+		monday.id,
+		'jonas',
+		`Level three. ${devTag}, can we put Monday behind a feature flag?`,
+		m2,
+		{
+			up: ['lena']
+		}
+	);
+	await post(monday.id, 'anke', 'Behind a flag, in prod, on a Friday.', m3, { down: ['noah'] });
+
+	// 2. Code review: a tombstone (lena deleted her comment) that keeps its replies.
+	const review = meme('Code review says: LGTM');
+	const lenaComment = await existing(review.id, 'Nobody actually read this, did they?');
+	const r1 = await post(
+		review.id,
+		'tobi',
+		`I read the title. Does that count? ${devTag} knows.`,
+		lenaComment,
+		{
+			up: ['jonas', 'kemal']
+		}
+	);
+	await post(review.id, 'noah', 'Title review is still a review.', r1, { up: ['tobi'] });
+	await post(review.id, 'yusuf', 'Two thousand lines and zero comments. Impressive.', lenaComment);
+	await deleteComment(lena, lenaComment.id);
+
+	// 3. Deploy on Friday: a late top-level comment that outscores the earlier ones, so Top and
+	// New order the thread differently.
+	const friday = meme('Deploy on Friday');
+	const anke = await existing(friday.id, 'Whoever does this brings cake on Monday.');
+	const jonas = await existing(friday.id, 'It is just one tiny hotfix.');
+	await voteComment(byName.get('mira')!.id, anke.id, 1);
+	await voteComment(byName.get('lena')!.id, jonas.id, -1);
+	await voteComment(byName.get('tobi')!.id, jonas.id, -1);
+	const f1 = await post(friday.id, 'noah', 'Cake budget approved.', anke, { up: ['anke'] });
+	await post(friday.id, 'lena', `Chocolate, not carrot. ${devTag} signs off on the cake.`, f1);
+	const rollback = await post(friday.id, 'mira', 'Rollback plan: pray.', null, {
+		up: ['kemal', 'yusuf', 'tobi', 'lena', 'jonas']
+	});
+	console.log(
+		`Seeded threads. Memes: /meme/${monday.publicId}, /meme/${review.publicId}, /meme/${friday.publicId}`
+	);
+	console.log(
+		`Deep-link comment (Top vs New differ): ${rollback.publicId} on /meme/${friday.publicId}`
+	);
 }
 
 /** Quotes, one open report, rules and FAQ, one favorite. Each block skips itself when rows exist. */

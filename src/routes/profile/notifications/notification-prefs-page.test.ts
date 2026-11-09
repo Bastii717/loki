@@ -13,8 +13,20 @@ beforeEach(resetDb);
 
 type Member = Awaited<ReturnType<typeof userWithSession>>;
 
-const ALL_ON = { comments: true, threadComments: true, reportOutcomes: true };
-const ALL_OFF = { comments: false, threadComments: false, reportOutcomes: false };
+const ALL_ON = {
+	comments: true,
+	threadComments: true,
+	replies: true,
+	mentions: true,
+	reportOutcomes: true
+};
+const ALL_OFF = {
+	comments: false,
+	threadComments: false,
+	replies: false,
+	mentions: false,
+	reportOutcomes: false
+};
 
 const save = (member: Member, form: Record<string, string>) =>
 	callRoute({
@@ -26,7 +38,7 @@ const save = (member: Member, form: Record<string, string>) =>
 	});
 
 describe('preferences load', () => {
-	it('returns all three preferences on for a member without a row', async () => {
+	it('returns all five preferences on for a member without a row', async () => {
 		const member = await userWithSession();
 		const data = await load({ locals: { user: member.user } } as never);
 		expect(data).toEqual({ prefs: ALL_ON });
@@ -34,7 +46,13 @@ describe('preferences load', () => {
 
 	it('returns the stored preferences', async () => {
 		const member = await userWithSession();
-		const prefs = { comments: false, threadComments: true, reportOutcomes: false };
+		const prefs = {
+			comments: false,
+			threadComments: true,
+			replies: true,
+			mentions: true,
+			reportOutcomes: false
+		};
 		await setPrefs(member.user.id, prefs);
 		const data = await load({ locals: { user: member.user } } as never);
 		expect(data).toEqual({ prefs });
@@ -53,6 +71,8 @@ describe('save action', () => {
 		expect(await getPrefs(member.user.id)).toEqual({
 			comments: true,
 			threadComments: false,
+			replies: false,
+			mentions: false,
 			reportOutcomes: false
 		});
 	});
@@ -61,7 +81,13 @@ describe('save action', () => {
 		const member = await userWithSession();
 		await save(member, {});
 		expect(await getPrefs(member.user.id)).toEqual(ALL_OFF);
-		await save(member, { comments: 'on', threadComments: 'on', reportOutcomes: 'on' });
+		await save(member, {
+			comments: 'on',
+			threadComments: 'on',
+			replies: 'on',
+			mentions: 'on',
+			reportOutcomes: 'on'
+		});
 		expect(await getPrefs(member.user.id)).toEqual(ALL_ON);
 	});
 
@@ -91,6 +117,8 @@ describe('save action', () => {
 		expect(await getPrefs(member.user.id)).toEqual({
 			comments: false,
 			threadComments: true,
+			replies: false,
+			mentions: false,
 			reportOutcomes: false
 		});
 	});
@@ -125,13 +153,15 @@ describe('preferences page', () => {
 		expect(out.body).toMatch(/<a[^>]*href="\/profile"[^>]*aria-label="Back to profile"/);
 	});
 
-	it('renders the three labelled checkboxes checked from the defaults', () => {
+	it('renders the five labelled checkboxes checked from the defaults', () => {
 		const body = html({ data: { prefs: ALL_ON }, form: null });
 		const boxes = [...body.matchAll(/<label[^>]*>[\s\S]*?<\/label>/g)].map((m) => m[0]);
-		expect(boxes).toHaveLength(3);
+		expect(boxes).toHaveLength(5);
 		const expected = [
 			['comments', 'Comments on my memes'],
 			['threadComments', 'New comments in threads I joined'],
+			['replies', 'Replies to my comments'],
+			['mentions', 'Mentions of me'],
 			['reportOutcomes', 'Outcomes of my reports']
 		];
 		expected.forEach(([name, label], i) => {
@@ -144,7 +174,15 @@ describe('preferences page', () => {
 
 	it('leaves a stored-off preference unchecked', () => {
 		const body = html({
-			data: { prefs: { comments: true, threadComments: false, reportOutcomes: true } },
+			data: {
+				prefs: {
+					comments: true,
+					threadComments: false,
+					replies: false,
+					mentions: false,
+					reportOutcomes: true
+				}
+			},
 			form: null
 		});
 		expect(body).toMatch(/name="comments"[^>]*checked/);

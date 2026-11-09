@@ -1,9 +1,9 @@
 import { render } from 'svelte/server';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../../lib/server/db';
-import { awards } from '../../lib/server/db/schema';
+import { awards, comments } from '../../lib/server/db/schema';
 import { resetDb, setupDb } from '../../lib/server/db/test-utils';
-import { userWithSession } from '../../lib/server/moderation-test-utils';
+import { insertMeme, userWithSession } from '../../lib/server/moderation-test-utils';
 import { setDisplayName, setMotto } from '../../lib/server/profile';
 import { load } from './+page.server';
 import Page from './+page.svelte';
@@ -33,6 +33,20 @@ describe('profile load', () => {
 		});
 		expect(data.counts).toEqual({ memes: 0, favorites: 0, comments: 0 });
 		expect(data.awards).toEqual([]);
+	});
+
+	it('counts live comments only, not tombstones', async () => {
+		const { user } = await userWithSession();
+		const meme = await insertMeme(user.id);
+		const [tomb] = await db
+			.insert(comments)
+			.values({ mediaId: meme, authorId: user.id, text: '', deletedAt: new Date() })
+			.returning({ id: comments.id });
+		await db
+			.insert(comments)
+			.values({ mediaId: meme, authorId: user.id, text: 'r', parentId: tomb.id, depth: 2 });
+		const data = (await load({ locals: { user } } as never)) as LoadData;
+		expect(data.counts.comments).toBe(1);
 	});
 
 	it('carries no internal id: no numeric id, user id or public id of the viewer', async () => {

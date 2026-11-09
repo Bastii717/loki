@@ -53,11 +53,18 @@ function comment(overrides: Partial<CommentItem> = {}): CommentItem {
 	return {
 		id: COMMENT,
 		mediaId: MEME,
+		parentId: null,
+		replyToId: null,
+		depth: 1,
+		deleted: false,
 		authorId: AUTHOR5,
 		author: 'Mo Derator',
 		authorRole: 'member',
 		authorAvatar: null,
 		text: 'Nice one',
+		mentions: {},
+		score: 0,
+		userVote: 0,
 		underReview: false,
 		createdAt: new Date().toISOString(),
 		...overrides
@@ -220,5 +227,66 @@ describe('MemeDetail remix link', () => {
 	it('is absent when the meme is withheld from the viewer', () => {
 		const body = html(feedItem({ mediaUrl: null, underReview: true }), []);
 		expect(body).not.toContain('/create?meme=');
+	});
+});
+
+describe('MemeDetail comment section', () => {
+	const tag = (body: string, text: string) =>
+		body.match(new RegExp(`<button\\b[^>]*>\\s*${text}\\s*</button>`))?.[0] ?? '';
+
+	it('is the #comments anchor target', () => {
+		expect(html(feedItem(), [])).toMatch(/<section\b[^>]*id="comments"/);
+	});
+
+	it('offers the Top | New toggle, Top pressed by default', () => {
+		const body = html(feedItem(), [comment()]);
+		expect(body).toMatch(/role="group"[^>]*aria-label="Sort comments"/);
+		expect(tag(body, 'Top')).toContain('aria-pressed="true"');
+		expect(tag(body, 'New')).toContain('aria-pressed="false"');
+	});
+
+	it('sorts the top level by score by default', () => {
+		const body = html(feedItem(), [
+			comment({ id: 'Cmt1Abc12345', text: 'older and low', score: 1 }),
+			comment({ id: 'Cmt2Abc12345', text: 'newer and high', score: 4 })
+		]);
+		expect(body.indexOf('newer and high')).toBeLessThan(body.indexOf('older and low'));
+	});
+
+	it('nests a reply inside its parent', () => {
+		const body = html(feedItem(), [
+			comment({ id: 'Cmt1Abc12345', text: 'parent text' }),
+			comment({ id: 'Cmt2Abc12345', text: 'other top', score: 9 }),
+			comment({
+				id: 'Cmt3Abc12345',
+				parentId: 'Cmt1Abc12345',
+				replyToId: 'Cmt1Abc12345',
+				depth: 2,
+				text: 'reply text'
+			})
+		]);
+		const parent = body.indexOf('id="c-Cmt1Abc12345"');
+		expect(body.indexOf('reply text')).toBeGreaterThan(parent);
+		expect(body.indexOf('other top')).toBeLessThan(parent);
+	});
+
+	it('counts live comments only in the heading', () => {
+		const body = html(feedItem(), [
+			comment({ id: 'Cmt1Abc12345', deleted: true, author: '', authorId: '', text: null }),
+			comment({
+				id: 'Cmt2Abc12345',
+				parentId: 'Cmt1Abc12345',
+				replyToId: 'Cmt1Abc12345',
+				depth: 2
+			})
+		]);
+		expect(body).toContain('Comments (1)');
+		expect(body).toContain('[deleted]');
+	});
+
+	it('always shows the top-level composer as a combobox', () => {
+		expect(html(feedItem(), [])).toMatch(
+			/<textarea\b[^>]*role="combobox"[^>]*aria-label="Write a comment"|<textarea\b[^>]*aria-label="Write a comment"[^>]*role="combobox"/
+		);
 	});
 });

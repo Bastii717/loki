@@ -228,7 +228,7 @@ export async function getFeedPage(opts: FeedOptions): Promise<{
 			WHERE mt.media_id = m.id
 		) tg ON true
 		LEFT JOIN LATERAL (
-			SELECT count(*)::int AS n FROM comments c WHERE c.media_id = m.id
+			SELECT count(*)::int AS n FROM comments c WHERE c.media_id = m.id AND c.deleted_at IS NULL
 		) cc ON true
 		LEFT JOIN LATERAL (
 			SELECT count(*)::int AS n FROM favorites f WHERE f.media_id = m.id

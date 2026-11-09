@@ -23,10 +23,12 @@ function item(overrides: Partial<TextInput> & Pick<TextInput, 'kind'>): TextInpu
 }
 
 describe('categories', () => {
-	it('derives the category from the kind for all thirteen kinds', () => {
+	it('derives the category from the kind for all fifteen kinds', () => {
 		const expected: Record<NotificationItem['kind'], NotificationCategory> = {
 			comment: 'activity',
 			thread_comment: 'activity',
+			comment_reply: 'activity',
+			mention: 'activity',
 			content_deleted: 'moderation',
 			content_flagged: 'moderation',
 			content_released: 'moderation',
@@ -39,7 +41,7 @@ describe('categories', () => {
 			motto_cleared: 'moderation',
 			award_won: 'activity'
 		};
-		expect(NOTIFICATION_KINDS).toHaveLength(13);
+		expect(NOTIFICATION_KINDS).toHaveLength(15);
 		expect(NOTIFICATION_CATEGORY).toEqual(expected);
 	});
 
@@ -55,6 +57,34 @@ describe('notificationText', () => {
 				item({ kind: 'comment', actor: LENA, detail: 'Nice one', contentType: 'comment' })
 			)
 		).toEqual({ text: 'Lena commented on your meme: “Nice one”', excerpt: null });
+	});
+
+	it('comment_reply', () => {
+		const base = { kind: 'comment_reply', actor: LENA, title: 'Cat', detail: 'Same' } as const;
+		expect(notificationText(item(base))).toEqual({
+			text: 'Lena replied to your comment on “Cat”',
+			excerpt: 'Same'
+		});
+		expect(notificationText(item({ ...base, count: 3 })).text).toBe(
+			'3 new replies to your comment on “Cat”, the latest from Lena'
+		);
+		expect(notificationText(item({ ...base, title: null })).text).toBe(
+			'Lena replied to your comment on a meme'
+		);
+	});
+
+	it('mention', () => {
+		const base = { kind: 'mention', actor: LENA, title: 'Cat', detail: 'Hi @Bob' } as const;
+		expect(notificationText(item(base))).toEqual({
+			text: 'Lena mentioned you in a comment on “Cat”',
+			excerpt: 'Hi @Bob'
+		});
+		expect(notificationText(item({ ...base, count: 2 })).text).toBe(
+			'You were mentioned 2 times on “Cat”, the latest by Lena'
+		);
+		expect(notificationText(item({ ...base, title: null })).text).toBe(
+			'Lena mentioned you in a comment on a meme'
+		);
 	});
 
 	it('comment, coalesced', () => {

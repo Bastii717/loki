@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { awardsOf } from '../../lib/server/awards';
 import { db } from '../../lib/server/db';
 import { comments, favorites, media } from '../../lib/server/db/schema';
@@ -12,7 +12,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const [[memes], [favs], [comms], profile, awards] = await Promise.all([
 		db.select({ n }).from(media).where(eq(media.uploaderId, user.id)),
 		db.select({ n }).from(favorites).where(eq(favorites.userId, user.id)),
-		db.select({ n }).from(comments).where(eq(comments.authorId, user.id)),
+		db
+			.select({ n })
+			.from(comments)
+			.where(and(eq(comments.authorId, user.id), isNull(comments.deletedAt))),
 		getProfile(user.id),
 		awardsOf(user.id)
 	]);

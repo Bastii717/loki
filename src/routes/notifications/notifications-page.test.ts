@@ -154,7 +154,7 @@ describe('open action', () => {
 		const id = await seed(member.user.id, { mediaId: memeId });
 		const res = await open(member, String(id));
 		expect(res.response.status).toBe(303);
-		expect(res.response.headers.get('location')).toBe(`/meme/${publicId}`);
+		expect(res.response.headers.get('location')).toBe(`/meme/${publicId}#comments`);
 		expect(await countUnread(member.user.id)).toBe(0);
 	});
 
@@ -222,7 +222,7 @@ describe('open action', () => {
 		const { id: memeId, publicId } = await insertMemeRow(member.user.id);
 		const id = await seed(member.user.id, { mediaId: memeId });
 		const res = await open(member, String(id), 'activity');
-		expect(res.response.headers.get('location')).toBe(`/meme/${publicId}`);
+		expect(res.response.headers.get('location')).toBe(`/meme/${publicId}#comments`);
 	});
 
 	it('does not open or mark a notice of someone else', async () => {
@@ -254,7 +254,7 @@ describe('open action', () => {
 		await lockWrites();
 		const res = await open(member, String(id));
 		expect(res.response.status).toBe(303);
-		expect(res.response.headers.get('location')).toBe(`/meme/${publicId}`);
+		expect(res.response.headers.get('location')).toBe(`/meme/${publicId}#comments`);
 		expect(await countUnread(member.user.id)).toBe(0);
 	});
 });

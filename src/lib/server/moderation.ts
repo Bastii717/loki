@@ -76,7 +76,7 @@ export class TimeoutActionError extends Error {
 	}
 }
 
-export type Executor = Pick<typeof db, 'select' | 'insert' | 'update'>;
+export type Executor = Pick<typeof db, 'select' | 'insert' | 'update' | 'execute'>;
 
 const ROLE_RANK = { member: 0, moderator: 1, admin: 2 } as const;
 
@@ -282,11 +282,14 @@ export async function snapshotContent(
 	}
 	if (contentType === 'comment') {
 		const [row] = await tx
-			.select({ authorId: comments.authorId, text: comments.text })
+			.select({
+				authorId: comments.authorId,
+				text: sql<string>`left(mention_text(${comments.text}), ${EXCERPT_LENGTH})`
+			})
 			.from(comments)
-			.where(eq(comments.id, contentId))
+			.where(and(eq(comments.id, contentId), isNull(comments.deletedAt)))
 			.for('update');
-		return row ? { authorId: row.authorId, excerpt: row.text.slice(0, EXCERPT_LENGTH) } : null;
+		return row ? { authorId: row.authorId, excerpt: row.text } : null;
 	}
 	const [row] = await tx
 		.select({ authorId: quotes.submittedBy, text: quotes.text })

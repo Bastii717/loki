@@ -8,7 +8,7 @@ Planned and being built. The whole app is English: UI, code and docs.
 
 - **Card feed** with in-feed voting, comment counts and hashtag chips. Views for New, Hot and Hall of Fame.
 - **Discover**: fullscreen swipe through memes you have not seen yet, then random old gems.
-- **Comments**, **favorites** and swipe-between-memes in the detail view.
+- **Threaded comments** (replies up to three levels deep), **comment votes**, **Top/New sorting** and **@mentions** with a member picker, plus **favorites** and swipe-between-memes in the detail view.
 - **Trending** via a periodically recomputed hot score, plus the **Hall of Fame**.
 - **Quotes** page with its own voting and submission form.
 - **Tags** with autocomplete and hashtag filtering.
@@ -19,7 +19,7 @@ Planned and being built. The whole app is English: UI, code and docs.
 - **Maintenance mode**: admins pause posting with a message; the app reports its own readiness and shows a designed page during outages.
 - **Seasonal themes**: Halloween, Advent and Carnival switch on by date; admins can force an event theme or turn seasons off.
 - **Profiles**: pick a display name (once every 30 days), an avatar and a motto; moderators and admins carry a badge.
-- **Notifications**: a bell with activity (comments on your memes and threads) and moderation notices, with per-member preferences.
+- **Notifications**: a bell with activity (comments on your memes and threads, replies to your comments and @mentions) and moderation notices, with per-member preferences.
 - **Search**: find memes by title, tag or comment; look up people and see what they posted.
 - **Meme of the Month**: the top-scored meme of each month gets a trophy automatically; every winner stays on the awards page.
 - **Meme generator**: pick a library template or remix any meme, type top and bottom text, post. Rendered in the browser, uploaded like any other meme.
