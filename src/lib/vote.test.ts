@@ -9,7 +9,7 @@ function setup(initial: VoteState, fetchImpl: typeof fetch) {
 	vi.stubGlobal('fetch', fetchImpl);
 	let state = initial;
 	const vote = createVoter(
-		() => PID,
+		() => `/api/memes/${PID}/vote`,
 		() => state,
 		(s) => {
 			state = s;
@@ -65,7 +65,7 @@ describe('createVoter', () => {
 		let state: VoteState = { score: 3, userVote: 0 };
 		const errors: string[] = [];
 		const vote = createVoter(
-			() => PID,
+			() => `/api/memes/${PID}/vote`,
 			() => state,
 			(s) => {
 				state = s;
@@ -81,7 +81,7 @@ describe('createVoter', () => {
 		vi.stubGlobal('fetch', () => Promise.resolve(new Response('no', { status: 500 })));
 		const errors: string[] = [];
 		const vote = createVoter(
-			() => PID,
+			() => `/api/memes/${PID}/vote`,
 			() => ({ score: 3, userVote: 0 }),
 			() => {},
 			(m) => errors.push(m)

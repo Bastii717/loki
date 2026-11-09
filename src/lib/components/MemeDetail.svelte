@@ -165,7 +165,7 @@
 
 	// ---- voting
 	const vote = createVoter(
-		() => item.id,
+		() => `/api/memes/${item.id}/vote`,
 		() => ({ score, userVote }),
 		(s) => {
 			score = s.score;

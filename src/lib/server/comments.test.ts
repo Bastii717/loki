@@ -8,9 +8,11 @@ import {
 	CommentNotFoundError,
 	CommentPermissionError,
 	CommentTextError,
+	CommentVoteOwnError,
 	deleteComment,
 	listComments,
-	markSeen
+	markSeen,
+	voteComment
 } from './comments';
 import { MediaNotFoundError } from './votes';
 import { addOpenReports, OVER_THRESHOLD, timeOut } from './moderation-test-utils';
@@ -718,5 +720,51 @@ describe('deleteComment report notices', () => {
 			{ kind: 'report_resolved', mediaId: memeId, detail: 'removed:x' }
 		]);
 		expect(await noticesOf(author.id)).toHaveLength(0);
+	});
+});
+
+describe('voteComment', () => {
+	it('toggles, switches and clears across users', async () => {
+		const a = await testUser();
+		const b = await testUser();
+		const c = await testUser();
+		const id = await addMedia(a.id);
+		const cm = await cid(await addComment(a.id, id, 'hi'));
+		expect(await voteComment(b.id, cm, 1)).toEqual({ score: 1, userVote: 1 });
+		expect(await voteComment(c.id, cm, 1)).toEqual({ score: 2, userVote: 1 });
+		expect(await voteComment(c.id, cm, -1)).toEqual({ score: 0, userVote: -1 });
+		expect(await voteComment(b.id, cm, 0)).toEqual({ score: -1, userVote: 0 });
+		const [item] = await listComments(id, c.id);
+		expect(item).toMatchObject({ score: -1, userVote: -1 });
+	});
+
+	it('rejects votes on the own comment', async () => {
+		const a = await testUser();
+		const id = await addMedia(a.id);
+		const cm = await cid(await addComment(a.id, id, 'hi'));
+		await expect(voteComment(a.id, cm, 1)).rejects.toBeInstanceOf(CommentVoteOwnError);
+	});
+
+	it('throws for a missing comment and for a tombstone', async () => {
+		const a = await testUser();
+		const b = await testUser();
+		const id = await addMedia(a.id);
+		await expect(voteComment(b.id, 999999, 1)).rejects.toBeInstanceOf(CommentNotFoundError);
+		const parent = await addComment(a.id, id, 'secret');
+		await addComment(b.id, id, 'reply', await cid(parent));
+		await deleteComment(asUser(a), await cid(parent));
+		await expect(voteComment(b.id, await cid(parent), 1)).rejects.toBeInstanceOf(
+			CommentNotFoundError
+		);
+	});
+
+	it('is blocked for a timed-out member', async () => {
+		const a = await testUser();
+		const b = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const id = await addMedia(a.id);
+		const cm = await cid(await addComment(a.id, id, 'hi'));
+		await timeOut(b.id, mod.id);
+		await expect(voteComment(b.id, cm, 1)).rejects.toBeInstanceOf(TimeoutActiveError);
 	});
 });

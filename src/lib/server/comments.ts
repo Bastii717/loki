@@ -10,7 +10,7 @@ import {
 } from './moderation';
 import { commentExcerpt, notify, type NotificationKind } from './notifications';
 import type { SessionUser } from './auth/session';
-import { MediaNotFoundError } from './votes';
+import { MediaNotFoundError, type VoteValue } from './votes';
 import { MAX_MENTIONS, mentionIds, renderMentionsPlain } from '../mentions';
 import { mentionNames, resolveMentions, TooManyMentionsError } from './mentions';
 
@@ -26,6 +26,11 @@ export class CommentTextError extends Error {
 export class CommentNotFoundError extends Error {
 	constructor() {
 		super('Comment not found');
+	}
+}
+export class CommentVoteOwnError extends Error {
+	constructor() {
+		super('Own comments cannot be voted on');
 	}
 }
 export class CommentPermissionError extends Error {
@@ -345,5 +350,41 @@ export async function markSeen(userId: number, mediaId: number): Promise<boolean
 				.where(eq(media.id, mediaId));
 		}
 		return inserted.length > 0;
+	});
+}
+
+/** Sets the user's vote on a comment (0 clears it) and returns the aggregated score. */
+export async function voteComment(
+	userId: number,
+	commentId: number,
+	value: VoteValue
+): Promise<{ score: number; userVote: VoteValue }> {
+	await assertNotTimedOut({ id: userId });
+	return db.transaction(async (tx) => {
+		const [c] = await tx
+			.select({ authorId: comments.authorId, deletedAt: comments.deletedAt })
+			.from(comments)
+			.where(eq(comments.id, commentId))
+			.for('update');
+		if (!c || c.deletedAt) throw new CommentNotFoundError();
+		if (c.authorId === userId) throw new CommentVoteOwnError();
+		if (value === 0) {
+			await tx
+				.delete(commentVotes)
+				.where(and(eq(commentVotes.userId, userId), eq(commentVotes.commentId, commentId)));
+		} else {
+			await tx
+				.insert(commentVotes)
+				.values({ userId, commentId, value })
+				.onConflictDoUpdate({
+					target: [commentVotes.userId, commentVotes.commentId],
+					set: { value }
+				});
+		}
+		const [{ score }] = await tx
+			.select({ score: sql<number>`coalesce(sum(${commentVotes.value}), 0)::int` })
+			.from(commentVotes)
+			.where(eq(commentVotes.commentId, commentId));
+		return { score, userVote: value };
 	});
 }
