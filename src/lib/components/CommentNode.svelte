@@ -6,10 +6,17 @@
 	import ChevronDown from 'lucide-svelte/icons/chevron-down';
 	import ChevronRight from 'lucide-svelte/icons/chevron-right';
 	import EyeOff from 'lucide-svelte/icons/eye-off';
+	import Pencil from 'lucide-svelte/icons/pencil';
 	import Reply from 'lucide-svelte/icons/reply';
 	import { apiErrorMessage } from '../api-error';
-	import { countReplies, type CommentNode as TreeNode, type CommentSection } from '../comment-tree';
-	import { splitMentions } from '../mentions';
+	import {
+		countReplies,
+		EDIT_WINDOW_MS,
+		type CommentNode as TreeNode,
+		type CommentSection
+	} from '../comment-tree';
+	import { editableMentions, splitMentions } from '../mentions';
+	import { formatDateTime } from '../moderation-labels';
 	import type { CommentItem } from '../server/comments';
 	import { relativeTime } from '../time';
 	import { createVoter } from '../vote';
@@ -30,6 +37,12 @@
 	const canVote = $derived(!item.deleted && !mine && item.text !== null);
 	const parts = $derived(item.text === null ? [] : splitMentions(item.text));
 	const replying = $derived(!item.deleted && section.replyingTo === item.id);
+	const withinWindow = () => Date.now() - new Date(item.createdAt).getTime() <= EDIT_WINDOW_MS;
+	// Not live: the button only disappears on the next render after the window closes; the click
+	// re-checks and the server enforces the window anyway.
+	const canEdit = $derived(mine && item.text !== null && withinWindow());
+	// an open editor stays open past the window (the server answers with the reason on save)
+	const editing = $derived(mine && item.text !== null && section.editing === item.id);
 	const replyCount = $derived(countReplies(node));
 	const userHref = (pid: string) => resolve('/users/[pid]', { pid });
 
@@ -43,6 +56,7 @@
 	let collapsed = $state(false);
 	let error = $state('');
 	let replyButton = $state<HTMLButtonElement>();
+	let editButton = $state<HTMLButtonElement>();
 	let deleting = false;
 
 	const vote = createVoter(
@@ -79,6 +93,28 @@
 		void closeReply();
 	}
 
+	function toggleEdit() {
+		if (section.editing === item.id) return section.openEdit(null);
+		if (section.blocked((m) => (error = m))) return;
+		if (!withinWindow()) {
+			error = 'Comments can only be edited for 5 minutes';
+			return;
+		}
+		error = '';
+		section.openEdit(item.id);
+	}
+
+	async function closeEdit() {
+		section.openEdit(null);
+		await tick();
+		editButton?.focus();
+	}
+
+	function saved(c: CommentItem) {
+		section.edited(c);
+		void closeEdit();
+	}
+
 	async function remove() {
 		if (deleting || section.blocked((m) => (error = m))) return;
 		error = '';
@@ -112,6 +148,10 @@
 					/>
 				</span>
 				<time datetime={item.createdAt}>{relativeTime(item.createdAt)}</time>
+				{#if item.editedAt !== null}<span
+						class="edited"
+						title="Edited {formatDateTime(item.editedAt)}">(edited)</span
+					>{/if}
 				<span class="actions">
 					{#if canDelete}
 						<button
@@ -128,6 +168,23 @@
 			</div>
 			{#if item.text === null}
 				<p class="review"><EyeOff size={14} aria-hidden="true" /> Under review</p>
+			{:else if editing}
+				{@const draft = editableMentions(item.text, item.mentions)}
+				<div class="edit-form">
+					<CommentComposer
+						mediaId={section.mediaId}
+						editId={item.id}
+						label="Edit your comment"
+						initialText={draft.text}
+						initialPicks={draft.picks}
+						locked={section.locked}
+						lockTitle={section.lockTitle}
+						blocked={section.blocked}
+						autofocus
+						onposted={saved}
+						oncancel={closeEdit}
+					/>
+				</div>
 			{:else}
 				{#if item.underReview}<p class="review-note"><UnderReviewBadge /></p>{/if}
 				<p class="text">
@@ -187,6 +244,18 @@
 						aria-disabled={section.locked ? 'true' : undefined}
 						title={section.lockTitle}
 						onclick={toggleReply}><Reply size={16} aria-hidden="true" /> Reply</button
+					>
+				{/if}
+				{#if canEdit || editing}
+					<button
+						type="button"
+						class="link"
+						bind:this={editButton}
+						aria-label="Edit your comment"
+						aria-expanded={editing}
+						aria-disabled={section.locked ? 'true' : undefined}
+						title={section.lockTitle}
+						onclick={toggleEdit}><Pencil size={16} aria-hidden="true" /> Edit</button
 					>
 				{/if}
 				{#if node.replies.length > 0}
@@ -315,6 +384,17 @@
 		flex: none;
 		color: var(--text-muted);
 		white-space: nowrap;
+	}
+
+	.edited {
+		flex: none;
+		color: var(--text-muted);
+		font-size: 12px;
+		white-space: nowrap;
+	}
+
+	.edit-form {
+		margin: 4px 0 0;
 	}
 
 	.actions {

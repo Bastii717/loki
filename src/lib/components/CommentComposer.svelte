@@ -11,11 +11,13 @@
 	/**
 	 * Comment form with the @mention picker. The textarea shows `@<name>`; picked members are kept
 	 * on the side and turned back into tokens on submit (`encodeMentions`), so a name edited by hand
-	 * stays plain text. Posts itself and hands the created comment to `onposted`.
+	 * stays plain text. Posts itself and hands the created comment to `onposted`; with `editId` it
+	 * saves an edit of that comment instead and hands over the updated one.
 	 */
 	let {
 		mediaId,
 		replyTo = null,
+		editId = null,
 		initialText = '',
 		initialPicks = [],
 		label,
@@ -31,6 +33,8 @@
 		mediaId: string;
 		/** Public id of the answered comment; null for a top-level comment. */
 		replyTo?: string | null;
+		/** Public id of the own comment being edited; null when writing a new one. */
+		editId?: string | null;
 		initialText?: string;
 		initialPicks?: Picked[];
 		/** Accessible name of the textarea. */
@@ -42,7 +46,7 @@
 		blocked: (show: (message: string) => void) => boolean;
 		autofocus?: boolean;
 		onposted: (item: CommentItem) => void;
-		/** Shows a Cancel button (inline reply composer). */
+		/** Shows a Cancel button (inline reply composer, editor). */
 		oncancel?: () => void;
 	} = $props();
 
@@ -189,6 +193,7 @@
 			}
 			return FALLBACK;
 		}
+		if (res.status === 404 && editId !== null) return 'The comment is gone.';
 		if (res.status === 404 && replyTo !== null) return 'The comment you are replying to is gone.';
 		return apiErrorMessage(res, FALLBACK);
 	}
@@ -207,14 +212,21 @@
 		sending = true;
 		error = '';
 		try {
-			const res = await fetch(`/api/memes/${mediaId}/comments`, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({
-					text: encoded,
-					...(replyTo !== null ? { replyTo } : {})
-				})
-			});
+			const res =
+				editId !== null
+					? await fetch(`/api/comments/${editId}`, {
+							method: 'PATCH',
+							headers: { 'content-type': 'application/json' },
+							body: JSON.stringify({ text: encoded })
+						})
+					: await fetch(`/api/memes/${mediaId}/comments`, {
+							method: 'POST',
+							headers: { 'content-type': 'application/json' },
+							body: JSON.stringify({
+								text: encoded,
+								...(replyTo !== null ? { replyTo } : {})
+							})
+						});
 			if (!res.ok) {
 				error = await failure(res);
 				return;
@@ -283,7 +295,7 @@
 			class="send"
 			disabled={sending || text.trim() === ''}
 			aria-disabled={locked ? 'true' : undefined}
-			title={lockTitle}>Send</button
+			title={lockTitle}>{editId !== null ? 'Save' : 'Send'}</button
 		>
 	</div>
 </form>

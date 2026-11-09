@@ -256,7 +256,9 @@
 	let sort = $state<CommentSort>('top');
 	// top-level comments posted in this page view stay on top under Top until the next load
 	const pinned = new SvelteSet<string>();
+	// at most one inline composer: opening a reply closes an edit and vice versa
 	let replyingTo = $state<string | null>(null);
+	let editing = $state<string | null>(null);
 	let highlighted = $state<string | null>(null);
 	const tree = $derived(buildCommentTree(comments, sort, pinned));
 	const liveCount = $derived(comments.filter((c) => !c.deleted).length);
@@ -284,6 +286,14 @@
 		if (replyingTo !== null && !comments.some((x) => x.id === replyingTo && !x.deleted)) {
 			replyingTo = null;
 		}
+		if (editing !== null && !comments.some((x) => x.id === editing && !x.deleted)) {
+			editing = null;
+		}
+	}
+
+	function edited(c: CommentItem) {
+		// in place, so the thread order does not move
+		comments = comments.map((x) => (x.id === c.id ? c : x));
 	}
 
 	const section: CommentSection = {
@@ -302,12 +312,23 @@
 		get replyingTo() {
 			return replyingTo;
 		},
+		get editing() {
+			return editing;
+		},
 		get highlighted() {
 			return highlighted;
 		},
 		blocked,
-		openReply: (id) => (replyingTo = id),
+		openReply: (id) => {
+			replyingTo = id;
+			if (id !== null) editing = null;
+		},
+		openEdit: (id) => {
+			editing = id;
+			if (id !== null) replyingTo = null;
+		},
 		posted,
+		edited,
 		deleted
 	};
 

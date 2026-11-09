@@ -12,7 +12,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { and, count, eq, isNotNull, isNull, max, ne } from 'drizzle-orm';
+import { and, count, eq, isNotNull, isNull, max, ne, sql } from 'drizzle-orm';
 import type { NotificationKind } from '../src/lib/server/notifications';
 
 const MIN_MEMES = 6;
@@ -494,7 +494,7 @@ async function seedMemes(byName: UserMap) {
 
 /**
  * Threaded comments on three memes: replies two and three levels deep, comment votes, mentions
- * of lena and dev, and one tombstone that still has live replies. Skipped once any reply exists.
+ * of lena and dev, one edited comment and one tombstone that still has live replies. Skipped once any reply exists.
  */
 async function seedThreads(byName: UserMap) {
 	const [{ n }] = await db
@@ -623,7 +623,16 @@ async function seedThreads(byName: UserMap) {
 	await voteComment(byName.get('mira')!.id, anke.id, 1);
 	await voteComment(byName.get('lena')!.id, jonas.id, -1);
 	await voteComment(byName.get('tobi')!.id, jonas.id, -1);
-	const f1 = await post(friday.id, 'noah', 'Cake budget approved.', anke, { up: ['anke'] });
+	const f1 = await post(friday.id, 'noah', 'Cake budget aproved.', anke, { up: ['anke'] });
+	// noah fixed his typo, so the "(edited)" marker shows. Written directly: the comment is
+	// backdated past the five-minute window, so editComment would refuse it.
+	await db
+		.update(comments)
+		.set({
+			text: 'Cake budget approved.',
+			editedAt: sql`${comments.createdAt} + interval '2 minutes'`
+		})
+		.where(eq(comments.id, f1.id));
 	await post(friday.id, 'lena', `Chocolate, not carrot. ${devTag} signs off on the cake.`, f1);
 	const rollback = await post(friday.id, 'mira', 'Rollback plan: pray.', null, {
 		up: ['kemal', 'yusuf', 'tobi', 'lena', 'jonas']

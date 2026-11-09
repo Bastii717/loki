@@ -201,6 +201,11 @@ export const comments = pgTable(
 		/** Soft delete for comments that still have replies; the text is blanked. */
 		deletedAt: timestamp('deleted_at', { withTimezone: true }),
 		reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+		/**
+		 * Last edit by the author (only possible within EDIT_WINDOW_MS of `createdAt`); null when the
+		 * comment was never edited. Shown as the "(edited)" marker.
+		 */
+		editedAt: timestamp('edited_at', { withTimezone: true }),
 		createdAt: createdAt()
 	},
 	(t) => [

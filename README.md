@@ -8,7 +8,7 @@ Planned and being built. The whole app is English: UI, code and docs.
 
 - **Card feed** with in-feed voting, comment counts and hashtag chips. Views for New, Hot and Hall of Fame.
 - **Discover**: fullscreen swipe through memes you have not seen yet, then random old gems.
-- **Threaded comments** (replies up to three levels deep), **comment votes**, **Top/New sorting** and **@mentions** with a member picker, plus **favorites** and swipe-between-memes in the detail view.
+- **Threaded comments** (replies up to three levels deep), **comment votes**, **Top/New sorting** and **@mentions** with a member picker, plus **favorites** and swipe-between-memes in the detail view. Comments can be edited for five minutes after posting and are then marked "(edited)".
 - **Trending** via a periodically recomputed hot score, plus the **Hall of Fame**.
 - **Quotes** page with its own voting and submission form.
 - **Tags** with autocomplete and hashtag filtering.

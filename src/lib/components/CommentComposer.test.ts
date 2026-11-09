@@ -58,4 +58,11 @@ describe('CommentComposer', () => {
 		expect(send).toContain('aria-disabled="true"');
 		expect(send).toContain('title="Maintenance"');
 	});
+
+	it('says Save in edit mode and Send otherwise', () => {
+		expect(html({ initialText: 'hi' })).toMatch(/<button\b[^>]*type="submit"[^>]*>Send<\/button>/);
+		expect(html({ initialText: 'hi', editId: 'Cmt0Abc12345' })).toMatch(
+			/<button\b[^>]*type="submit"[^>]*>Save<\/button>/
+		);
+	});
 });

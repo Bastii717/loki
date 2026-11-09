@@ -31,6 +31,7 @@ function c(id: string, overrides: Partial<CommentItem> = {}): CommentItem {
 		userVote: 0,
 		underReview: false,
 		createdAt: new Date(Date.UTC(2026, 10, 9, 12, 0, seq)).toISOString(),
+		editedAt: null,
 		...overrides
 	};
 }
@@ -136,7 +137,10 @@ describe('removeComment', () => {
 	});
 
 	it('turns a comment with replies into a tombstone in place', () => {
-		const out = removeComment([c('a', { score: 3 }), reply('a1', 'a', 2), c('b')], 'a');
+		const out = removeComment(
+			[c('a', { score: 3, editedAt: '2026-11-09T12:02:00.000Z' }), reply('a1', 'a', 2), c('b')],
+			'a'
+		);
 		expect(out.map((x) => x.id)).toEqual(['a', 'a1', 'b']);
 		expect(out[0]).toMatchObject({
 			deleted: true,
@@ -146,7 +150,8 @@ describe('removeComment', () => {
 			authorAvatar: null,
 			mentions: {},
 			userVote: 0,
-			underReview: false
+			underReview: false,
+			editedAt: null
 		});
 		// the sort position stays until the next load
 		expect(buildCommentTree(out, 'top').map((n) => n.item.id)).toEqual(['a', 'b']);
