@@ -581,7 +581,7 @@ describe('addComment notices', () => {
 		const deep = await addComment(a.id, id, 'deep', await cid(mid));
 		const sibling = await addComment(b.id, id, 'sibling', await cid(deep));
 		await db.delete(notifications);
-		// answers the level-3 sibling by b; its parent is mid (also b), the answered one is deep (a)
+		// c answers deep (author a), which sits at level 3 under mid (author b): a is answered, b is only a thread member
 		await addComment(c.id, id, 'answer to deep', await cid(deep));
 		expect((await noticesOf(a.id)).map((n) => n.kind)).toEqual(['comment_reply']);
 		expect((await noticesOf(b.id)).map((n) => n.kind)).toEqual(['thread_comment']);
@@ -589,6 +589,49 @@ describe('addComment notices', () => {
 		await addComment(c.id, id, 'answer to sibling', await cid(sibling));
 		expect((await noticesOf(b.id)).map((n) => n.kind)).toEqual(['comment_reply']);
 		expect((await noticesOf(a.id)).map((n) => n.kind)).toEqual(['thread_comment']);
+	});
+
+	it('the answered author gets one comment_reply even when the text mentions them', async () => {
+		const u = await testUser();
+		const r = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		const target = await addComment(r.id, id, 'target');
+		await db.delete(notifications);
+		await addComment(actor.id, id, `${mentionToken(r.publicId)} agreed`, await cid(target));
+		expect((await noticesOf(r.id)).map((n) => n.kind)).toEqual(['comment_reply']);
+	});
+
+	it('a self-mention writes no notice for the actor', async () => {
+		const u = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		await addComment(actor.id, id, `me ${mentionToken(actor.publicId)}`);
+		expect(await noticesOf(actor.id)).toHaveLength(0);
+	});
+
+	it('the uploader as reply target gets comment_reply, not comment', async () => {
+		const u = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		const target = await addComment(u.id, id, 'mine');
+		await addComment(actor.id, id, 'answer', await cid(target));
+		expect((await noticesOf(u.id)).map((n) => n.kind)).toEqual(['comment_reply']);
+	});
+
+	it('a mentioned uploader with mentions off gets nothing, not a comment notice', async () => {
+		const u = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		await setPrefs(u.id, {
+			comments: true,
+			threadComments: true,
+			replies: true,
+			mentions: false,
+			reportOutcomes: true
+		});
+		await addComment(actor.id, id, `hi ${mentionToken(u.publicId)}`);
+		expect(await noticesOf(u.id)).toHaveLength(0);
 	});
 
 	it('switched-off top kind means nothing for that comment', async () => {

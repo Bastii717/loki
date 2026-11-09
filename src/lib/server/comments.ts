@@ -220,12 +220,14 @@ export async function addComment(
 			.returning({ id: comments.id });
 
 		// one notice per person: later assignments win, so the order is the precedence
-		// (thread_comment < comment < comment_reply < mention)
+		// (thread_comment < comment < mention < comment_reply, the last only for the answered author)
 		const kinds = new Map<number, NotificationKind>();
 		for (const { authorId } of earlier) kinds.set(authorId, 'thread_comment');
 		kinds.set(m.uploaderId, 'comment');
-		if (replyAuthorId !== null) kinds.set(replyAuthorId, 'comment_reply');
 		for (const { userId: mentionedId } of mentioned) kinds.set(mentionedId, 'mention');
+		// the answered author always hears "replied to you", even when the text also mentions them
+		// (the composer pre-fills that mention on level-3 replies)
+		if (replyAuthorId !== null) kinds.set(replyAuthorId, 'comment_reply');
 
 		const base = {
 			actorId: userId,
