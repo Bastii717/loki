@@ -91,7 +91,9 @@ export async function findWinner(month: string, tx: Executor = db): Promise<Winn
 		)
 		.orderBy(
 			desc(media.score),
-			desc(sql`(SELECT count(*) FROM ${comments} WHERE ${comments.mediaId} = ${media.id})`),
+			desc(
+				sql`(SELECT count(*) FROM ${comments} WHERE ${comments.mediaId} = ${media.id} AND ${comments.deletedAt} IS NULL)`
+			),
 			asc(media.createdAt),
 			asc(media.id)
 		)

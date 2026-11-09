@@ -13,7 +13,7 @@ import {
 	nextMonth
 } from './awards';
 import { db } from './db';
-import { awards, media, notifications, votes } from './db/schema';
+import { awards, comments, media, notifications, votes } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import { addOpenReports, insertComment, OVER_THRESHOLD } from './moderation-test-utils';
 
@@ -127,6 +127,24 @@ describe('findWinner', () => {
 		await insertComment(user.id, loud);
 		await insertComment(user.id, quiet);
 		expect((await findWinner('2026-10'))?.mediaId).toBe(loud);
+	});
+
+	it('does not count a tombstone in the comment tie-break', async () => {
+		const user = await testUser();
+		const quiet = await meme(user.id, '2026-10-10T10:00:00Z', 5);
+		const loud = await meme(user.id, '2026-10-20T10:00:00Z', 5);
+		// quiet: tombstone + one live reply = 1; loud: two live comments = 2
+		const [tomb] = await db
+			.insert(comments)
+			.values({ mediaId: quiet, authorId: user.id, text: '', deletedAt: new Date() })
+			.returning({ id: comments.id });
+		await db
+			.insert(comments)
+			.values({ mediaId: quiet, authorId: user.id, text: 'r', parentId: tomb.id, depth: 2 });
+		await insertComment(user.id, loud);
+		await insertComment(user.id, loud);
+		expect((await findWinner('2026-10'))?.mediaId).toBe(loud);
+		// with the tombstone counted both would tie at 2 and the older meme would win
 	});
 
 	it('breaks a score and comment tie by age, older first', async () => {

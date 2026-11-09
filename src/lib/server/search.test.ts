@@ -507,6 +507,41 @@ describe('searchPeople', () => {
 });
 
 describe('searchComments', () => {
+	it('finds a comment by the current name of a mentioned member', async () => {
+		const author = await testUser();
+		const mentioned = await testUser({ displayName: 'Zebulon' });
+		const meme = await insertMeme(author.id, 'M');
+		const id = await insertComment(author.id, meme, `hey @[u:${mentioned.publicId}] look`);
+		const { items } = await searchComments(false, 'Zebulon', PAGE);
+		expect(items.map((i) => i.id)).toEqual([commentPub(id)]);
+		expect(items[0].excerpt).toBe('hey @Zebulon look');
+	});
+
+	it('mention_text follows display name changes', async () => {
+		const author = await testUser();
+		const mentioned = await testUser({ displayName: 'Oldname' });
+		const meme = await insertMeme(author.id, 'M');
+		const id = await insertComment(author.id, meme, `hi @[u:${mentioned.publicId}] there`);
+		await db.execute(sql`UPDATE users SET display_name = 'Newname' WHERE id = ${mentioned.id}`);
+		expect((await searchComments(false, 'Oldname', PAGE)).items).toEqual([]);
+		const { items } = await searchComments(false, 'Newname', PAGE);
+		expect(items.map((i) => i.id)).toEqual([commentPub(id)]);
+		expect(items[0].excerpt).toBe('hi @Newname there');
+		expect(items[0].excerpt).not.toContain('@[u:');
+	});
+
+	it('never lists a tombstone', async () => {
+		const u = await testUser();
+		const meme = await insertMeme(u.id, 'M');
+		const id = await insertComment(u.id, meme, 'findable words');
+		await db.execute(sql`UPDATE comments SET deleted_at = now(), text = '' WHERE id = ${id}`);
+		const { items, total } = await searchComments(false, 'findable', PAGE);
+		expect(items).toEqual([]);
+		expect(total).toBe(0);
+		await db.execute(sql`UPDATE comments SET text = 'findable words' WHERE id = ${id}`);
+		expect((await searchComments(true, 'findable', PAGE)).total).toBe(0);
+	});
+
 	it('finds a comment by substring with excerpt, meme title and author', async () => {
 		const author = await testUser({ displayName: 'Lena', role: 'moderator' });
 		const meme = await insertMeme(author.id, 'The meme');

@@ -206,6 +206,22 @@ describe('getFeedPage', () => {
 		expect(theirs.find((i) => i.id === id)).toMatchObject({ userVote: 1, userFavorite: true });
 	});
 
+	it('counts a tombstone with one live reply as one comment', async () => {
+		const u = await testUser();
+		const id = await addMedia(u.id);
+		const [top] = await db
+			.insert(comments)
+			.values({ mediaId: inner(id), authorId: u.id, text: '', deletedAt: new Date() })
+			.returning();
+		await db
+			.insert(comments)
+			.values({ mediaId: inner(id), authorId: u.id, text: 'r', parentId: top.id, depth: 2 });
+		const item = (await getFeedPage({ viewerId: u.id, sort: 'new' })).items.find(
+			(i) => i.id === id
+		)!;
+		expect(item.commentCount).toBe(1);
+	});
+
 	it('shows the display name when set, else the username, with role and avatar thumb', async () => {
 		const named = await testUser({
 			displayName: 'Ronja',

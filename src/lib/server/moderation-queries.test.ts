@@ -151,6 +151,16 @@ describe('listOpenCases', () => {
 		expect(done.reports.map((r) => r.reporterDisplay)).toEqual(['Melder', 'rep2']);
 	});
 
+	it('renders mentions in a comment preview', async () => {
+		const author = await testUser();
+		const named = await testUser({ displayName: 'Mira' });
+		const memeId = await meme(author.id);
+		const commentId = await comment(author.id, memeId, `ping @[u:${named.publicId}] ok`);
+		await addOpenReports('comment', commentId, author.id, 1);
+		const { cases } = await listOpenCases();
+		expect(cases[0].preview).toMatchObject({ type: 'comment', text: 'ping @Mira ok' });
+	});
+
 	it('shows comments and quotes with their text, and flags over-threshold ones as under review', async () => {
 		const author = await testUser();
 		const memeId = await meme(author.id);
@@ -312,6 +322,9 @@ describe('listUserOverview', () => {
 		const m1 = await meme(bad.id);
 		const m2 = await meme(bad.id);
 		await comment(bad.id, m1);
+		await db
+			.insert(comments)
+			.values({ authorId: bad.id, mediaId: m1, text: '', deletedAt: new Date() });
 		await quote(bad.id);
 		await quote(bad.id);
 		await quote(clean.id);
