@@ -293,7 +293,7 @@
 		<button
 			type="submit"
 			class="send"
-			disabled={sending || text.trim() === ''}
+			disabled={sending || text.trim() === '' || (editId !== null && text === initialText)}
 			aria-disabled={locked ? 'true' : undefined}
 			title={lockTitle}>{editId !== null ? 'Save' : 'Send'}</button
 		>

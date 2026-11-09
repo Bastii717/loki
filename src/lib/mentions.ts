@@ -38,7 +38,8 @@ export function renderMentionsPlain(text: string, names: Record<string, string>)
 /**
  * The editable form of a stored text: tokens of members in `names` become `@<name>` and yield one
  * pick per member; unknown tokens stay raw, which `encodeMentions` leaves untouched, so they survive
- * an edit unchanged.
+ * an edit unchanged. As when posting, a hand-typed plain `@Name` that equals a picked name becomes a
+ * token on save too.
  */
 export function editableMentions(
 	text: string,

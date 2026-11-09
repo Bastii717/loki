@@ -1,7 +1,7 @@
-import { and, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from './db';
-import { commentVotes, comments, media, mediaViews, users } from './db/schema';
+import { commentVotes, comments, media, mediaViews, notifications, users } from './db/schema';
 import {
 	assertNotTimedOut,
 	resolveAfterDelete,
@@ -287,9 +287,10 @@ export async function editComment(
 			.select({
 				authorId: comments.authorId,
 				text: comments.text,
-				createdAt: comments.createdAt,
 				deletedAt: comments.deletedAt,
-				mediaId: comments.mediaId
+				mediaId: comments.mediaId,
+				// on the database clock, like created_at itself
+				expired: sql<boolean>`(now() - ${comments.createdAt}) > make_interval(secs => ${EDIT_WINDOW_MS / 1000})`
 			})
 			.from(comments)
 			.where(eq(comments.id, commentId))
@@ -297,37 +298,65 @@ export async function editComment(
 		if (!c || c.deletedAt) throw new CommentNotFoundError();
 		if (await hiddenForReview(tx, commentId)) throw new CommentNotFoundError();
 		if (c.authorId !== userId) throw new CommentPermissionError();
-		// created_at was written by this same database, so comparing it with the app clock only
-		// carries the (negligible) skew between this process and the database host
-		if (Date.now() - c.createdAt.getTime() > EDIT_WINDOW_MS) throw new CommentEditWindowError();
+		if (c.expired) throw new CommentEditWindowError();
 
-		await tx
-			.update(comments)
-			.set({ text: trimmed, editedAt: sql`now()` })
-			.where(eq(comments.id, commentId));
-
-		// only members the edit newly mentions hear about it; ascending user id keeps the
-		// per-recipient locks in notify from deadlocking (see addComment)
-		const before = new Set(mentionIds(c.text));
-		const fresh = mentioned
-			.filter((m) => !before.has(m.publicId))
-			.map((m) => m.userId)
-			.sort((a, b) => a - b);
-		for (const recipient of fresh) {
-			await notify(tx, {
-				userId: recipient,
-				kind: 'mention',
-				actorId: userId,
-				contentType: 'comment',
-				contentId: commentId,
-				mediaId: c.mediaId,
-				detail: storedCommentExcerpt(trimmed)
-			});
-		}
+		// an unchanged save is no edit: no marker, no notices
+		if (trimmed !== c.text) await saveEdit(tx, userId, commentId, c, trimmed, mentioned);
 
 		const [row] = await selectRows(tx, userId, eq(comments.id, commentId));
 		return toItem(row, names, false);
 	});
+}
+
+/** Writes the new text with the edit marker and notifies members first mentioned by it. */
+async function saveEdit(
+	tx: Tx,
+	userId: number,
+	commentId: number,
+	c: { text: string; mediaId: number },
+	trimmed: string,
+	mentioned: { userId: number; publicId: string }[]
+): Promise<void> {
+	await tx
+		.update(comments)
+		.set({ text: trimmed, editedAt: sql`now()` })
+		.where(eq(comments.id, commentId));
+
+	// only members the edit newly mentions hear about it, and never twice for one comment
+	// (mention, edit it away, mention again); ascending user id keeps the per-recipient locks in
+	// notify from deadlocking (see addComment)
+	const before = new Set(mentionIds(c.text));
+	const candidates = mentioned.filter((m) => !before.has(m.publicId)).map((m) => m.userId);
+	const told =
+		candidates.length === 0
+			? new Set<number>()
+			: new Set(
+					(
+						await tx
+							.select({ userId: notifications.userId })
+							.from(notifications)
+							.where(
+								and(
+									inArray(notifications.userId, candidates),
+									eq(notifications.kind, 'mention'),
+									eq(notifications.contentType, 'comment'),
+									eq(notifications.contentId, commentId)
+								)
+							)
+					).map((r) => r.userId)
+				);
+	const fresh = candidates.filter((id) => !told.has(id)).sort((a, b) => a - b);
+	for (const recipient of fresh) {
+		await notify(tx, {
+			userId: recipient,
+			kind: 'mention',
+			actorId: userId,
+			contentType: 'comment',
+			contentId: commentId,
+			mediaId: c.mediaId,
+			detail: storedCommentExcerpt(trimmed)
+		});
+	}
 }
 
 /**

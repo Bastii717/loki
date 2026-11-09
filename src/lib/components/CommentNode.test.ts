@@ -223,6 +223,8 @@ describe('CommentNode', () => {
 		it('offers no Edit on a tombstone or on withheld text', () => {
 			expect(editButton(html(node(tombstone({ authorId: VIEWER }))))).toBeNull();
 			expect(editButton(html(node(own({ text: null, underReview: true }))))).toBeNull();
+			// a moderator-author still sees their text under review, but may not edit it
+			expect(editButton(html(node(own({ underReview: true }))))).toBeNull();
 		});
 
 		it('marks an edited comment with the edit time as tooltip', () => {

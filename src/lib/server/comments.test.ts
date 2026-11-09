@@ -1036,6 +1036,48 @@ describe('editComment', () => {
 		}
 	});
 
+	it('an unchanged save is no edit: no marker, no notice', async () => {
+		const owner = await testUser();
+		const author = await testUser();
+		const lena = await testUser();
+		const id = await addMedia(owner.id);
+		const text = `hi ${mentionToken(lena.publicId)}`;
+		const posted = await addComment(author.id, id, text);
+		await db.delete(notifications);
+		const saved = await editComment(author.id, await cid(posted), `  ${text} `);
+		expect(saved).toMatchObject({ text, editedAt: null });
+		expect((await listComments(id, author.id))[0].editedAt).toBeNull();
+		expect(await db.select().from(notifications)).toHaveLength(0);
+	});
+
+	it('mentioning someone again after editing them away does not notify twice', async () => {
+		const owner = await testUser();
+		const author = await testUser();
+		const lena = await testUser();
+		const id = await addMedia(owner.id);
+		const posted = await cid(await addComment(author.id, id, 'hi'));
+		await db.delete(notifications);
+		await editComment(author.id, posted, `hi ${mentionToken(lena.publicId)}`);
+		await editComment(author.id, posted, 'hi');
+		await editComment(author.id, posted, `hi again ${mentionToken(lena.publicId)}`);
+		const rows = await noticesOf(lena.id);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({ kind: 'mention', contentId: posted, count: 1 });
+	});
+
+	it('an edit that newly mentions the uploader gives them one mention and nothing else', async () => {
+		const owner = await testUser();
+		const author = await testUser();
+		const id = await addMedia(owner.id);
+		const posted = await cid(await addComment(author.id, id, 'nice'));
+		await db.delete(notifications);
+		await editComment(author.id, posted, `nice ${mentionToken(owner.publicId)}`);
+		const rows = await noticesOf(owner.id);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({ kind: 'mention', contentId: posted, count: 1 });
+		expect(await db.select().from(notifications)).toHaveLength(1);
+	});
+
 	it('editing a mention away sends nothing', async () => {
 		const owner = await testUser();
 		const author = await testUser();

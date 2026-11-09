@@ -59,6 +59,12 @@ describe('CommentComposer', () => {
 		expect(send).toContain('title="Maintenance"');
 	});
 
+	it('keeps Save disabled until the edit changes the text', () => {
+		const unchanged = html({ initialText: 'hi', editId: 'Cmt0Abc12345' });
+		expect(unchanged).toMatch(/<button\b[^>]*type="submit"[^>]*disabled/);
+		expect(html({ initialText: 'hi' })).not.toMatch(/<button\b[^>]*type="submit"[^>]*disabled/);
+	});
+
 	it('says Save in edit mode and Send otherwise', () => {
 		expect(html({ initialText: 'hi' })).toMatch(/<button\b[^>]*type="submit"[^>]*>Send<\/button>/);
 		expect(html({ initialText: 'hi', editId: 'Cmt0Abc12345' })).toMatch(

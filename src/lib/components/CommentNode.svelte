@@ -40,7 +40,8 @@
 	const withinWindow = () => Date.now() - new Date(item.createdAt).getTime() <= EDIT_WINDOW_MS;
 	// Not live: the button only disappears on the next render after the window closes; the click
 	// re-checks and the server enforces the window anyway.
-	const canEdit = $derived(mine && item.text !== null && withinWindow());
+	// not under review either: a moderator-author still sees the text, but the server refuses the edit
+	const canEdit = $derived(mine && item.text !== null && !item.underReview && withinWindow());
 	// an open editor stays open past the window (the server answers with the reason on save)
 	const editing = $derived(mine && item.text !== null && section.editing === item.id);
 	const replyCount = $derived(countReplies(node));
