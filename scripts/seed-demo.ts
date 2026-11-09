@@ -12,7 +12,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { and, count, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, count, eq, isNotNull, isNull, max, ne } from 'drizzle-orm';
 import type { NotificationKind } from '../src/lib/server/notifications';
 
 const MIN_MEMES = 6;
@@ -530,7 +530,6 @@ async function seedThreads(byName: UserMap) {
 	};
 
 	/** Posts a comment (optionally a reply), backdates it, applies votes; returns its internal and public id. */
-	let clock = 0;
 	async function post(
 		mediaId: number,
 		by: string,
@@ -543,12 +542,18 @@ async function seedThreads(byName: UserMap) {
 			.select({ id: comments.id })
 			.from(comments)
 			.where(eq(comments.publicId, item.id));
+		// 17 minutes after the meme's latest other comment (or the meme itself), never in the future;
+		// each post sees the previous one's backdated time, so a thread stays in order
+		const [latest] = await db
+			.select({ at: max(comments.createdAt) })
+			.from(comments)
+			.where(and(eq(comments.mediaId, mediaId), ne(comments.id, row.id)));
 		const [m] = await db
 			.select({ createdAt: media.createdAt })
 			.from(media)
 			.where(eq(media.id, mediaId));
-		// 17 minutes apart after the meme's existing comments, never in the future
-		const at = Math.min(m.createdAt.getTime() + (4 + ++clock) * 17 * 60_000, Date.now() - 60_000);
+		const base = (latest?.at ?? m.createdAt).getTime();
+		const at = Math.min(base + 17 * 60_000, Date.now() - 60_000);
 		await db
 			.update(comments)
 			.set({ createdAt: new Date(at) })

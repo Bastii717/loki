@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNull, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from './db';
 import { comments, media, quotes, reports, templates, timeouts, users } from './db/schema';
@@ -213,7 +213,8 @@ async function previews(cases: { contentType: ContentType; contentId: number }[]
 					})
 					.from(comments)
 					.innerJoin(media, eq(media.id, comments.mediaId))
-					.where(inArray(comments.id, commentIds)),
+					// a tombstone has no text left: no preview, so the case renders as gone
+					.where(and(inArray(comments.id, commentIds), isNull(comments.deletedAt))),
 		quoteIds.length === 0
 			? []
 			: db

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { SessionUser } from './auth/session';
 import { db } from './db';
 import { comments, media, quotes, reports, templates, timeouts } from './db/schema';
@@ -190,6 +190,20 @@ describe('listOpenCases', () => {
 		const { cases } = await listOpenCases();
 		expect(cases).toHaveLength(1);
 		expect(cases[0]).toMatchObject({ preview: null, excerpt: 'Weg', underReview: false });
+	});
+
+	it('shows no preview for a tombstoned comment', async () => {
+		const author = await testUser();
+		const memeId = await meme(author.id);
+		const commentId = await comment(author.id, memeId);
+		await addOpenReports('comment', commentId, author.id, 1);
+		// directly, not via deleteComment, so the reports stay open
+		await db.execute(
+			sql`UPDATE comments SET deleted_at = now(), text = '' WHERE id = ${commentId}`
+		);
+		const { cases } = await listOpenCases();
+		expect(cases).toHaveLength(1);
+		expect(cases[0]).toMatchObject({ contentType: 'comment', preview: null });
 	});
 
 	it('ignores resolved reports, orders oldest case first and paginates by cursor', async () => {

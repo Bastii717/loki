@@ -517,6 +517,22 @@ describe('searchComments', () => {
 		expect(items[0].excerpt).toBe('hey @Zebulon look');
 	});
 
+	it('finds comments with and without mention tokens side by side', async () => {
+		const author = await testUser();
+		const mentioned = await testUser({ displayName: 'Quentin' });
+		const meme = await insertMeme(author.id, 'M');
+		const plain = await insertComment(author.id, meme, 'plain banana talk');
+		const tokened = await insertComment(author.id, meme, `@[u:${mentioned.publicId}] banana too`);
+		const { items, total } = await searchComments(false, 'banana', PAGE);
+		expect(total).toBe(2);
+		expect(new Set(items.map((i) => i.id))).toEqual(
+			new Set([commentPub(plain), commentPub(tokened)])
+		);
+		expect(items.find((i) => i.id === commentPub(plain))?.excerpt).toBe('plain banana talk');
+		// a token comment matches on its rendered text only, never on the raw public id
+		expect((await searchComments(false, mentioned.publicId, PAGE)).total).toBe(0);
+	});
+
 	it('mention_text follows display name changes', async () => {
 		const author = await testUser();
 		const mentioned = await testUser({ displayName: 'Oldname' });

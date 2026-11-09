@@ -275,7 +275,13 @@ export async function searchComments(
 ): Promise<{ items: CommentHit[]; total: number }> {
 	const from = sql`comments c JOIN media m ON m.id = c.media_id JOIN users u ON u.id = c.author_id`;
 	const shown = sql`mention_text(c.text)`;
-	const where = sql`c.deleted_at IS NULL AND ${matchLong(text, shown)} ${
+	// mention_text is plpgsql with a users lookup per token: only comments that contain a token go
+	// through it; the rest match on the raw column, which the trigram index serves. Same semantics:
+	// a token comment matches on its rendered text only.
+	const where = sql`c.deleted_at IS NULL AND (
+		(c.text NOT LIKE '%@[u:%' AND ${matchLong(text, sql`c.text`)})
+		OR (c.text LIKE '%@[u:%' AND ${matchLong(text, shown)})
+	) ${
 		revealAll
 			? sql``
 			: sql`AND NOT ${underReviewSql('comment', sql`c.id`, sql`c.reviewed_at`)}
