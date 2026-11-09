@@ -615,8 +615,8 @@ async function seedThreads(byName: UserMap) {
 	await post(review.id, 'yusuf', 'Two thousand lines and zero comments. Impressive.', lenaComment);
 	await deleteComment(lena, lenaComment.id);
 
-	// 3. Deploy on Friday: a late top-level comment that outscores the earlier ones, so Top and
-	// New order the thread differently.
+	// 3. Deploy on Friday: a late top-level comment that outscores the earlier ones, so it leads
+	// under both sorts, while the two older ones swap places between Top and New.
 	const friday = meme('Deploy on Friday');
 	const anke = await existing(friday.id, 'Whoever does this brings cake on Monday.');
 	const jonas = await existing(friday.id, 'It is just one tiny hotfix.');
@@ -641,7 +641,7 @@ async function seedThreads(byName: UserMap) {
 		`Seeded threads. Memes: /meme/${monday.publicId}, /meme/${review.publicId}, /meme/${friday.publicId}`
 	);
 	console.log(
-		`Deep-link comment (Top vs New differ): ${rollback.publicId} on /meme/${friday.publicId}`
+		`Deep-link comment (leads under Top and New): ${rollback.publicId} on /meme/${friday.publicId}`
 	);
 }
 

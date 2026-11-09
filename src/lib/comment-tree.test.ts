@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+	applyVote,
 	buildCommentTree,
 	commentIdFromHash,
 	countReplies,
@@ -52,15 +53,15 @@ describe('buildCommentTree', () => {
 		c('d', { score: -1 })
 	];
 
-	it('New keeps the input (oldest first) order at the top level', () => {
-		expect(ids(buildCommentTree(items, 'new'))).toEqual(['a', 'b', 'c', 'd']);
+	it('New puts the newest top-level comment first', () => {
+		expect(ids(buildCommentTree(items, 'new'))).toEqual(['d', 'c', 'b', 'a']);
 	});
 
-	it('Top orders by score, ties by input order', () => {
-		expect(ids(buildCommentTree(items, 'top'))).toEqual(['b', 'c', 'a', 'd']);
+	it('Top orders by score, ties newest first', () => {
+		expect(ids(buildCommentTree(items, 'top'))).toEqual(['c', 'b', 'a', 'd']);
 	});
 
-	it('keeps replies in input order whatever the sort', () => {
+	it('keeps replies oldest first whatever the sort', () => {
 		for (const sort of ['top', 'new'] as const) {
 			const b = buildCommentTree(items, sort).find((n) => n.item.id === 'b')!;
 			expect(ids(b.replies)).toEqual(['b1', 'b2']);
@@ -68,13 +69,13 @@ describe('buildCommentTree', () => {
 		}
 	});
 
-	it('puts pinned ids first in Top, in input order', () => {
+	it('puts pinned ids first in Top, newest first', () => {
 		const tree = buildCommentTree(items, 'top', new Set(['d', 'a']));
-		expect(ids(tree)).toEqual(['a', 'd', 'b', 'c']);
+		expect(ids(tree)).toEqual(['d', 'a', 'c', 'b']);
 	});
 
 	it('ignores pinned ids in New', () => {
-		expect(ids(buildCommentTree(items, 'new', new Set(['d'])))).toEqual(['a', 'b', 'c', 'd']);
+		expect(ids(buildCommentTree(items, 'new', new Set(['a'])))).toEqual(['d', 'c', 'b', 'a']);
 	});
 
 	it('keeps tombstones in place with their replies', () => {
@@ -84,14 +85,32 @@ describe('buildCommentTree', () => {
 			reply('t1', 't', 2),
 			c('z')
 		];
-		expect(ids(buildCommentTree(withTomb, 'new'))).toEqual(['a', 't', 'z']);
+		expect(ids(buildCommentTree(withTomb, 'new'))).toEqual(['z', 't', 'a']);
 		const top = buildCommentTree(withTomb, 'top');
-		expect(ids(top)).toEqual(['a', 't', 'z']);
-		expect(ids(top[1].replies)).toEqual(['t1']);
+		expect(ids(top)).toEqual(['a', 'z', 't']);
+		expect(ids(top[2].replies)).toEqual(['t1']);
 	});
 
 	it('shows a reply whose parent is missing at the top level instead of dropping it', () => {
-		expect(ids(buildCommentTree([c('a'), reply('x', 'gone', 2)], 'new'))).toEqual(['a', 'x']);
+		expect(ids(buildCommentTree([c('a'), reply('x', 'gone', 2)], 'new'))).toEqual(['x', 'a']);
+	});
+});
+
+describe('applyVote', () => {
+	it('patches the shared item, so a built tree shows the score but keeps its order', () => {
+		const list = [c('a', { score: 2 }), c('b', { score: 1 })];
+		const tree = buildCommentTree(list, 'top');
+		applyVote(list, 'b', { score: 3, userVote: 1 });
+		expect(ids(tree)).toEqual(['a', 'b']);
+		expect(tree[1].item).toMatchObject({ score: 3, userVote: 1 });
+		// the next rebuild sorts by the live score, matching what is shown
+		expect(ids(buildCommentTree(list, 'top'))).toEqual(['b', 'a']);
+	});
+
+	it('ignores an unknown id', () => {
+		const list = [c('a', { score: 2 })];
+		applyVote(list, 'nope', { score: 9, userVote: 1 });
+		expect(list[0]).toMatchObject({ score: 2, userVote: 0 });
 	});
 });
 

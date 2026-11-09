@@ -1,5 +1,6 @@
 /** Client-side shaping of a meme's flat comment list into the threaded, sorted view. */
 import type { CommentItem } from './server/comments';
+import type { VoteState } from './vote';
 
 export type CommentSort = 'top' | 'new';
 
@@ -13,9 +14,10 @@ export interface CommentNode {
 
 /**
  * Nests `items` (oldest first, as the server sends them) by `parentId`. Replies always keep the
- * input order. The top level keeps it for `new`; `top` orders by score (ties: input order) after
- * the `pinned` ids, which the viewer just posted and keep in input order. A reply whose parent is
- * missing is shown at the top level rather than dropped.
+ * input order (oldest first). The top level is newest first for `new`; `top` orders it by score
+ * (ties: newest first) after the `pinned` ids, which the viewer just posted and come newest first
+ * too (`new` ignores them: a fresh comment is on top there anyway). A reply whose parent is missing
+ * is shown at the top level rather than dropped.
  */
 export function buildCommentTree(
 	items: CommentItem[],
@@ -31,15 +33,28 @@ export function buildCommentTree(
 		if (parent && parent !== node) parent.replies.push(node);
 		else roots.push(node);
 	}
+	roots.reverse();
 	if (sort === 'new') return roots;
 	const order = new Map(roots.map((n, i) => [n, i]));
 	const rank = (n: CommentNode) => (pinned.has(n.item.id) ? 1 : 0);
-	return [...roots].sort(
+	return roots.sort(
 		(a, b) =>
 			rank(b) - rank(a) ||
 			(rank(a) === 1 ? 0 : b.item.score - a.item.score) ||
 			order.get(a)! - order.get(b)!
 	);
+}
+
+/**
+ * Writes a vote result into the comment `id` of `items`, in place: a tree built from the same
+ * objects shows the new score without re-sorting (no reshuffle while voting), and the next build
+ * sorts by it.
+ */
+export function applyVote(items: CommentItem[], id: string, state: VoteState): void {
+	const item = items.find((c) => c.id === id);
+	if (!item) return;
+	item.score = state.score;
+	item.userVote = state.userVote;
 }
 
 /** Live comments under `node`, at any depth (tombstones are not counted). */
@@ -141,8 +156,10 @@ export interface CommentSection {
 	openEdit(id: string | null): void;
 	/** A comment or reply was created. */
 	posted(item: CommentItem): void;
-	/** A comment was edited; replaces it in the list. */
+	/** A comment was edited; updates it in the list, in place. */
 	edited(item: CommentItem): void;
+	/** A vote on comment `id` changed its score (optimistic, server answer or rollback). */
+	voted(id: string, state: { score: number; userVote: -1 | 0 | 1 }): void;
 	/** A comment was deleted on the server (or was already gone). */
 	deleted(id: string): void;
 }
