@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	buildCommentTree,
+	commentIdFromHash,
+	countReplies,
 	readSort,
 	removeComment,
 	SORT_KEY,
@@ -89,6 +91,41 @@ describe('buildCommentTree', () => {
 
 	it('shows a reply whose parent is missing at the top level instead of dropping it', () => {
 		expect(ids(buildCommentTree([c('a'), reply('x', 'gone', 2)], 'new'))).toEqual(['a', 'x']);
+	});
+});
+
+describe('countReplies', () => {
+	it('counts live replies at any depth, not tombstones', () => {
+		const tomb = { deleted: true, text: null, author: '', authorId: '' };
+		const tree = buildCommentTree(
+			[
+				c('a'),
+				reply('a1', 'a', 2, tomb),
+				reply('a1x', 'a1', 3),
+				reply('a1y', 'a1', 3),
+				reply('a2', 'a', 2)
+			],
+			'new'
+		);
+		expect(countReplies(tree[0])).toBe(3);
+	});
+
+	it('is 0 when only tombstones are left under a node', () => {
+		const tomb = { deleted: true, text: null, author: '', authorId: '' };
+		const tree = buildCommentTree([c('a'), reply('a1', 'a', 2, tomb)], 'new');
+		expect(countReplies(tree[0])).toBe(0);
+	});
+});
+
+describe('commentIdFromHash', () => {
+	it('reads a #c-<public id> deep link', () => {
+		expect(commentIdFromHash('#c-Cmt0Abc12345')).toBe('Cmt0Abc12345');
+	});
+
+	it('ignores other hashes', () => {
+		for (const h of ['', '#comments', '#c-short', '#c-Cmt0Abc12345x', '#c-Cmt0Abc1234!']) {
+			expect(commentIdFromHash(h)).toBeNull();
+		}
 	});
 });
 

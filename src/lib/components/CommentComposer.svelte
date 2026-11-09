@@ -102,12 +102,8 @@
 		// the server rejects more than five members; stop offering once five are picked
 		if (!query || pickedCount() >= MAX_MENTIONS) return close();
 		clearTimeout(timer);
-		// a different `@` starts from scratch; for the same one, narrow the shown list right away
-		// so Enter never picks a result of an older query while the new search is pending
-		const needle = query.q.toLowerCase();
-		people =
-			query.start === queryStart ? people.filter((p) => p.name.toLowerCase().includes(needle)) : [];
-		active = people.length > 0 ? 0 : -1;
+		// the shown list stays until the new answer replaces it (the server matches more loosely
+		// than any client-side filter could), so Enter keeps picking instead of adding a newline
 		queryStart = query.start;
 		const mine = ++seq;
 		timer = setTimeout(() => void search(query.q, mine), DEBOUNCE_MS);

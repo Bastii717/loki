@@ -102,10 +102,11 @@ describe('CommentNode', () => {
 		expect(body).toContain('+3');
 	});
 
-	it('renders no vote arrows on an own comment', () => {
+	it('renders no vote arrows on an own comment, but its score', () => {
 		const body = html(node(comment({ authorId: VIEWER })));
 		expect(body).not.toContain('Upvote');
 		expect(body).not.toContain('Downvote');
+		expect(body).toMatch(/<b class="score[^"]*">[\s\S]*?\+3<\/b>/);
 		expect(body).toContain('aria-label="Delete comment by Mo Derator"');
 		expect(body).not.toContain('aria-label="Report"');
 	});
@@ -126,6 +127,7 @@ describe('CommentNode', () => {
 		const own = body.slice(0, body.indexOf('Reply1234567'));
 		expect(own).toContain('[deleted]');
 		expect(own).not.toContain('Upvote');
+		expect(own).not.toContain('class="score');
 		expect(own).not.toContain('Reply to');
 		expect(own).not.toContain('aria-label="Report"');
 		expect(own).not.toContain('Delete comment');
@@ -134,6 +136,20 @@ describe('CommentNode', () => {
 
 	it('shows Under review instead of withheld text', () => {
 		expect(html(node(comment({ text: null, underReview: true })))).toContain('Under review');
+	});
+
+	it('offers no vote arrows on withheld text, but shows the score', () => {
+		const body = html(node(comment({ text: null, underReview: true })));
+		expect(body).not.toContain('Upvote');
+		expect(body).not.toContain('Downvote');
+		expect(body).toMatch(/<b class="score[^"]*">[\s\S]*?\+3<\/b>/);
+	});
+
+	it('keeps the arrows for a moderator who sees the text under review', () => {
+		const body = html(node(comment({ underReview: true })), {
+			viewer: { id: VIEWER, canModerate: true }
+		});
+		expect(button(body, 'Upvote comment by Mo Derator')).not.toBeNull();
 	});
 
 	it('nests replies and offers a collapse toggle', () => {

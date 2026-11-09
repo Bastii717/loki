@@ -39,9 +39,14 @@ export function buildCommentTree(
 	);
 }
 
-/** All comments under `node`, at any depth (tombstones included). */
+/** Live comments under `node`, at any depth (tombstones are not counted). */
 export function countReplies(node: CommentNode): number {
-	return node.replies.reduce((n, r) => n + 1 + countReplies(r), 0);
+	return node.replies.reduce((n, r) => n + (r.item.deleted ? 0 : 1) + countReplies(r), 0);
+}
+
+/** The comment id a `#c-<pid>` deep link points at, or null. */
+export function commentIdFromHash(hash: string): string | null {
+	return /^#c-([0-9A-Za-z]{12})$/.exec(hash)?.[1] ?? null;
 }
 
 /**

@@ -26,6 +26,8 @@
 	const item = $derived(node.item);
 	const mine = $derived(!item.deleted && item.authorId === section.viewer.id);
 	const canDelete = $derived(!item.deleted && (mine || section.viewer.canModerate));
+	// no votes on own comments, nor on text withheld for review; the score still shows
+	const canVote = $derived(!item.deleted && !mine && item.text !== null);
 	const parts = $derived(item.text === null ? [] : splitMentions(item.text));
 	const replying = $derived(!item.deleted && section.replyingTo === item.id);
 	const replyCount = $derived(countReplies(node));
@@ -138,41 +140,41 @@
 		{/if}
 		{#if !item.deleted || node.replies.length > 0}
 			<div class="foot">
-				{#if !item.deleted && !mine}
-					<span class="votes">
-						<button
-							type="button"
-							class="arrow up"
-							class:active={userVote === 1}
-							aria-label="Upvote comment by {item.author}"
-							aria-pressed={userVote === 1}
-							aria-disabled={section.locked ? 'true' : undefined}
-							title={section.lockTitle}
-							onclick={() => castVote(1)}
-							><ArrowBigUp
-								size={18}
-								fill={userVote === 1 ? 'currentColor' : 'none'}
-								aria-hidden="true"
-							/></button
-						>
+				{#if !item.deleted}
+					<span class="votes" class:static={!canVote}>
+						{#if canVote}<button
+								type="button"
+								class="arrow up"
+								class:active={userVote === 1}
+								aria-label="Upvote comment by {item.author}"
+								aria-pressed={userVote === 1}
+								aria-disabled={section.locked ? 'true' : undefined}
+								title={section.lockTitle}
+								onclick={() => castVote(1)}
+								><ArrowBigUp
+									size={18}
+									fill={userVote === 1 ? 'currentColor' : 'none'}
+									aria-hidden="true"
+								/></button
+							>{/if}
 						<b class="score" class:pos={score > 0} class:neg={score < 0}
 							><span class="sr-only">Score </span>{scoreLabel}</b
 						>
-						<button
-							type="button"
-							class="arrow down"
-							class:active={userVote === -1}
-							aria-label="Downvote comment by {item.author}"
-							aria-pressed={userVote === -1}
-							aria-disabled={section.locked ? 'true' : undefined}
-							title={section.lockTitle}
-							onclick={() => castVote(-1)}
-							><ArrowBigDown
-								size={18}
-								fill={userVote === -1 ? 'currentColor' : 'none'}
-								aria-hidden="true"
-							/></button
-						>
+						{#if canVote}<button
+								type="button"
+								class="arrow down"
+								class:active={userVote === -1}
+								aria-label="Downvote comment by {item.author}"
+								aria-pressed={userVote === -1}
+								aria-disabled={section.locked ? 'true' : undefined}
+								title={section.lockTitle}
+								onclick={() => castVote(-1)}
+								><ArrowBigDown
+									size={18}
+									fill={userVote === -1 ? 'currentColor' : 'none'}
+									aria-hidden="true"
+								/></button
+							>{/if}
 					</span>
 				{/if}
 				{#if !item.deleted}
@@ -197,8 +199,9 @@
 					>
 						{#if collapsed}
 							<ChevronRight size={16} aria-hidden="true" />
-							Show {replyCount}
-							{replyCount === 1 ? 'reply' : 'replies'}
+							{replyCount === 0
+								? 'Show replies'
+								: `Show ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`}
 						{:else}
 							<ChevronDown size={16} aria-hidden="true" /> Hide replies
 						{/if}
@@ -365,6 +368,11 @@
 	.votes {
 		display: inline-flex;
 		align-items: center;
+	}
+
+	.votes.static {
+		min-height: 32px;
+		padding: 0 4px;
 	}
 
 	.arrow {

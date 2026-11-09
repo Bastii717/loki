@@ -2,7 +2,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import ArrowBigDown from 'lucide-svelte/icons/arrow-big-down';
 	import ArrowBigUp from 'lucide-svelte/icons/arrow-big-up';
@@ -20,6 +20,7 @@
 	import { apiErrorMessage } from '../api-error';
 	import {
 		buildCommentTree,
+		commentIdFromHash,
 		readSort,
 		removeComment,
 		writeSort,
@@ -313,18 +314,29 @@
 	// `#c-<pid>` (notification links): scroll to the comment and flash it; a comment that is gone
 	// leaves the page at the comment section. Re-runs when the hash changes on the same meme.
 	$effect(() => {
-		const m = /^#c-([0-9A-Za-z]{12})$/.exec(page.url.hash);
-		if (!m) return;
-		const el = document.getElementById(`c-${m[1]}`);
-		if (!el) {
-			document.getElementById('comments')?.scrollIntoView();
-			return;
-		}
-		const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-		el.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
-		highlighted = m[1];
-		const timer = setTimeout(() => (highlighted = null), 3000);
-		return () => clearTimeout(timer);
+		const id = commentIdFromHash(page.url.hash);
+		if (id === null) return;
+		let cancelled = false;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		// Measure only after pending updates are in the DOM: on mount the stored sort (read in the
+		// onMount above, same flush) reorders the SSR'd Top list, which would move the target.
+		void tick().then(() => {
+			if (cancelled) return;
+			const el = document.getElementById(`c-${id}`);
+			if (!el) {
+				document.getElementById('comments')?.scrollIntoView();
+				return;
+			}
+			const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+			el.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+			highlighted = id;
+			timer = setTimeout(() => (highlighted = null), 3000);
+		});
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+			highlighted = null;
+		};
 	});
 </script>
 
