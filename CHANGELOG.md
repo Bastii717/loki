@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.8.0](https://github.com/Bastii717/loki/compare/v1.7.0...v1.8.0) (2026-11-09)
+
+
+### Features
+
+* comments can be edited for five minutes after posting: an Edit action next to Reply for the author's own live comments, a permanent "(edited)" marker with the edit time, mentions stay editable and only newly mentioned members are notified (once per comment); the window is enforced server-side on the database clock ([#49](https://github.com/Bastii717/loki/pull/49))
+
+
+### Operations
+
+* migration 0016 runs at boot and only adds a nullable `comments.edited_at` column — rolling back to 1.7.0 is safe
+* no new environment variables
+
+
 ## [1.7.0](https://github.com/Bastii717/loki/compare/v1.6.0...v1.7.0) (2026-11-09)
 
 
