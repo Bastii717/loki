@@ -58,6 +58,7 @@ function section(overrides: Partial<CommentSection> = {}): CommentSection {
 		posted: () => {},
 		edited: () => {},
 		deleted: () => {},
+		voted: () => {},
 		...overrides
 	};
 }

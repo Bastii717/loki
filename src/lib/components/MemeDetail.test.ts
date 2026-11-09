@@ -254,6 +254,14 @@ describe('MemeDetail comment section', () => {
 		expect(body.indexOf('newer and high')).toBeLessThan(body.indexOf('older and low'));
 	});
 
+	it('breaks Top ties newest first', () => {
+		const body = html(feedItem(), [
+			comment({ id: 'Cmt1Abc12345', text: 'older tie', score: 2 }),
+			comment({ id: 'Cmt2Abc12345', text: 'newer tie', score: 2 })
+		]);
+		expect(body.indexOf('newer tie')).toBeLessThan(body.indexOf('older tie'));
+	});
+
 	it('nests a reply inside its parent', () => {
 		const body = html(feedItem(), [
 			comment({ id: 'Cmt1Abc12345', text: 'parent text' }),

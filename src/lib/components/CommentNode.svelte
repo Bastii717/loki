@@ -47,13 +47,9 @@
 	const replyCount = $derived(countReplies(node));
 	const userHref = (pid: string) => resolve('/users/[pid]', { pid });
 
-	// Votes live here, not in the section's list, so Top does not reshuffle while someone votes.
-	// Replies are hidden (not unmounted) when collapsed, so this state survives a collapse.
-	// svelte-ignore state_referenced_locally
-	let score = $state(node.item.score);
-	// svelte-ignore state_referenced_locally
-	let userVote = $state<-1 | 0 | 1>(node.item.userVote);
-	const scoreLabel = $derived(score > 0 ? `+${score}` : String(score));
+	// The score lives in the section's list (patched via `section.voted`); the section only
+	// re-sorts on an explicit rebuild, so Top does not reshuffle while someone votes.
+	const scoreLabel = $derived(item.score > 0 ? `+${item.score}` : String(item.score));
 	let collapsed = $state(false);
 	let error = $state('');
 	let replyButton = $state<HTMLButtonElement>();
@@ -62,11 +58,8 @@
 
 	const vote = createVoter(
 		() => `/api/comments/${item.id}/vote`,
-		() => ({ score, userVote }),
-		(s) => {
-			score = s.score;
-			userVote = s.userVote;
-		},
+		() => ({ score: item.score, userVote: item.userVote }),
+		(s) => section.voted(item.id, s),
 		(message) => (error = message)
 	);
 	function castVote(dir: 1 | -1) {
@@ -203,33 +196,33 @@
 						{#if canVote}<button
 								type="button"
 								class="arrow up"
-								class:active={userVote === 1}
+								class:active={item.userVote === 1}
 								aria-label="Upvote comment by {item.author}"
-								aria-pressed={userVote === 1}
+								aria-pressed={item.userVote === 1}
 								aria-disabled={section.locked ? 'true' : undefined}
 								title={section.lockTitle}
 								onclick={() => castVote(1)}
 								><ArrowBigUp
 									size={18}
-									fill={userVote === 1 ? 'currentColor' : 'none'}
+									fill={item.userVote === 1 ? 'currentColor' : 'none'}
 									aria-hidden="true"
 								/></button
 							>{/if}
-						<b class="score" class:pos={score > 0} class:neg={score < 0}
+						<b class="score" class:pos={item.score > 0} class:neg={item.score < 0}
 							><span class="sr-only">Score </span>{scoreLabel}</b
 						>
 						{#if canVote}<button
 								type="button"
 								class="arrow down"
-								class:active={userVote === -1}
+								class:active={item.userVote === -1}
 								aria-label="Downvote comment by {item.author}"
-								aria-pressed={userVote === -1}
+								aria-pressed={item.userVote === -1}
 								aria-disabled={section.locked ? 'true' : undefined}
 								title={section.lockTitle}
 								onclick={() => castVote(-1)}
 								><ArrowBigDown
 									size={18}
-									fill={userVote === -1 ? 'currentColor' : 'none'}
+									fill={item.userVote === -1 ? 'currentColor' : 'none'}
 									aria-hidden="true"
 								/></button
 							>{/if}

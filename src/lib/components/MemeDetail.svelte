@@ -19,6 +19,7 @@
 	import WandSparkles from 'lucide-svelte/icons/wand-sparkles';
 	import { apiErrorMessage } from '../api-error';
 	import {
+		applyVote,
 		buildCommentTree,
 		commentIdFromHash,
 		readSort,
@@ -260,22 +261,33 @@
 	let replyingTo = $state<string | null>(null);
 	let editing = $state<string | null>(null);
 	let highlighted = $state<string | null>(null);
-	const tree = $derived(buildCommentTree(comments, sort, pinned));
+	// Not derived: votes patch the (reactive) items in `comments`, so a node shows its new score
+	// at once, but the order only changes when it is rebuilt here (on mount, on a sort toggle, on
+	// posting and deleting). No reshuffle while voting, and every rebuild uses the live scores.
+	// svelte-ignore state_referenced_locally
+	let tree = $state.raw(buildCommentTree(comments, sort, pinned));
 	const liveCount = $derived(comments.filter((c) => !c.deleted).length);
+
+	function resort() {
+		tree = buildCommentTree(comments, sort, pinned);
+	}
 
 	onMount(() => {
 		sort = readSort();
+		resort();
 	});
 
 	function setSort(next: CommentSort) {
 		sort = next;
 		writeSort(next);
+		resort();
 	}
 
 	function posted(c: CommentItem) {
 		comments.push(c);
 		commentCount += 1;
 		if (c.parentId === null) pinned.add(c.id);
+		resort();
 	}
 
 	function deleted(id: string) {
@@ -283,6 +295,7 @@
 		if (!c || c.deleted) return;
 		comments = removeComment(comments, id);
 		commentCount = Math.max(0, commentCount - 1);
+		resort();
 		if (replyingTo !== null && !comments.some((x) => x.id === replyingTo && !x.deleted)) {
 			replyingTo = null;
 		}
@@ -292,8 +305,13 @@
 	}
 
 	function edited(c: CommentItem) {
-		// in place, so the thread order does not move
-		comments = comments.map((x) => (x.id === c.id ? c : x));
+		// in place (the tree holds the same objects), so the thread order does not move
+		const x = comments.find((y) => y.id === c.id);
+		if (x) Object.assign(x, c);
+	}
+
+	function voted(id: string, state: { score: number; userVote: -1 | 0 | 1 }) {
+		applyVote(comments, id, state);
 	}
 
 	const section: CommentSection = {
@@ -329,7 +347,8 @@
 		},
 		posted,
 		edited,
-		deleted
+		deleted,
+		voted
 	};
 
 	// `#c-<pid>` (notification links): scroll to the comment and flash it; a comment that is gone
@@ -879,6 +898,8 @@
 
 	.comments {
 		padding: 0 var(--gutter);
+		/* #comments deep links land below the sticky meme bar, like the comments themselves */
+		scroll-margin-top: calc(var(--banners-height, 0px) + 64px);
 	}
 
 	.comments-head {
