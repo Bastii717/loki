@@ -15,6 +15,7 @@ import {
 	userWithSession
 } from './moderation-test-utils';
 import { resolveReports } from './moderation';
+import { mentionToken } from '../mentions';
 import {
 	commentExcerpt,
 	countUnread,
@@ -26,6 +27,8 @@ import {
 	NOTIFICATION_KINDS,
 	openNotification,
 	setPrefs,
+	storedCommentExcerpt,
+	STORED_EXCERPT_LENGTH,
 	sweepNotifications,
 	type NotificationKind,
 	type NotifyInput
@@ -71,6 +74,29 @@ describe('commentExcerpt', () => {
 
 	it('does not split a surrogate pair', () => {
 		expect(commentExcerpt('😀'.repeat(100))).toBe('😀'.repeat(80));
+	});
+});
+
+describe('storedCommentExcerpt', () => {
+	const token = mentionToken('AbCdEfGhIjKl');
+
+	it('keeps mention tokens raw, collapses whitespace and trims', () => {
+		expect(storedCommentExcerpt(`  hi\n\n${token}  there \r\n`)).toBe(`hi ${token} there`);
+	});
+
+	it('keeps up to 400 characters, so ~80 remain once the tokens render', () => {
+		expect(STORED_EXCERPT_LENGTH).toBe(400);
+		expect(storedCommentExcerpt('a'.repeat(500))).toBe('a'.repeat(400));
+		expect(storedCommentExcerpt('😀'.repeat(500))).toBe('😀'.repeat(400));
+	});
+
+	it('never ends in a partial token', () => {
+		// the token would straddle the 400-character cut: it is dropped whole, with what follows
+		const text = `${'a'.repeat(390)} ${token} tail`;
+		expect(storedCommentExcerpt(text)).toBe('a'.repeat(390));
+		// a token that ends exactly at the cut stays
+		const exact = `${'a'.repeat(400 - token.length)}${token} tail`;
+		expect(storedCommentExcerpt(exact)).toBe(`${'a'.repeat(400 - token.length)}${token}`);
 	});
 });
 

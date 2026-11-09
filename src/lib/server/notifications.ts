@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, isNull, lt, sql, type SQL } from 'drizzle-orm';
+import { mentionToken, splitMentions } from '../mentions';
 import { NOTIFICATION_CATEGORY } from '../notification-labels';
 import { db } from './db';
 import { comments, media, notificationPrefs, notifications, quotes, users } from './db/schema';
@@ -24,6 +25,8 @@ export const NOTIFICATION_KINDS = [
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 export const EXCERPT_LENGTH = 80;
+/** Raw characters a comment notice keeps: room for ~80 once the mention tokens render as names. */
+export const STORED_EXCERPT_LENGTH = 400;
 const PAGE_SIZE = 50;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -52,7 +55,7 @@ const COALESCING_KINDS: readonly NotificationKind[] = [
 	'mention'
 ];
 
-/** Kinds that lead to a comment on a meme page. */
+/** Kinds that lead to a comment on a meme page; their `detail` is a raw excerpt with mention tokens. */
 const COMMENT_KINDS: readonly NotificationKind[] = [
 	'comment',
 	'thread_comment',
@@ -68,10 +71,35 @@ const PROFILE_KINDS: readonly NotificationKind[] = [
 	'motto_cleared'
 ];
 
-/** First 80 characters of a comment, trimmed, with every run of whitespace (line breaks too) as one space. */
+/** First 80 characters of a (rendered) comment, trimmed, with every run of whitespace (line breaks too) as one space. */
 export function commentExcerpt(text: string): string {
 	const flat = text.replace(/\s+/g, ' ').trim();
 	return [...flat].slice(0, EXCERPT_LENGTH).join('').trim();
+}
+
+/**
+ * What a comment notice stores as `detail`: the raw text with its mention tokens (they render as the
+ * current names when listed), whitespace collapsed, at most STORED_EXCERPT_LENGTH characters and
+ * never ending inside a token.
+ */
+export function storedCommentExcerpt(text: string): string {
+	const flat = text.replace(/\s+/g, ' ').trim();
+	let out = '';
+	let room = STORED_EXCERPT_LENGTH;
+	for (const part of splitMentions(flat)) {
+		if (part.kind === 'mention') {
+			const token = mentionToken(part.id);
+			if (token.length > room) break;
+			out += token;
+			room -= token.length;
+		} else {
+			const chars = [...part.text].slice(0, room);
+			out += chars.join('');
+			room -= chars.length;
+		}
+		if (room === 0) break;
+	}
+	return out.trim();
 }
 
 export interface NotifyInput {
@@ -212,7 +240,9 @@ export async function listNotifications(
 			mediaPublicId: media.publicId,
 			title: media.title,
 			titleHidden: underReviewSql('meme', media.id, media.reviewedAt),
-			detail: notifications.detail,
+			// comment notices store raw tokens: rendered here, so a name change shows everywhere
+			detail: sql<string>`CASE WHEN ${inArray(notifications.kind, [...COMMENT_KINDS])}
+				THEN mention_text(${notifications.detail}) ELSE ${notifications.detail} END`,
 			count: notifications.count,
 			readAt: notifications.readAt,
 			updatedAt: notifications.updatedAt
@@ -241,7 +271,10 @@ export async function listNotifications(
 		mediaId: r.mediaPublicId,
 		// never text the recipient could not see on the meme's page
 		title: r.titleHidden ? null : r.title,
-		detail: r.detail,
+		// cut after rendering, so the excerpt is 80 visible characters whatever the names' lengths
+		detail: COMMENT_KINDS.includes(r.kind as NotificationKind)
+			? commentExcerpt(r.detail)
+			: r.detail,
 		count: r.count,
 		read: r.readAt !== null,
 		updatedAt: r.updatedAt.toISOString()

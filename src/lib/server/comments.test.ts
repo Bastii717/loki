@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from './db';
-import { comments, media, mediaViews, notifications } from './db/schema';
+import { comments, media, mediaViews, notifications, users } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import {
 	addComment,
@@ -18,7 +18,7 @@ import { MediaNotFoundError } from './votes';
 import { addOpenReports, OVER_THRESHOLD, timeOut } from './moderation-test-utils';
 import { env } from './env';
 import { resolveReports, TimeoutActiveError } from './moderation';
-import { setPrefs } from './notifications';
+import { listNotifications, setPrefs } from './notifications';
 import { TooManyMentionsError } from './mentions';
 import { mentionToken } from '../mentions';
 import { commentVotes } from './db/schema';
@@ -567,9 +567,11 @@ describe('addComment notices', () => {
 		expect((await noticesOf(e.id)).map((n) => n.kind)).toEqual(['mention']);
 		expect((await noticesOf(r.id)).map((n) => n.kind)).toEqual(['comment_reply']);
 		expect(await noticesOf(actor.id)).toHaveLength(0);
+		// stored with the tokens, listed with the names
 		const [n] = await noticesOf(u.id);
-		expect(n.detail).toBe(`hey @${u.username} @${e.username} @${e.username}`);
-		expect(n.detail).not.toContain('@[u:');
+		expect(n.detail).toBe(text);
+		const { items } = await listNotifications(u.id, {});
+		expect(items[0].detail).toBe(`hey @${u.username} @${e.username} @${e.username}`);
 	});
 
 	it("replies at depth 3 notify the answered author, not the parent's", async () => {
@@ -661,7 +663,86 @@ describe('addComment notices', () => {
 		await addComment(actor.id, id, 'hi @[u:AAAAAAAAAAAA]');
 		const rows = await db.select().from(notifications);
 		expect(rows.map((n) => n.kind)).toEqual(['comment']);
-		expect(rows[0].detail).toBe('hi @unknown member');
+		const { items } = await listNotifications(u.id, {});
+		expect(items[0].detail).toBe('hi @unknown member');
+	});
+
+	it('lists the current name of a mentioned member, after a rename and after a reset', async () => {
+		const u = await testUser();
+		const lena = await testUser({ displayName: 'Lena', displayNameKey: 'lena' });
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		await addComment(actor.id, id, `hi ${mentionToken(lena.publicId)}!`);
+		const detailsFor = async (userId: number) =>
+			(await listNotifications(userId, {})).items.map((n) => n.detail);
+		expect(await detailsFor(u.id)).toEqual(['hi @Lena!']);
+
+		await db
+			.update(users)
+			.set({ displayName: 'Lena K.', displayNameKey: 'lena k.' })
+			.where(eq(users.id, lena.id));
+		expect(await detailsFor(u.id)).toEqual(['hi @Lena K.!']);
+		expect(await detailsFor(lena.id)).toEqual(['hi @Lena K.!']);
+
+		// a moderator's name reset falls back to the username, also in other members' notices
+		await db
+			.update(users)
+			.set({ displayName: null, displayNameKey: null })
+			.where(eq(users.id, lena.id));
+		expect(await detailsFor(u.id)).toEqual([`hi @${lena.username}!`]);
+	});
+
+	it('cuts the listed excerpt to 80 characters after the names render', async () => {
+		const u = await testUser();
+		const name = 'N'.repeat(30);
+		const lena = await testUser({ displayName: name, displayNameKey: 'n'.repeat(30) });
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		await addComment(actor.id, id, `${mentionToken(lena.publicId)}\n\n${'a'.repeat(100)}`);
+		const [n] = (await listNotifications(u.id, {})).items;
+		// '@' + 30 + ' ' = 32 characters of name, then 48 of text
+		expect(n.detail).toBe(`@${name} ${'a'.repeat(48)}`);
+		expect([...n.detail]).toHaveLength(80);
+	});
+
+	it('fills the listed excerpt even when the raw text is mostly tokens', async () => {
+		const u = await testUser();
+		const m = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		const raw = Array.from({ length: 30 }, () => mentionToken(m.publicId)).join(' ');
+		await addComment(actor.id, id, raw);
+		const [n] = (await listNotifications(u.id, {})).items;
+		expect(n.detail).not.toContain('@[u:');
+		const rendered = Array.from({ length: 30 }, () => `@${m.username}`).join(' ');
+		expect(n.detail).toBe([...rendered].slice(0, 80).join('').trim());
+	});
+
+	it('never lists a raw token, for any comment notice kind', async () => {
+		const u = await testUser();
+		const r = await testUser();
+		const e = await testUser();
+		const m = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		await addComment(e.id, id, 'early');
+		const target = await addComment(r.id, id, 'target');
+		await db.delete(notifications);
+		await addComment(
+			actor.id,
+			id,
+			`${'x '.repeat(5)}${mentionToken(m.publicId)} ${mentionToken(r.publicId)}`,
+			await cid(target)
+		);
+		const kinds = new Set<string>();
+		for (const who of [u, r, e, m]) {
+			for (const n of (await listNotifications(who.id, {})).items) {
+				kinds.add(n.kind);
+				expect(n.detail).not.toContain('@[u:');
+				expect(n.detail).toContain(`@${m.username}`);
+			}
+		}
+		expect([...kinds].sort()).toEqual(['comment', 'comment_reply', 'mention', 'thread_comment']);
 	});
 
 	it('leaves neither a comment nor a notice behind when the meme does not exist', async () => {
@@ -766,5 +847,38 @@ describe('voteComment', () => {
 		const cm = await cid(await addComment(a.id, id, 'hi'));
 		await timeOut(b.id, mod.id);
 		await expect(voteComment(b.id, cm, 1)).rejects.toBeInstanceOf(TimeoutActiveError);
+	});
+
+	it('treats a comment under review as missing for members; moderators may vote', async () => {
+		const a = await testUser();
+		const b = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const id = await addMedia(a.id);
+		const cm = await cid(await addComment(a.id, id, 'hi'));
+		await addOpenReports('comment', cm, a.id, OVER_THRESHOLD);
+		await expect(voteComment(b.id, cm, 1)).rejects.toBeInstanceOf(CommentNotFoundError);
+		await expect(voteComment(b.id, cm, 0)).rejects.toBeInstanceOf(CommentNotFoundError);
+		expect(await db.select().from(commentVotes)).toHaveLength(0);
+		expect(await voteComment(mod.id, cm, 1, true)).toEqual({ score: 1, userVote: 1 });
+	});
+
+	it('treats a comment on a meme under review as missing for members; moderators may vote', async () => {
+		const a = await testUser();
+		const b = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const id = await addMedia(a.id);
+		const cm = await cid(await addComment(a.id, id, 'hi'));
+		await addOpenReports('meme', id, a.id, OVER_THRESHOLD);
+		await expect(voteComment(b.id, cm, 1)).rejects.toBeInstanceOf(CommentNotFoundError);
+		expect(await voteComment(mod.id, cm, -1, true)).toEqual({ score: -1, userVote: -1 });
+	});
+
+	it('lets members vote again once the reports stay at the threshold', async () => {
+		const a = await testUser();
+		const b = await testUser();
+		const id = await addMedia(a.id);
+		const cm = await cid(await addComment(a.id, id, 'hi'));
+		await addOpenReports('comment', cm, a.id, env.REPORT_REVIEW_THRESHOLD);
+		expect(await voteComment(b.id, cm, 1)).toEqual({ score: 1, userVote: 1 });
 	});
 });

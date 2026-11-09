@@ -8,10 +8,10 @@ import {
 	snapshotContent,
 	underReviewSql
 } from './moderation';
-import { commentExcerpt, notify, type NotificationKind } from './notifications';
+import { notify, storedCommentExcerpt, type NotificationKind } from './notifications';
 import type { SessionUser } from './auth/session';
 import { MediaNotFoundError, type VoteValue } from './votes';
-import { MAX_MENTIONS, mentionIds, renderMentionsPlain } from '../mentions';
+import { MAX_MENTIONS, mentionIds } from '../mentions';
 import { mentionNames, resolveMentions, TooManyMentionsError } from './mentions';
 
 export { TooManyMentionsError };
@@ -179,7 +179,8 @@ export async function addComment(
 		.from(media)
 		.where(eq(media.id, mediaId));
 	if (!m) throw new MediaNotFoundError();
-	// resolved up front so the transaction holds a single connection
+	// Resolved up front: inside the transaction only `tx` may be used, since a query on the global
+	// `db` would wait for a second pool connection while this one is held (a deadlock under load).
 	const mentioned = await resolveMentions(trimmed);
 	const names = await mentionNames(mentionIds(trimmed));
 	return db.transaction(async (tx) => {
@@ -239,7 +240,8 @@ export async function addComment(
 			contentType: 'comment',
 			contentId: inserted.id,
 			mediaId,
-			detail: commentExcerpt(renderMentionsPlain(trimmed, names))
+			// raw tokens: listNotifications renders the current names
+			detail: storedCommentExcerpt(trimmed)
 		} as const;
 		// ascending user id keeps the per-recipient locks in notify from deadlocking concurrent comments;
 		// notify skips the author themselves
@@ -247,8 +249,8 @@ export async function addComment(
 			await notify(tx, { ...base, userId: recipient, kind });
 		}
 
-		const rows = await selectRows(tx, userId, eq(comments.id, inserted.id));
-		return (await itemsOf(rows, false))[0];
+		const [row] = await selectRows(tx, userId, eq(comments.id, inserted.id));
+		return toItem(row, names, false);
 	});
 }
 
@@ -353,11 +355,15 @@ export async function markSeen(userId: number, mediaId: number): Promise<boolean
 	});
 }
 
-/** Sets the user's vote on a comment (0 clears it) and returns the aggregated score. */
+/**
+ * Sets the user's vote on a comment (0 clears it) and returns the aggregated score. A comment under
+ * review, or on a meme under review, counts as missing unless `revealAll` (moderators).
+ */
 export async function voteComment(
 	userId: number,
 	commentId: number,
-	value: VoteValue
+	value: VoteValue,
+	revealAll = false
 ): Promise<{ score: number; userVote: VoteValue }> {
 	await assertNotTimedOut({ id: userId });
 	return db.transaction(async (tx) => {
@@ -367,6 +373,7 @@ export async function voteComment(
 			.where(eq(comments.id, commentId))
 			.for('update');
 		if (!c || c.deletedAt) throw new CommentNotFoundError();
+		if (!revealAll && (await hiddenForReview(tx, commentId))) throw new CommentNotFoundError();
 		if (c.authorId === userId) throw new CommentVoteOwnError();
 		if (value === 0) {
 			await tx
@@ -387,4 +394,16 @@ export async function voteComment(
 			.where(eq(commentVotes.commentId, commentId));
 		return { score, userVote: value };
 	});
+}
+
+/** True while the comment or its meme is hidden for review. */
+async function hiddenForReview(tx: Tx, commentId: number): Promise<boolean> {
+	const [row] = await tx
+		.select({
+			hidden: sql<boolean>`(${underReviewSql('comment', comments.id, comments.reviewedAt)} OR ${underReviewSql('meme', media.id, media.reviewedAt)})`
+		})
+		.from(comments)
+		.innerJoin(media, eq(media.id, comments.mediaId))
+		.where(eq(comments.id, commentId));
+	return row?.hidden === true;
 }
