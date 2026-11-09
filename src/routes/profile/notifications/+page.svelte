@@ -11,6 +11,8 @@
 	const options = [
 		{ name: 'comments', label: 'Comments on my memes' },
 		{ name: 'threadComments', label: 'New comments in threads I joined' },
+		{ name: 'replies', label: 'Replies to my comments' },
+		{ name: 'mentions', label: 'Mentions of me' },
 		{ name: 'reportOutcomes', label: 'Outcomes of my reports' }
 	] as const;
 

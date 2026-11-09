@@ -8,6 +8,8 @@ export type NotificationCategory = 'activity' | 'moderation';
 export const NOTIFICATION_CATEGORY: Record<NotificationKind, NotificationCategory> = {
 	comment: 'activity',
 	thread_comment: 'activity',
+	comment_reply: 'activity',
+	mention: 'activity',
 	content_deleted: 'moderation',
 	content_flagged: 'moderation',
 	content_released: 'moderation',
@@ -67,6 +69,26 @@ export function notificationText(
 					: `${who} also commented on a meme you commented on`,
 				excerpt: detail || null
 			};
+		case 'comment_reply': {
+			const what = item.title ? `“${item.title}”` : 'a meme';
+			return {
+				text:
+					item.count > 1
+						? `${item.count} new replies to your comment on ${what}, the latest from ${who}`
+						: `${who} replied to your comment on ${what}`,
+				excerpt: detail || null
+			};
+		}
+		case 'mention': {
+			const what = item.title ? `“${item.title}”` : 'a meme';
+			return {
+				text:
+					item.count > 1
+						? `You were mentioned ${item.count} times on ${what}, the latest by ${who}`
+						: `${who} mentioned you in a comment on ${what}`,
+				excerpt: detail || null
+			};
+		}
 		case 'content_deleted':
 			return { text: `A moderator removed your ${noun}: “${detail}”`, excerpt: null };
 		case 'content_flagged': {

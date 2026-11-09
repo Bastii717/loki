@@ -2,11 +2,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { NOTIFICATION_CATEGORY } from '../notification-labels';
 import { db } from './db';
-import { media, notificationPrefs, notifications, users } from './db/schema';
+import { comments, media, notificationPrefs, notifications, users } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import {
 	addOpenReports,
 	insertComment,
+	insertCommentRow,
 	insertMeme,
 	insertMemeRow,
 	insertQuote,
@@ -74,10 +75,12 @@ describe('commentExcerpt', () => {
 });
 
 describe('notify', () => {
-	it('lists the thirteen kinds', () => {
+	it('lists the fifteen kinds', () => {
 		expect(NOTIFICATION_KINDS).toEqual([
 			'comment',
 			'thread_comment',
+			'comment_reply',
+			'mention',
 			'content_deleted',
 			'content_flagged',
 			'content_released',
@@ -157,7 +160,13 @@ describe('notify', () => {
 	it('skips comment, thread_comment and report_resolved when the pref is off, but not content_deleted', async () => {
 		const user = await testUser();
 		const actor = await testUser();
-		await setPrefs(user.id, { comments: false, threadComments: false, reportOutcomes: false });
+		await setPrefs(user.id, {
+			comments: false,
+			threadComments: false,
+			replies: false,
+			mentions: false,
+			reportOutcomes: false
+		});
 		await notify(db, { userId: user.id, kind: 'comment', actorId: actor.id });
 		await notify(db, { userId: user.id, kind: 'thread_comment', actorId: actor.id });
 		await notify(db, { userId: user.id, kind: 'report_resolved', detail: 'dismissed:x' });
@@ -169,7 +178,13 @@ describe('notify', () => {
 	it('only the matching pref switches a kind off', async () => {
 		const user = await testUser();
 		const actor = await testUser();
-		await setPrefs(user.id, { comments: false, threadComments: true, reportOutcomes: true });
+		await setPrefs(user.id, {
+			comments: false,
+			threadComments: true,
+			replies: true,
+			mentions: true,
+			reportOutcomes: true
+		});
 		await notify(db, { userId: user.id, kind: 'comment', actorId: actor.id });
 		await notify(db, { userId: user.id, kind: 'thread_comment', actorId: actor.id });
 		await notify(db, { userId: user.id, kind: 'report_resolved', detail: 'dismissed:x' });
@@ -211,6 +226,54 @@ describe('notify', () => {
 		expect(all[0].count).toBe(3);
 	});
 
+	it.each(['comment_reply', 'mention'] as const)(
+		'coalesces %s and points at the latest comment',
+		async (kind) => {
+			const user = await testUser();
+			const actor = await testUser();
+			const mediaId = await insertMeme(user.id);
+			const c1 = await insertComment(actor.id, mediaId);
+			const c2 = await insertComment(actor.id, mediaId);
+			const input = (contentId: number) => ({
+				userId: user.id,
+				kind,
+				actorId: actor.id,
+				contentType: 'comment' as const,
+				contentId,
+				mediaId
+			});
+			await notify(db, input(c1));
+			await notify(db, input(c2));
+			const all = await rows();
+			expect(all).toHaveLength(1);
+			expect(all[0]).toMatchObject({ count: 2, contentType: 'comment', contentId: c2 });
+		}
+	);
+
+	it('skips comment_reply and mention when their pref is off', async () => {
+		const user = await testUser();
+		const actor = await testUser();
+		await setPrefs(user.id, {
+			comments: true,
+			threadComments: true,
+			replies: false,
+			mentions: true,
+			reportOutcomes: true
+		});
+		await notify(db, { userId: user.id, kind: 'comment_reply', actorId: actor.id });
+		await notify(db, { userId: user.id, kind: 'mention', actorId: actor.id });
+		expect((await rows()).map((r) => r.kind)).toEqual(['mention']);
+		await setPrefs(user.id, {
+			comments: true,
+			threadComments: true,
+			replies: true,
+			mentions: false,
+			reportOutcomes: true
+		});
+		await notify(db, { userId: user.id, kind: 'mention', actorId: actor.id });
+		expect(await rows()).toHaveLength(1);
+	});
+
 	it('does not coalesce across kinds, recipients or memes', async () => {
 		const user = await testUser();
 		const other = await testUser();
@@ -243,7 +306,13 @@ describe('notify', () => {
 		const actor = await testUser();
 		const mediaId = await insertMeme(user.id);
 		await notify(db, { userId: user.id, kind: 'comment', actorId: actor.id, mediaId, detail: 'a' });
-		await setPrefs(user.id, { comments: false, threadComments: true, reportOutcomes: true });
+		await setPrefs(user.id, {
+			comments: false,
+			threadComments: true,
+			replies: true,
+			mentions: true,
+			reportOutcomes: true
+		});
 		await notify(db, { userId: user.id, kind: 'comment', actorId: actor.id, mediaId, detail: 'b' });
 		const all = await rows();
 		expect(all).toHaveLength(1);
@@ -511,12 +580,41 @@ describe('openNotification', () => {
 	it('leads to the meme while mediaId is set, and marks the notice read', async () => {
 		const user = await testUser();
 		const { id: mediaId, publicId } = await insertMemeRow(user.id);
-		const id = await seed(user.id, { kind: 'comment', mediaId });
+		const id = await seed(user.id, { kind: 'report_resolved', mediaId });
 		expect(await openNotification(user.id, id)).toBe(`/meme/${publicId}`);
 		expect(await countUnread(user.id)).toBe(0);
 		const [row] = await rows();
 		expect(row.readAt).not.toBeNull();
 	});
+
+	it.each(['comment', 'thread_comment', 'comment_reply', 'mention'] as const)(
+		'links %s to the comment, or to #comments when it is gone or a tombstone',
+		async (kind) => {
+			const user = await testUser();
+			const { id: mediaId, publicId } = await insertMemeRow(user.id);
+			const { id: live, publicId: livePid } = await insertCommentRow(user.id, mediaId);
+			const open = await seed(user.id, {
+				kind,
+				mediaId,
+				contentType: 'comment',
+				contentId: live
+			});
+			expect(await openNotification(user.id, open)).toBe(`/meme/${publicId}#c-${livePid}`);
+
+			await db
+				.update(comments)
+				.set({ deletedAt: sql`now()` })
+				.where(eq(comments.id, live));
+			const tomb = await seed(user.id, { kind, mediaId, contentType: 'comment', contentId: live });
+			expect(await openNotification(user.id, tomb)).toBe(`/meme/${publicId}#comments`);
+
+			await db.delete(comments).where(eq(comments.id, live));
+			const gone = await seed(user.id, { kind, mediaId, contentType: 'comment', contentId: live });
+			expect(await openNotification(user.id, gone)).toBe(`/meme/${publicId}#comments`);
+			const none = await seed(user.id, { kind, mediaId });
+			expect(await openNotification(user.id, none)).toBe(`/meme/${publicId}#comments`);
+		}
+	);
 
 	it('does not move updatedAt when opening', async () => {
 		const user = await testUser();
@@ -637,22 +735,40 @@ describe('preferences', () => {
 		expect(await getPrefs(user.id)).toEqual({
 			comments: true,
 			threadComments: true,
+			replies: true,
+			mentions: true,
 			reportOutcomes: true
 		});
 	});
 
 	it('upserts', async () => {
 		const user = await testUser();
-		await setPrefs(user.id, { comments: false, threadComments: true, reportOutcomes: false });
+		await setPrefs(user.id, {
+			comments: false,
+			threadComments: true,
+			replies: true,
+			mentions: true,
+			reportOutcomes: false
+		});
 		expect(await getPrefs(user.id)).toEqual({
 			comments: false,
 			threadComments: true,
+			replies: true,
+			mentions: true,
 			reportOutcomes: false
 		});
-		await setPrefs(user.id, { comments: true, threadComments: false, reportOutcomes: true });
+		await setPrefs(user.id, {
+			comments: true,
+			threadComments: false,
+			replies: false,
+			mentions: false,
+			reportOutcomes: true
+		});
 		expect(await getPrefs(user.id)).toEqual({
 			comments: true,
 			threadComments: false,
+			replies: false,
+			mentions: false,
 			reportOutcomes: true
 		});
 		expect(await db.select().from(notificationPrefs)).toHaveLength(1);
@@ -661,7 +777,13 @@ describe('preferences', () => {
 	it('is per user', async () => {
 		const user = await testUser();
 		const other = await testUser();
-		await setPrefs(user.id, { comments: false, threadComments: false, reportOutcomes: false });
+		await setPrefs(user.id, {
+			comments: false,
+			threadComments: false,
+			replies: false,
+			mentions: false,
+			reportOutcomes: false
+		});
 		expect((await getPrefs(other.id)).comments).toBe(true);
 	});
 });
@@ -735,7 +857,13 @@ describe('cascades', () => {
 	it('deleting the recipient removes their notices and prefs', async () => {
 		const user = await testUser();
 		await seed(user.id);
-		await setPrefs(user.id, { comments: false, threadComments: true, reportOutcomes: true });
+		await setPrefs(user.id, {
+			comments: false,
+			threadComments: true,
+			replies: true,
+			mentions: true,
+			reportOutcomes: true
+		});
 		await db.delete(users).where(eq(users.id, user.id));
 		expect(await rows()).toHaveLength(0);
 		expect(await db.select().from(notificationPrefs)).toHaveLength(0);

@@ -537,11 +537,86 @@ describe('addComment notices', () => {
 		const lena = await testUser();
 		const id = await addMedia(owner.id);
 		await addComment(lena.id, id, 'before');
-		await setPrefs(owner.id, { comments: false, threadComments: true, reportOutcomes: true });
+		await setPrefs(owner.id, {
+			comments: false,
+			threadComments: true,
+			replies: true,
+			mentions: true,
+			reportOutcomes: true
+		});
 		await addComment(lena.id, id, 'after');
 		const rows = await noticesOf(owner.id);
 		expect(rows).toHaveLength(1);
 		expect(rows[0]).toMatchObject({ count: 1, detail: 'before' });
+	});
+
+	it('one notice per person: mention beats reply, comment and thread', async () => {
+		const u = await testUser(); // uploader
+		const e = await testUser(); // earlier commenter
+		const r = await testUser(); // reply target author
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		await addComment(e.id, id, 'early');
+		const target = await addComment(r.id, id, 'target');
+		await db.delete(notifications);
+		const text = `hey ${mentionToken(u.publicId)} ${mentionToken(e.publicId)} ${mentionToken(e.publicId)}`;
+		await addComment(actor.id, id, text, await cid(target));
+		expect((await noticesOf(u.id)).map((n) => n.kind)).toEqual(['mention']);
+		expect((await noticesOf(e.id)).map((n) => n.kind)).toEqual(['mention']);
+		expect((await noticesOf(r.id)).map((n) => n.kind)).toEqual(['comment_reply']);
+		expect(await noticesOf(actor.id)).toHaveLength(0);
+		const [n] = await noticesOf(u.id);
+		expect(n.detail).toBe(`hey @${u.username} @${e.username} @${e.username}`);
+		expect(n.detail).not.toContain('@[u:');
+	});
+
+	it("replies at depth 3 notify the answered author, not the parent's", async () => {
+		const u = await testUser();
+		const a = await testUser();
+		const b = await testUser();
+		const c = await testUser();
+		const id = await addMedia(u.id);
+		const top = await addComment(a.id, id, 'top');
+		const mid = await addComment(b.id, id, 'mid', await cid(top));
+		const deep = await addComment(a.id, id, 'deep', await cid(mid));
+		const sibling = await addComment(b.id, id, 'sibling', await cid(deep));
+		await db.delete(notifications);
+		// answers the level-3 sibling by b; its parent is mid (also b), the answered one is deep (a)
+		await addComment(c.id, id, 'answer to deep', await cid(deep));
+		expect((await noticesOf(a.id)).map((n) => n.kind)).toEqual(['comment_reply']);
+		expect((await noticesOf(b.id)).map((n) => n.kind)).toEqual(['thread_comment']);
+		await db.delete(notifications);
+		await addComment(c.id, id, 'answer to sibling', await cid(sibling));
+		expect((await noticesOf(b.id)).map((n) => n.kind)).toEqual(['comment_reply']);
+		expect((await noticesOf(a.id)).map((n) => n.kind)).toEqual(['thread_comment']);
+	});
+
+	it('switched-off top kind means nothing for that comment', async () => {
+		const u = await testUser();
+		const r = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		const target = await addComment(r.id, id, 'target');
+		await db.delete(notifications);
+		await setPrefs(r.id, {
+			comments: true,
+			threadComments: true,
+			replies: false,
+			mentions: true,
+			reportOutcomes: true
+		});
+		await addComment(actor.id, id, 'reply', await cid(target));
+		expect(await noticesOf(r.id)).toHaveLength(0);
+	});
+
+	it('ignores tokens of unknown members', async () => {
+		const u = await testUser();
+		const actor = await testUser();
+		const id = await addMedia(u.id);
+		await addComment(actor.id, id, 'hi @[u:AAAAAAAAAAAA]');
+		const rows = await db.select().from(notifications);
+		expect(rows.map((n) => n.kind)).toEqual(['comment']);
+		expect(rows[0].detail).toBe('hi @unknown member');
 	});
 
 	it('leaves neither a comment nor a notice behind when the meme does not exist', async () => {

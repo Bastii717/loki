@@ -1,12 +1,14 @@
 import { and, desc, eq, inArray, isNull, lt, sql, type SQL } from 'drizzle-orm';
 import { NOTIFICATION_CATEGORY } from '../notification-labels';
 import { db } from './db';
-import { media, notificationPrefs, notifications, quotes, users } from './db/schema';
+import { comments, media, notificationPrefs, notifications, quotes, users } from './db/schema';
 import { underReviewSql, type ContentType, type Executor } from './moderation';
 
 export const NOTIFICATION_KINDS = [
 	'comment',
 	'thread_comment',
+	'comment_reply',
+	'mention',
 	'content_deleted',
 	'content_flagged',
 	'content_released',
@@ -28,6 +30,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export type NotificationPrefs = {
 	comments: boolean;
 	threadComments: boolean;
+	replies: boolean;
+	mentions: boolean;
 	reportOutcomes: boolean;
 };
 
@@ -35,11 +39,26 @@ export type NotificationPrefs = {
 const PREF_FOR_KIND: Partial<Record<NotificationKind, keyof NotificationPrefs>> = {
 	comment: 'comments',
 	thread_comment: 'threadComments',
+	comment_reply: 'replies',
+	mention: 'mentions',
 	report_resolved: 'reportOutcomes'
 };
 
 /** Kinds that fold into an existing unread row instead of adding a new one. */
-const COALESCING_KINDS: readonly NotificationKind[] = ['comment', 'thread_comment'];
+const COALESCING_KINDS: readonly NotificationKind[] = [
+	'comment',
+	'thread_comment',
+	'comment_reply',
+	'mention'
+];
+
+/** Kinds that lead to a comment on a meme page. */
+const COMMENT_KINDS: readonly NotificationKind[] = [
+	'comment',
+	'thread_comment',
+	'comment_reply',
+	'mention'
+];
 
 /** Where each profile-change notice leads. */
 const PROFILE_KINDS: readonly NotificationKind[] = [
@@ -68,8 +87,8 @@ export interface NotifyInput {
 /**
  * Writes a notice for `userId`. Pass the caller's transaction so a failed action leaves no stray
  * notice. Writes nothing when the recipient is the actor or has switched the kind off (the actor is
- * stored for activity kinds only, moderation kinds store none); folds
- * `comment` and `thread_comment` into the recipient's unread notice of that kind for the same meme.
+ * stored for activity kinds only, moderation kinds store none); folds the comment kinds into the
+ * recipient's unread notice of that kind for the same meme (the row then points at the latest comment).
  */
 export async function notify(tx: Executor, input: NotifyInput): Promise<void> {
 	const { userId, kind } = input;
@@ -111,6 +130,8 @@ export async function notify(tx: Executor, input: NotifyInput): Promise<void> {
 					count: sql`${notifications.count} + 1`,
 					actorId,
 					detail,
+					contentType: input.contentType ?? null,
+					contentId: input.contentId ?? null,
 					updatedAt: sql`now()`
 				})
 				.where(eq(notifications.id, open.id));
@@ -256,6 +277,17 @@ export async function openNotification(userId: number, id: number): Promise<stri
 	if (kind === 'award_won') {
 		return row.mediaPublicId !== null ? `/meme/${row.mediaPublicId}` : '/awards';
 	}
+	if (COMMENT_KINDS.includes(kind) && row.mediaPublicId !== null) {
+		// a comment that is gone or only a tombstone has nothing to scroll to
+		const [comment] =
+			row.contentType === 'comment' && row.contentId !== null
+				? await db
+						.select({ publicId: comments.publicId })
+						.from(comments)
+						.where(and(eq(comments.id, row.contentId), isNull(comments.deletedAt)))
+				: [];
+		return `/meme/${row.mediaPublicId}#${comment ? `c-${comment.publicId}` : 'comments'}`;
+	}
 	if (row.mediaPublicId !== null) return `/meme/${row.mediaPublicId}`;
 	if (row.contentType === 'quote' && row.contentId !== null) {
 		const [quote] = await db
@@ -279,17 +311,29 @@ export async function getPrefs(userId: number): Promise<NotificationPrefs> {
 		.select({
 			comments: notificationPrefs.comments,
 			threadComments: notificationPrefs.threadComments,
+			replies: notificationPrefs.replies,
+			mentions: notificationPrefs.mentions,
 			reportOutcomes: notificationPrefs.reportOutcomes
 		})
 		.from(notificationPrefs)
 		.where(eq(notificationPrefs.userId, userId));
-	return row ?? { comments: true, threadComments: true, reportOutcomes: true };
+	return (
+		row ?? {
+			comments: true,
+			threadComments: true,
+			replies: true,
+			mentions: true,
+			reportOutcomes: true
+		}
+	);
 }
 
 export async function setPrefs(userId: number, prefs: NotificationPrefs): Promise<void> {
 	const values = {
 		comments: prefs.comments,
 		threadComments: prefs.threadComments,
+		replies: prefs.replies,
+		mentions: prefs.mentions,
 		reportOutcomes: prefs.reportOutcomes
 	};
 	await db

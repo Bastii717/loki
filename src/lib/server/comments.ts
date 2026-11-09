@@ -8,11 +8,11 @@ import {
 	snapshotContent,
 	underReviewSql
 } from './moderation';
-import { commentExcerpt, notify } from './notifications';
+import { commentExcerpt, notify, type NotificationKind } from './notifications';
 import type { SessionUser } from './auth/session';
 import { MediaNotFoundError } from './votes';
-import { MAX_MENTIONS, mentionIds } from '../mentions';
-import { mentionNames, TooManyMentionsError } from './mentions';
+import { MAX_MENTIONS, mentionIds, renderMentionsPlain } from '../mentions';
+import { mentionNames, resolveMentions, TooManyMentionsError } from './mentions';
 
 export { TooManyMentionsError };
 
@@ -174,7 +174,11 @@ export async function addComment(
 		.from(media)
 		.where(eq(media.id, mediaId));
 	if (!m) throw new MediaNotFoundError();
+	// resolved up front so the transaction holds a single connection
+	const mentioned = await resolveMentions(trimmed);
+	const names = await mentionNames(mentionIds(trimmed));
 	return db.transaction(async (tx) => {
+		let replyAuthorId: number | null = null;
 		let placement: { parentId: number | null; replyToId: number | null; depth: number } = {
 			parentId: null,
 			replyToId: null,
@@ -188,6 +192,7 @@ export async function addComment(
 					mediaId: comments.mediaId,
 					parentId: comments.parentId,
 					depth: comments.depth,
+					authorId: comments.authorId,
 					deletedAt: comments.deletedAt
 				})
 				.from(comments)
@@ -195,6 +200,7 @@ export async function addComment(
 				.for('update');
 			if (!target || target.mediaId !== mediaId || target.deletedAt)
 				throw new CommentNotFoundError();
+			replyAuthorId = target.authorId;
 			placement = {
 				parentId: target.depth < 3 ? target.id : target.parentId,
 				replyToId: target.id,
@@ -213,18 +219,25 @@ export async function addComment(
 			.values({ mediaId, authorId: userId, text: trimmed, ...placement })
 			.returning({ id: comments.id });
 
+		// one notice per person: later assignments win, so the order is the precedence
+		// (thread_comment < comment < comment_reply < mention)
+		const kinds = new Map<number, NotificationKind>();
+		for (const { authorId } of earlier) kinds.set(authorId, 'thread_comment');
+		kinds.set(m.uploaderId, 'comment');
+		if (replyAuthorId !== null) kinds.set(replyAuthorId, 'comment_reply');
+		for (const { userId: mentionedId } of mentioned) kinds.set(mentionedId, 'mention');
+
 		const base = {
 			actorId: userId,
 			contentType: 'comment',
 			contentId: inserted.id,
 			mediaId,
-			detail: commentExcerpt(trimmed)
+			detail: commentExcerpt(renderMentionsPlain(trimmed, names))
 		} as const;
-		await notify(tx, { ...base, userId: m.uploaderId, kind: 'comment' });
-		for (const { authorId } of earlier) {
-			// the uploader got `comment` above; the author never hears about their own comment (notify skips them)
-			if (authorId === m.uploaderId) continue;
-			await notify(tx, { ...base, userId: authorId, kind: 'thread_comment' });
+		// ascending user id keeps the per-recipient locks in notify from deadlocking concurrent comments;
+		// notify skips the author themselves
+		for (const [recipient, kind] of [...kinds].sort((x, y) => x[0] - y[0])) {
+			await notify(tx, { ...base, userId: recipient, kind });
 		}
 
 		const rows = await selectRows(tx, userId, eq(comments.id, inserted.id));
