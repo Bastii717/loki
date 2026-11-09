@@ -35,6 +35,26 @@ export function renderMentionsPlain(text: string, names: Record<string, string>)
 	return text.replace(TOKEN_RE, (_, id: string) => `@${names[id] ?? 'unknown member'}`);
 }
 
+/**
+ * The editable form of a stored text: tokens of members in `names` become `@<name>` and yield one
+ * pick per member; unknown tokens stay raw, which `encodeMentions` leaves untouched, so they survive
+ * an edit unchanged. As when posting, a hand-typed plain `@Name` that equals a picked name becomes a
+ * token on save too.
+ */
+export function editableMentions(
+	text: string,
+	names: Record<string, string>
+): { text: string; picks: { id: string; name: string }[] } {
+	const picks = new Map<string, string>();
+	const out = text.replace(TOKEN_RE, (token, id: string) => {
+		const name = names[id];
+		if (name === undefined) return token;
+		picks.set(id, name);
+		return `@${name}`;
+	});
+	return { text: out, picks: [...picks].map(([id, name]) => ({ id, name })) };
+}
+
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**

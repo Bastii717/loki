@@ -1,7 +1,7 @@
-import { and, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from './db';
-import { commentVotes, comments, media, mediaViews, users } from './db/schema';
+import { commentVotes, comments, media, mediaViews, notifications, users } from './db/schema';
 import {
 	assertNotTimedOut,
 	resolveAfterDelete,
@@ -13,8 +13,9 @@ import type { SessionUser } from './auth/session';
 import { MediaNotFoundError, type VoteValue } from './votes';
 import { MAX_COMMENT_LENGTH, MAX_MENTIONS, mentionIds } from '../mentions';
 import { mentionNames, resolveMentions, TooManyMentionsError } from './mentions';
+import { EDIT_WINDOW_MS } from '../comment-tree';
 
-export { TooManyMentionsError, MAX_COMMENT_LENGTH };
+export { TooManyMentionsError, MAX_COMMENT_LENGTH, EDIT_WINDOW_MS };
 
 export class CommentTextError extends Error {
 	constructor() {
@@ -33,7 +34,12 @@ export class CommentVoteOwnError extends Error {
 }
 export class CommentPermissionError extends Error {
 	constructor() {
-		super('Not allowed to delete this comment');
+		super('Not allowed to change this comment');
+	}
+}
+export class CommentEditWindowError extends Error {
+	constructor() {
+		super('Comments can only be edited for 5 minutes');
 	}
 }
 
@@ -62,6 +68,8 @@ export interface CommentItem {
 	userVote: -1 | 0 | 1;
 	underReview: boolean;
 	createdAt: string;
+	/** When the author last edited the text (ISO), null if never; null on tombstones. */
+	editedAt: string | null;
 }
 
 const parentComments = alias(comments, 'parent_comments');
@@ -82,7 +90,8 @@ const columnsFor = (viewerId: number) => ({
 	score: sql<number>`coalesce((select sum(${commentVotes.value}) from ${commentVotes} where ${commentVotes.commentId} = ${comments.id}), 0)::int`,
 	userVote: sql<number>`coalesce((select ${commentVotes.value} from ${commentVotes} where ${commentVotes.commentId} = ${comments.id} and ${commentVotes.userId} = ${viewerId}), 0)::int`,
 	underReview: underReviewSql('comment', comments.id, comments.reviewedAt),
-	createdAt: comments.createdAt
+	createdAt: comments.createdAt,
+	editedAt: comments.editedAt
 });
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -121,7 +130,8 @@ function toItem(r: Row, names: Record<string, string>, revealAll: boolean): Comm
 			mentions: {},
 			score: 0,
 			userVote: 0,
-			underReview: false
+			underReview: false,
+			editedAt: null
 		};
 	}
 	const hidden = r.underReview && !revealAll;
@@ -140,7 +150,8 @@ function toItem(r: Row, names: Record<string, string>, revealAll: boolean): Comm
 				),
 		score: r.score,
 		userVote: Math.sign(r.userVote) as -1 | 0 | 1,
-		underReview: r.underReview
+		underReview: r.underReview,
+		editedAt: r.editedAt?.toISOString() ?? null
 	};
 }
 
@@ -250,6 +261,102 @@ export async function addComment(
 		const [row] = await selectRows(tx, userId, eq(comments.id, inserted.id));
 		return toItem(row, names, false);
 	});
+}
+
+/**
+ * Replaces the text of the author's own comment within EDIT_WINDOW_MS of posting and marks it
+ * edited. Same text rules as addComment; only members newly mentioned by the edit are notified.
+ * Tombstones and comments hidden for review count as missing; anyone but the author gets
+ * CommentPermissionError (moderators delete instead).
+ */
+export async function editComment(
+	userId: number,
+	commentId: number,
+	text: string
+): Promise<CommentItem> {
+	const trimmed = text.trim();
+	if (trimmed.length < 1 || trimmed.length > MAX_COMMENT_LENGTH) throw new CommentTextError();
+	if (mentionIds(trimmed).length > MAX_MENTIONS) throw new TooManyMentionsError();
+	await assertNotTimedOut({ id: userId });
+	// resolved up front: inside the transaction only `tx` may be used (see addComment)
+	const mentioned = await resolveMentions(trimmed);
+	const names = await mentionNames(mentionIds(trimmed));
+	return db.transaction(async (tx) => {
+		// locked so a concurrent delete, reply or second edit serialises with this one
+		const [c] = await tx
+			.select({
+				authorId: comments.authorId,
+				text: comments.text,
+				deletedAt: comments.deletedAt,
+				mediaId: comments.mediaId,
+				// on the database clock, like created_at itself
+				expired: sql<boolean>`(now() - ${comments.createdAt}) > make_interval(secs => ${EDIT_WINDOW_MS / 1000})`
+			})
+			.from(comments)
+			.where(eq(comments.id, commentId))
+			.for('update');
+		if (!c || c.deletedAt) throw new CommentNotFoundError();
+		if (await hiddenForReview(tx, commentId)) throw new CommentNotFoundError();
+		if (c.authorId !== userId) throw new CommentPermissionError();
+		if (c.expired) throw new CommentEditWindowError();
+
+		// an unchanged save is no edit: no marker, no notices
+		if (trimmed !== c.text) await saveEdit(tx, userId, commentId, c, trimmed, mentioned);
+
+		const [row] = await selectRows(tx, userId, eq(comments.id, commentId));
+		return toItem(row, names, false);
+	});
+}
+
+/** Writes the new text with the edit marker and notifies members first mentioned by it. */
+async function saveEdit(
+	tx: Tx,
+	userId: number,
+	commentId: number,
+	c: { text: string; mediaId: number },
+	trimmed: string,
+	mentioned: { userId: number; publicId: string }[]
+): Promise<void> {
+	await tx
+		.update(comments)
+		.set({ text: trimmed, editedAt: sql`now()` })
+		.where(eq(comments.id, commentId));
+
+	// only members the edit newly mentions hear about it, and never twice for one comment
+	// (mention, edit it away, mention again); ascending user id keeps the per-recipient locks in
+	// notify from deadlocking (see addComment)
+	const before = new Set(mentionIds(c.text));
+	const candidates = mentioned.filter((m) => !before.has(m.publicId)).map((m) => m.userId);
+	const told =
+		candidates.length === 0
+			? new Set<number>()
+			: new Set(
+					(
+						await tx
+							.select({ userId: notifications.userId })
+							.from(notifications)
+							.where(
+								and(
+									inArray(notifications.userId, candidates),
+									eq(notifications.kind, 'mention'),
+									eq(notifications.contentType, 'comment'),
+									eq(notifications.contentId, commentId)
+								)
+							)
+					).map((r) => r.userId)
+				);
+	const fresh = candidates.filter((id) => !told.has(id)).sort((a, b) => a - b);
+	for (const recipient of fresh) {
+		await notify(tx, {
+			userId: recipient,
+			kind: 'mention',
+			actorId: userId,
+			contentType: 'comment',
+			contentId: commentId,
+			mediaId: c.mediaId,
+			detail: storedCommentExcerpt(trimmed)
+		});
+	}
 }
 
 /**

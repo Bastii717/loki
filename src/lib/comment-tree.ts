@@ -3,6 +3,9 @@ import type { CommentItem } from './server/comments';
 
 export type CommentSort = 'top' | 'new';
 
+/** How long after posting the author may edit a comment (the server enforces it; shared with it). */
+export const EDIT_WINDOW_MS = 5 * 60_000;
+
 export interface CommentNode {
 	item: CommentItem;
 	replies: CommentNode[];
@@ -64,7 +67,8 @@ export function tombstoneOf(item: CommentItem): CommentItem {
 		text: null,
 		mentions: {},
 		userVote: 0,
-		underReview: false
+		underReview: false,
+		editedAt: null
 	};
 }
 
@@ -125,14 +129,20 @@ export interface CommentSection {
 	lockTitle: string | undefined;
 	/** Id of the comment whose inline reply composer is open, if any. */
 	replyingTo: string | null;
+	/** Id of the comment being edited in place, if any (never open together with a reply). */
+	editing: string | null;
 	/** Id of the comment a `#c-<pid>` deep link points at, while it is highlighted. */
 	highlighted: string | null;
 	/** Explains the write lock via `show` and returns true while writes are locked. */
 	blocked(show: (message: string) => void): boolean;
 	/** Opens the inline reply composer under `id`, or closes it with null. */
 	openReply(id: string | null): void;
+	/** Opens the in-place editor for `id` (closing any reply composer), or closes it with null. */
+	openEdit(id: string | null): void;
 	/** A comment or reply was created. */
 	posted(item: CommentItem): void;
+	/** A comment was edited; replaces it in the list. */
+	edited(item: CommentItem): void;
 	/** A comment was deleted on the server (or was already gone). */
 	deleted(id: string): void;
 }

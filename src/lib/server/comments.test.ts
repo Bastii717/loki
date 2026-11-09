@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from './db';
 import { comments, media, mediaViews, notifications, users } from './db/schema';
 import { resetDb, setupDb, testUser } from './db/test-utils';
@@ -9,7 +9,10 @@ import {
 	CommentPermissionError,
 	CommentTextError,
 	CommentVoteOwnError,
+	CommentEditWindowError,
 	deleteComment,
+	editComment,
+	EDIT_WINDOW_MS,
 	listComments,
 	markSeen,
 	voteComment
@@ -880,5 +883,210 @@ describe('voteComment', () => {
 		const cm = await cid(await addComment(a.id, id, 'hi'));
 		await addOpenReports('comment', cm, a.id, env.REPORT_REVIEW_THRESHOLD);
 		expect(await voteComment(b.id, cm, 1)).toEqual({ score: 1, userVote: 1 });
+	});
+});
+
+describe('editComment', () => {
+	const noticesOf = (userId: number) =>
+		db
+			.select()
+			.from(notifications)
+			.where(eq(notifications.userId, userId))
+			.orderBy(notifications.id);
+
+	/** Moves the comment's creation `minutes` into the past. */
+	const backdate = (commentId: number, minutes: number) =>
+		db
+			.update(comments)
+			.set({ createdAt: sql`now() - make_interval(mins => ${minutes})` })
+			.where(eq(comments.id, commentId));
+
+	it('is a five-minute window', () => {
+		expect(EDIT_WINDOW_MS).toBe(5 * 60_000);
+	});
+
+	it('updates the trimmed text inside the window and sets editedAt', async () => {
+		const u = await testUser();
+		const id = await addMedia(u.id);
+		const posted = await addComment(u.id, id, 'tpyo');
+		expect(posted.editedAt).toBeNull();
+		await backdate(await cid(posted), 4);
+		const edited = await editComment(u.id, await cid(posted), '  typo  ');
+		expect(edited).toMatchObject({ id: posted.id, text: 'typo', deleted: false });
+		expect(edited.editedAt).not.toBeNull();
+		expect(Number.isNaN(Date.parse(edited.editedAt!))).toBe(false);
+		const [listed] = await listComments(id, u.id);
+		expect(listed).toMatchObject({ text: 'typo', editedAt: edited.editedAt });
+	});
+
+	it('rejects edits after the window', async () => {
+		const u = await testUser();
+		const id = await addMedia(u.id);
+		const posted = await addComment(u.id, id, 'frozen');
+		await backdate(await cid(posted), 6);
+		await expect(editComment(u.id, await cid(posted), 'changed')).rejects.toBeInstanceOf(
+			CommentEditWindowError
+		);
+		await expect(editComment(u.id, await cid(posted), 'changed')).rejects.toThrow(
+			'Comments can only be edited for 5 minutes'
+		);
+		const [listed] = await listComments(id, u.id);
+		expect(listed).toMatchObject({ text: 'frozen', editedAt: null });
+	});
+
+	it('only the author may edit, not even a moderator', async () => {
+		const u = await testUser();
+		const other = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const id = await addMedia(u.id);
+		const posted = await cid(await addComment(u.id, id, 'mine'));
+		await expect(editComment(other.id, posted, 'yours')).rejects.toBeInstanceOf(
+			CommentPermissionError
+		);
+		await expect(editComment(mod.id, posted, 'yours')).rejects.toBeInstanceOf(
+			CommentPermissionError
+		);
+		expect((await listComments(id, u.id))[0].text).toBe('mine');
+	});
+
+	it('treats missing comments, tombstones and comments under review as not found', async () => {
+		const u = await testUser();
+		const b = await testUser();
+		const id = await addMedia(u.id);
+		await expect(editComment(u.id, 999999, 'x')).rejects.toBeInstanceOf(CommentNotFoundError);
+		const parent = await addComment(u.id, id, 'gone soon');
+		await addComment(b.id, id, 'reply', await cid(parent));
+		await deleteComment(asUser(u), await cid(parent));
+		await expect(editComment(u.id, await cid(parent), 'back')).rejects.toBeInstanceOf(
+			CommentNotFoundError
+		);
+		const reported = await cid(await addComment(u.id, id, 'boese'));
+		await addOpenReports('comment', reported, u.id, OVER_THRESHOLD);
+		await expect(editComment(u.id, reported, 'harmlos')).rejects.toBeInstanceOf(
+			CommentNotFoundError
+		);
+		const onHiddenMeme = await cid(await addComment(u.id, id, 'hidden meme'));
+		await addOpenReports('meme', id, u.id, OVER_THRESHOLD);
+		await expect(editComment(u.id, onHiddenMeme, 'x')).rejects.toBeInstanceOf(CommentNotFoundError);
+	});
+
+	it('is blocked for a timed-out author', async () => {
+		const u = await testUser();
+		const mod = await testUser({ role: 'moderator' });
+		const id = await addMedia(u.id);
+		const posted = await cid(await addComment(u.id, id, 'hi'));
+		await timeOut(u.id, mod.id);
+		await expect(editComment(u.id, posted, 'ho')).rejects.toBeInstanceOf(TimeoutActiveError);
+	});
+
+	it('applies the length and mention rules of posting', async () => {
+		const u = await testUser();
+		const members = await Promise.all(Array.from({ length: 6 }, () => testUser()));
+		const id = await addMedia(u.id);
+		const posted = await cid(await addComment(u.id, id, 'hi'));
+		await expect(editComment(u.id, posted, '   ')).rejects.toBeInstanceOf(CommentTextError);
+		await expect(editComment(u.id, posted, 'x'.repeat(2001))).rejects.toBeInstanceOf(
+			CommentTextError
+		);
+		const tokens = members.map((m) => mentionToken(m.publicId));
+		await expect(editComment(u.id, posted, tokens.join(' '))).rejects.toBeInstanceOf(
+			TooManyMentionsError
+		);
+		await expect(editComment(u.id, posted, tokens.slice(0, 5).join(' '))).resolves.toBeTruthy();
+	});
+
+	it('notifies only newly mentioned members, once', async () => {
+		const owner = await testUser();
+		const target = await testUser();
+		const author = await testUser();
+		const known = await testUser();
+		const fresh = await testUser({ displayName: 'Fresh', displayNameKey: 'fresh' });
+		const id = await addMedia(owner.id);
+		const answered = await addComment(target.id, id, 'question');
+		const reply = await addComment(
+			author.id,
+			id,
+			`hi ${mentionToken(known.publicId)}`,
+			await cid(answered)
+		);
+		await db.delete(notifications);
+
+		const edited = await editComment(
+			author.id,
+			await cid(reply),
+			`hi ${mentionToken(known.publicId)} and ${mentionToken(fresh.publicId)} ${mentionToken(fresh.publicId)}`
+		);
+		expect(edited.mentions).toEqual({
+			[known.publicId]: known.username,
+			[fresh.publicId]: 'Fresh'
+		});
+
+		const forFresh = await noticesOf(fresh.id);
+		expect(forFresh).toHaveLength(1);
+		expect(forFresh[0]).toMatchObject({
+			kind: 'mention',
+			actorId: author.id,
+			mediaId: id,
+			contentType: 'comment',
+			contentId: await cid(reply),
+			count: 1
+		});
+		for (const quiet of [owner, target, known, author]) {
+			expect(await noticesOf(quiet.id), quiet.username).toHaveLength(0);
+		}
+	});
+
+	it('an unchanged save is no edit: no marker, no notice', async () => {
+		const owner = await testUser();
+		const author = await testUser();
+		const lena = await testUser();
+		const id = await addMedia(owner.id);
+		const text = `hi ${mentionToken(lena.publicId)}`;
+		const posted = await addComment(author.id, id, text);
+		await db.delete(notifications);
+		const saved = await editComment(author.id, await cid(posted), `  ${text} `);
+		expect(saved).toMatchObject({ text, editedAt: null });
+		expect((await listComments(id, author.id))[0].editedAt).toBeNull();
+		expect(await db.select().from(notifications)).toHaveLength(0);
+	});
+
+	it('mentioning someone again after editing them away does not notify twice', async () => {
+		const owner = await testUser();
+		const author = await testUser();
+		const lena = await testUser();
+		const id = await addMedia(owner.id);
+		const posted = await cid(await addComment(author.id, id, 'hi'));
+		await db.delete(notifications);
+		await editComment(author.id, posted, `hi ${mentionToken(lena.publicId)}`);
+		await editComment(author.id, posted, 'hi');
+		await editComment(author.id, posted, `hi again ${mentionToken(lena.publicId)}`);
+		const rows = await noticesOf(lena.id);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({ kind: 'mention', contentId: posted, count: 1 });
+	});
+
+	it('an edit that newly mentions the uploader gives them one mention and nothing else', async () => {
+		const owner = await testUser();
+		const author = await testUser();
+		const id = await addMedia(owner.id);
+		const posted = await cid(await addComment(author.id, id, 'nice'));
+		await db.delete(notifications);
+		await editComment(author.id, posted, `nice ${mentionToken(owner.publicId)}`);
+		const rows = await noticesOf(owner.id);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({ kind: 'mention', contentId: posted, count: 1 });
+		expect(await db.select().from(notifications)).toHaveLength(1);
+	});
+
+	it('editing a mention away sends nothing', async () => {
+		const owner = await testUser();
+		const author = await testUser();
+		const lena = await testUser();
+		const id = await addMedia(owner.id);
+		const posted = await addComment(author.id, id, `hi ${mentionToken(lena.publicId)}`);
+		await db.delete(notifications);
+		const edited = await editComment(author.id, await cid(posted), 'hi everyone');
+		expect(edited.mentions).toEqual({});
+		expect(await db.select().from(notifications)).toHaveLength(0);
 	});
 });

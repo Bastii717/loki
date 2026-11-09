@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	editableMentions,
 	encodeMentions,
 	MAX_MENTIONS,
 	mentionIds,
@@ -119,5 +120,36 @@ describe('mentionQuery', () => {
 		expect(mentionQuery(`@${'a'.repeat(50)}`)).toEqual({ start: 0, q: 'a'.repeat(50) });
 		expect(mentionQuery(`@${'a'.repeat(25)} ${'b'.repeat(25)}`)).toBeNull();
 		expect(mentionQuery(`@${'a'.repeat(51)}`)).toBeNull();
+	});
+});
+
+describe('editableMentions', () => {
+	const lena = 'aaaaaaaaaaaa';
+	const tom = 'bbbbbbbbbbbb';
+	const gone = 'cccccccccccc';
+	const names = { [lena]: 'Lena K.', [tom]: 'Tom' };
+
+	it('turns a known token into @Name and a pick', () => {
+		expect(editableMentions(`hi ${mentionToken(lena)}!`, names)).toEqual({
+			text: 'hi @Lena K.!',
+			picks: [{ id: lena, name: 'Lena K.' }]
+		});
+	});
+
+	it('yields one pick for a repeated token', () => {
+		const out = editableMentions(`${mentionToken(tom)} and ${mentionToken(tom)}`, names);
+		expect(out.text).toBe('@Tom and @Tom');
+		expect(out.picks).toEqual([{ id: tom, name: 'Tom' }]);
+	});
+
+	it('leaves an unknown token as it is', () => {
+		const raw = `hey ${mentionToken(gone)}`;
+		expect(editableMentions(raw, names)).toEqual({ text: raw, picks: [] });
+	});
+
+	it('round-trips through encodeMentions', () => {
+		const t = `${mentionToken(lena)} meet ${mentionToken(tom)}, not ${mentionToken(gone)}`;
+		const { text, picks } = editableMentions(t, names);
+		expect(encodeMentions(text, picks)).toBe(t);
 	});
 });

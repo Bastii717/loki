@@ -28,6 +28,7 @@ function comment(overrides: Partial<CommentItem> = {}): CommentItem {
 		userVote: 0,
 		underReview: false,
 		createdAt: new Date().toISOString(),
+		editedAt: null,
 		...overrides
 	};
 }
@@ -49,10 +50,13 @@ function section(overrides: Partial<CommentSection> = {}): CommentSection {
 		locked: false,
 		lockTitle: undefined,
 		replyingTo: null,
+		editing: null,
 		highlighted: null,
 		blocked: () => false,
 		openReply: () => {},
+		openEdit: () => {},
 		posted: () => {},
+		edited: () => {},
 		deleted: () => {},
 		...overrides
 	};
@@ -193,5 +197,53 @@ describe('CommentNode', () => {
 	it('does not pre-fill on levels 1 and 2', () => {
 		const body = html(node(comment({ depth: 2 })), { replyingTo: COMMENT });
 		expect(body).toMatch(/<textarea\b[^>]*><\/textarea>/);
+	});
+
+	describe('editing', () => {
+		const own = (overrides: Partial<CommentItem> = {}) =>
+			comment({ authorId: VIEWER, author: 'Vi Ewer', ...overrides });
+		const editButton = (body: string) => button(body, 'Edit your comment');
+
+		it('offers Edit on an own fresh comment', () => {
+			expect(editButton(html(node(own())))).not.toBeNull();
+		});
+
+		it("offers no Edit on someone else's comment, even to moderators", () => {
+			expect(editButton(html(node(comment())))).toBeNull();
+			expect(
+				editButton(html(node(comment()), { viewer: { id: VIEWER, canModerate: true } }))
+			).toBeNull();
+		});
+
+		it('offers no Edit once the five minutes are over', () => {
+			const old = new Date(Date.now() - 6 * 60_000).toISOString();
+			expect(editButton(html(node(own({ createdAt: old }))))).toBeNull();
+		});
+
+		it('offers no Edit on a tombstone or on withheld text', () => {
+			expect(editButton(html(node(tombstone({ authorId: VIEWER }))))).toBeNull();
+			expect(editButton(html(node(own({ text: null, underReview: true }))))).toBeNull();
+			// a moderator-author still sees their text under review, but may not edit it
+			expect(editButton(html(node(own({ underReview: true }))))).toBeNull();
+		});
+
+		it('marks an edited comment with the edit time as tooltip', () => {
+			const editedAt = '2026-11-09T10:02:00.000Z';
+			const body = html(node(comment({ editedAt })));
+			expect(body).toMatch(/<span class="edited[^"]*" title="Edited [^"]+">\(edited\)<\/span>/);
+			expect(html(node(comment()))).not.toContain('(edited)');
+		});
+
+		it('replaces the text with a prefilled Save composer while editing', () => {
+			const body = html(node(own({ text: `hi @[u:${LENA}]`, mentions: { [LENA]: 'Lena K.' } })), {
+				editing: COMMENT
+			});
+			expect(body).toMatch(
+				/<textarea\b[^>]*aria-label="Edit your comment"[^>]*>hi @Lena K\.<\/textarea>/
+			);
+			expect(body).toMatch(/<button\b[^>]*type="submit"[^>]*>Save<\/button>/);
+			expect(body).not.toMatch(/<p class="text/);
+			expect(body).toContain('>Cancel<');
+		});
 	});
 });

@@ -67,6 +67,7 @@ function comment(overrides: Partial<CommentItem> = {}): CommentItem {
 		userVote: 0,
 		underReview: false,
 		createdAt: new Date().toISOString(),
+		editedAt: null,
 		...overrides
 	};
 }
