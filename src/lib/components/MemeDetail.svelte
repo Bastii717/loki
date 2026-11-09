@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import ArrowBigDown from 'lucide-svelte/icons/arrow-big-down';
 	import ArrowBigUp from 'lucide-svelte/icons/arrow-big-up';
 	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
@@ -17,6 +18,14 @@
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import WandSparkles from 'lucide-svelte/icons/wand-sparkles';
 	import { apiErrorMessage } from '../api-error';
+	import {
+		buildCommentTree,
+		readSort,
+		removeComment,
+		writeSort,
+		type CommentSection,
+		type CommentSort
+	} from '../comment-tree';
 	import { lockMessage, refreshStatus, useStatus } from '../status-context';
 	import { relativeTime } from '../time';
 	import { isPublicId } from '../public-id';
@@ -25,6 +34,8 @@
 	import type { FeedItem } from '../server/feed';
 	import Avatar from './Avatar.svelte';
 	import AwardBadge from './AwardBadge.svelte';
+	import CommentComposer from './CommentComposer.svelte';
+	import CommentNode from './CommentNode.svelte';
 	import ReportButton from './ReportButton.svelte';
 	import RoleBadge from './RoleBadge.svelte';
 	import UnderReviewBadge from './UnderReviewBadge.svelte';
@@ -56,9 +67,6 @@
 	let commentCount = $state(item.commentCount);
 	// svelte-ignore state_referenced_locally
 	let viewCount = $state(item.viewCount);
-	let text = $state('');
-	let sending = $state(false);
-	let commentError = $state('');
 	// vote and favorite errors show next to those controls, not under the comment form
 	let reactionError = $state('');
 	// svelte-ignore state_referenced_locally
@@ -243,47 +251,81 @@
 	}
 
 	// ---- comments
-	async function submit(e: SubmitEvent) {
-		e.preventDefault();
-		const value = text.trim();
-		if (!value || sending || blocked((m) => (commentError = m))) return;
-		sending = true;
-		commentError = '';
-		try {
-			const res = await fetch(`/api/memes/${item.id}/comments`, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ text: value })
-			});
-			if (!res.ok) {
-				commentError = await apiErrorMessage(res, 'Could not send the comment.');
-				return;
-			}
-			comments.push((await res.json()) as CommentItem);
-			commentCount += 1;
-			text = '';
-		} catch {
-			commentError = 'Could not send the comment.';
-		} finally {
-			sending = false;
+	// Top until the stored choice is read on mount (SSR has no storage).
+	let sort = $state<CommentSort>('top');
+	// top-level comments posted in this page view stay on top under Top until the next load
+	const pinned = new SvelteSet<string>();
+	let replyingTo = $state<string | null>(null);
+	let highlighted = $state<string | null>(null);
+	const tree = $derived(buildCommentTree(comments, sort, pinned));
+	const liveCount = $derived(comments.filter((c) => !c.deleted).length);
+
+	onMount(() => {
+		sort = readSort();
+	});
+
+	function setSort(next: CommentSort) {
+		sort = next;
+		writeSort(next);
+	}
+
+	function posted(c: CommentItem) {
+		comments.push(c);
+		commentCount += 1;
+		if (c.parentId === null) pinned.add(c.id);
+	}
+
+	function deleted(id: string) {
+		const c = comments.find((x) => x.id === id);
+		if (!c || c.deleted) return;
+		comments = removeComment(comments, id);
+		commentCount = Math.max(0, commentCount - 1);
+		if (replyingTo !== null && !comments.some((x) => x.id === replyingTo && !x.deleted)) {
+			replyingTo = null;
 		}
 	}
 
-	async function remove(c: CommentItem) {
-		if (blocked((m) => (commentError = m))) return;
-		commentError = '';
-		try {
-			const res = await fetch(`/api/comments/${c.id}`, { method: 'DELETE' });
-			if (!res.ok && res.status !== 404) {
-				commentError = await apiErrorMessage(res, 'Could not delete the comment.');
-				return;
-			}
-			if (comments.some((x) => x.id === c.id)) commentCount = Math.max(0, commentCount - 1);
-			comments = comments.filter((x) => x.id !== c.id);
-		} catch {
-			commentError = 'Could not delete the comment.';
+	const section: CommentSection = {
+		get mediaId() {
+			return item.id;
+		},
+		get viewer() {
+			return viewer;
+		},
+		get locked() {
+			return locked;
+		},
+		get lockTitle() {
+			return lockTitle;
+		},
+		get replyingTo() {
+			return replyingTo;
+		},
+		get highlighted() {
+			return highlighted;
+		},
+		blocked,
+		openReply: (id) => (replyingTo = id),
+		posted,
+		deleted
+	};
+
+	// `#c-<pid>` (notification links): scroll to the comment and flash it; a comment that is gone
+	// leaves the page at the comment section. Re-runs when the hash changes on the same meme.
+	$effect(() => {
+		const m = /^#c-([0-9A-Za-z]{12})$/.exec(page.url.hash);
+		if (!m) return;
+		const el = document.getElementById(`c-${m[1]}`);
+		if (!el) {
+			document.getElementById('comments')?.scrollIntoView();
+			return;
 		}
-	}
+		const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+		el.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+		highlighted = m[1];
+		const timer = setTimeout(() => (highlighted = null), 3000);
+		return () => clearTimeout(timer);
+	});
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -478,64 +520,34 @@
 		{/if}
 	</section>
 
-	<section class="comments" aria-labelledby="comments-h">
-		<h2 id="comments-h">Comments ({comments.length})</h2>
-		<form onsubmit={submit}>
-			<textarea
-				bind:value={text}
-				placeholder="Write a comment…"
-				aria-label="Write a comment"
-				maxlength="2000"
-				rows="2"></textarea>
-			<button
-				type="submit"
-				disabled={sending || text.trim() === ''}
-				aria-disabled={locked ? 'true' : undefined}
-				title={lockTitle}>Send</button
-			>
-		</form>
-		{#if commentError}
-			<p class="error" role="alert">{commentError}</p>
-		{/if}
+	<section class="comments" id="comments" aria-labelledby="comments-h">
+		<div class="comments-head">
+			<h2 id="comments-h">Comments ({liveCount})</h2>
+			{#if comments.length > 0}
+				<div class="sort" role="group" aria-label="Sort comments">
+					<button type="button" aria-pressed={sort === 'top'} onclick={() => setSort('top')}
+						>Top</button
+					>
+					<button type="button" aria-pressed={sort === 'new'} onclick={() => setSort('new')}
+						>New</button
+					>
+				</div>
+			{/if}
+		</div>
+		<CommentComposer
+			mediaId={item.id}
+			label="Write a comment"
+			{locked}
+			{lockTitle}
+			{blocked}
+			onposted={posted}
+		/>
 		{#if comments.length === 0}
 			<p class="empty">No comments yet — be the first!</p>
 		{:else}
 			<ul class="list">
-				{#each comments as c (c.id)}
-					<li>
-						<div class="head">
-							<span class="author">
-								<Avatar thumbKey={c.authorAvatar} name={c.author} size={24} />
-								<b><a href={userHref(c.authorId)} class="name">{c.author}</a></b><RoleBadge
-									role={c.authorRole}
-								/>
-							</span>
-							<time datetime={c.createdAt}>{relativeTime(c.createdAt)}</time>
-							<span class="actions">
-								{#if c.authorId === viewer.id || viewer.canModerate}
-									<button
-										type="button"
-										class="del"
-										onclick={() => remove(c)}
-										aria-disabled={locked ? 'true' : undefined}
-										title={lockTitle}
-										aria-label="Delete comment by {c.author}">Delete</button
-									>
-								{/if}
-								<ReportButton
-									contentType="comment"
-									contentId={c.id}
-									mine={c.authorId === viewer.id}
-								/>
-							</span>
-						</div>
-						{#if c.text === null}
-							<p class="review"><EyeOff size={14} aria-hidden="true" /> Under review</p>
-						{:else}
-							{#if c.underReview}<p class="review-note"><UnderReviewBadge /></p>{/if}
-							<p>{c.text}</p>
-						{/if}
-					</li>
+				{#each tree as node (node.item.id)}
+					<CommentNode {node} {section} />
 				{/each}
 			</ul>
 		{/if}
@@ -836,42 +848,41 @@
 		padding: 0 var(--gutter);
 	}
 
+	.comments-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+
 	h2 {
 		margin: 8px 0;
 		font-size: 15px;
 	}
 
-	form {
+	.sort {
 		display: flex;
-		gap: 8px;
-		align-items: flex-end;
-	}
-
-	textarea {
-		flex: 1;
-		min-width: 0;
-		resize: none;
-		padding: 8px 10px;
+		padding: 2px;
 		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		background: var(--surface);
-		color: var(--text);
-		font: inherit;
+		border-radius: var(--radius-pill);
 	}
 
-	form button {
-		padding: 10px 14px;
+	.sort button {
+		min-width: 52px;
+		min-height: 32px;
+		padding: 0 12px;
 		border: 0;
 		border-radius: var(--radius-pill);
-		background: var(--accent);
-		color: var(--accent-text);
+		background: none;
+		color: var(--text-muted);
+		font-size: 13px;
 		font-weight: 600;
 		cursor: pointer;
 	}
 
-	form button:disabled {
-		opacity: 0.5;
-		cursor: default;
+	.sort button[aria-pressed='true'] {
+		background: var(--accent-soft);
+		color: var(--accent-soft-text);
 	}
 
 	.error {
@@ -891,65 +902,9 @@
 		list-style: none;
 	}
 
-	.list li {
+	.list > :global(li) {
 		padding: 10px 0;
 		border-top: 1px solid var(--border);
-	}
-
-	.head {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		font-size: 13px;
-	}
-
-	.author {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		min-width: 0;
-	}
-
-	.author b {
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.head time {
-		flex: none;
-		color: var(--text-muted);
-		white-space: nowrap;
-	}
-
-	.actions {
-		display: flex;
-		align-items: center;
-		margin-left: auto;
-	}
-
-	.del {
-		padding: 4px 8px;
-		border: 0;
-		background: none;
-		color: var(--down);
-		font-size: 12px;
-		cursor: pointer;
-	}
-
-	.list p {
-		margin: 4px 0 0;
-		overflow-wrap: anywhere;
-		white-space: pre-wrap;
-	}
-
-	.list p.review {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		color: var(--text-muted);
-		font-style: italic;
 	}
 
 	.review-note,
