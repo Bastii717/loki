@@ -54,4 +54,37 @@ describe('mentions', () => {
 			])
 		).toBe('@[u:bbbbbbbbbbbb] hi');
 	});
+
+	it('encodeMentions ignores picks with an empty or blank name', () => {
+		expect(
+			encodeMentions('@ hi @Lena', [
+				{ id: 'aaaaaaaaaaaa', name: '' },
+				{ id: 'bbbbbbbbbbbb', name: '   ' }
+			])
+		).toBe('@ hi @Lena');
+	});
+
+	it('encodeMentions does not match a picked name at the start of a longer typed name', () => {
+		const lena = [{ id: 'aaaaaaaaaaaa', name: 'Lena' }];
+		expect(encodeMentions('@Lena Kowalski and @Lenara and @Lena2 and @Lena_k', lena)).toBe(
+			'@[u:aaaaaaaaaaaa] Kowalski and @Lenara and @Lena2 and @Lena_k'
+		);
+		expect(encodeMentions('@Lenä', lena)).toBe('@Lenä');
+	});
+
+	it('encodeMentions matches before end of text, whitespace and punctuation', () => {
+		const lena = [{ id: 'aaaaaaaaaaaa', name: 'Lena' }];
+		const t = mentionToken('aaaaaaaaaaaa');
+		expect(encodeMentions('@Lena', lena)).toBe(t);
+		expect(encodeMentions('@Lena, @Lena! (@Lena) @Lena\nok', lena)).toBe(
+			`${t}, ${t}! (${t}) ${t}\nok`
+		);
+		expect(encodeMentions("@Lena's", lena)).toBe(`${t}'s`);
+	});
+
+	it('encodeMentions treats regex characters in names literally', () => {
+		expect(encodeMentions('@a.b and @axb', [{ id: 'aaaaaaaaaaaa', name: 'a.b' }])).toBe(
+			'@[u:aaaaaaaaaaaa] and @axb'
+		);
+	});
 });

@@ -29,11 +29,20 @@ export function renderMentionsPlain(text: string, names: Record<string, string>)
 	return text.replace(TOKEN_RE, (_, id: string) => `@${names[id] ?? 'unknown member'}`);
 }
 
-/** Turns `@<name>` of picked members back into tokens; longer names win over their prefixes. */
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Turns `@<name>` of picked members back into tokens; longer names win over their prefixes. A
+ * name only matches when followed by the end of the text, whitespace or punctuation (not a letter,
+ * digit, mark or underscore), so a picked "Lena" never swallows the start of "@Lenara". Blank picks
+ * are ignored.
+ */
 export function encodeMentions(text: string, picked: { id: string; name: string }[]): string {
 	let out = text;
-	for (const p of [...picked].sort((a, b) => b.name.length - a.name.length)) {
-		out = out.split(`@${p.name}`).join(mentionToken(p.id));
+	const usable = picked.filter((p) => p.name.trim() !== '');
+	for (const p of usable.sort((a, b) => b.name.length - a.name.length)) {
+		const re = new RegExp(`@${escapeRegExp(p.name)}(?![\\p{L}\\p{N}\\p{M}_])`, 'gu');
+		out = out.replace(re, () => mentionToken(p.id));
 	}
 	return out;
 }
