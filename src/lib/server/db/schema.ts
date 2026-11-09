@@ -189,7 +189,10 @@ export const comments = pgTable(
 		parentId: integer('parent_id').references((): AnyPgColumn => comments.id, {
 			onDelete: 'cascade'
 		}),
-		/** The comment this one answers (any depth); nulled when that comment is deleted. */
+		/**
+		 * The comment this one answers (any depth). An answered comment becomes a tombstone instead of
+		 * being deleted, so the SET NULL is only a safety net.
+		 */
 		replyToId: integer('reply_to_id').references((): AnyPgColumn => comments.id, {
 			onDelete: 'set null'
 		}),
@@ -205,6 +208,7 @@ export const comments = pgTable(
 		index('comments_text_trgm_idx').using('gin', sql`${t.text} gin_trgm_ops`),
 		index('comments_media_created_idx').on(t.mediaId, t.createdAt, t.id),
 		index('comments_parent_idx').on(t.parentId),
+		index('comments_reply_to_idx').on(t.replyToId),
 		check('comments_depth_check', sql`${t.depth} BETWEEN 1 AND 3`)
 	]
 );
@@ -220,7 +224,10 @@ export const commentVotes = pgTable(
 			.references(() => comments.id, { onDelete: 'cascade' }),
 		value: smallint('value').notNull()
 	},
-	(t) => [primaryKey({ columns: [t.userId, t.commentId] })]
+	(t) => [
+		primaryKey({ columns: [t.userId, t.commentId] }),
+		index('comment_votes_comment_idx').on(t.commentId)
+	]
 );
 
 export const mediaViews = pgTable(
