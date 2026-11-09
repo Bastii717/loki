@@ -1,8 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { resetDb, setupDb } from '../../../../../lib/server/db/test-utils';
 import {
+	addOpenReports,
 	insertCommentRow,
 	insertMeme,
+	OVER_THRESHOLD,
 	timeOut,
 	userWithSession
 } from '../../../../../lib/server/moderation-test-utils';
@@ -22,7 +24,7 @@ async function world() {
 	const mod = await userWithSession('moderator');
 	const memeId = await insertMeme(author.user.id);
 	const comment = await insertCommentRow(author.user.id, memeId);
-	return { author, voter, mod, comment };
+	return { author, voter, mod, memeId, comment };
 }
 
 const vote = (pid: string, session: string, body: unknown = { value: 1 }) =>
@@ -61,6 +63,22 @@ describe('POST /api/comments/[pid]/vote', () => {
 	it('answers 403 for the own comment', async () => {
 		const { author, comment } = await world();
 		expect((await vote(comment.publicId, author.session)).response.status).toBe(403);
+	});
+
+	it('answers 404 to members for a comment under review; moderators may vote', async () => {
+		const { author, voter, mod, comment } = await world();
+		await addOpenReports('comment', comment.id, author.user.id, OVER_THRESHOLD);
+		expect((await vote(comment.publicId, voter.session)).response.status).toBe(404);
+		const { response } = await vote(comment.publicId, mod.session);
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({ score: 1, userVote: 1 });
+	});
+
+	it('answers 404 to members for a comment on a meme under review; moderators may vote', async () => {
+		const { author, voter, mod, memeId, comment } = await world();
+		await addOpenReports('meme', memeId, author.user.id, OVER_THRESHOLD);
+		expect((await vote(comment.publicId, voter.session)).response.status).toBe(404);
+		expect((await vote(comment.publicId, mod.session)).response.status).toBe(200);
 	});
 
 	it('answers 403 for a timed-out member', async () => {

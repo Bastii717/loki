@@ -4,6 +4,7 @@ import {
 	CommentVoteOwnError,
 	voteComment
 } from '../../../../../lib/server/comments';
+import { canSeeUnderReview } from '../../../../../lib/server/moderation';
 import { mapModerationError } from '../../../../../lib/server/moderation-http';
 import { isPublicId, resolveCommentId } from '../../../../../lib/server/public-ids';
 import type { VoteValue } from '../../../../../lib/server/votes';
@@ -24,7 +25,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	if (value !== 1 && value !== -1 && value !== 0) error(400, 'value must be 1, -1 or 0');
 
 	try {
-		return json(await voteComment(locals.user!.id, id, value as VoteValue));
+		const user = locals.user!;
+		return json(await voteComment(user.id, id, value as VoteValue, canSeeUnderReview(user)));
 	} catch (e) {
 		if (e instanceof CommentNotFoundError) error(404, 'Not found');
 		if (e instanceof CommentVoteOwnError) error(403, 'Own comments cannot be voted on');
