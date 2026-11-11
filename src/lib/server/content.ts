@@ -72,7 +72,7 @@ export async function saveContent(
 
 /**
  * True when there are rules and the member has not accepted their current version: never accepted,
- * or accepted before the last change. One primary-key query; called on mutations and the root layout load.
+ * or accepted before the last change. One primary-key query; the hook runs it on every non-public, non-exempt request of a signed-in member (reads included) and /welcome on load.
  */
 export async function needsRulesAcceptance(user: {
 	rulesAcceptedAt: Date | null;

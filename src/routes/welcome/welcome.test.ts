@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { acceptRules, saveContent } from '../../lib/server/content';
+import { validateSession } from '../../lib/server/auth/session';
 import { resetDb, setupDb } from '../../lib/server/db/test-utils';
 import { timeOut, userWithSession } from '../../lib/server/moderation-test-utils';
 import { resetRateLimits } from '../../lib/server/rate-limit';
@@ -152,7 +153,12 @@ describe('/welcome accept action', () => {
 
 	it('refuses without the checkbox and stays gated', async () => {
 		const { member } = await world();
-		await accept(member.session, {});
+		const event = {
+			locals: { user: await validateSession(member.session) },
+			request: new Request('https://loki.test/welcome', { method: 'POST', body: new FormData() })
+		};
+		const result = await (actions.accept as unknown as (e: unknown) => Promise<unknown>)(event);
+		expect(result).toMatchObject({ status: 400, data: { error: expect.any(String) } });
 		const get = await callRoute({ handler: page, path: '/', session: member.session });
 		expect(get.response.status).toBe(303);
 	});

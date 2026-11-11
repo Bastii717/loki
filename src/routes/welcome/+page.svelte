@@ -2,12 +2,17 @@
 	import { enhance } from '$app/forms';
 	import Info from 'lucide-svelte/icons/info';
 	import Shield from 'lucide-svelte/icons/shield';
+	import { onMount } from 'svelte';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
 
 	let agreed = $state(false);
 	let submitting = $state(false);
+	// Without JS the checkbox cannot enable the button, so it only starts disabled once hydrated;
+	// the server validates the checkbox either way.
+	let hydrated = $state(false);
+	onMount(() => (hydrated = true));
 </script>
 
 <svelte:head>
@@ -58,7 +63,7 @@
 		{#if form?.error}
 			<p class="error" role="alert">{form.error}</p>
 		{/if}
-		<button type="submit" class="accept" disabled={!agreed || submitting}>
+		<button type="submit" class="accept" disabled={hydrated && (!agreed || submitting)}>
 			{data.changed ? 'Accept the updated rules' : 'Accept & enter Loki'}
 		</button>
 	</form>

@@ -16,7 +16,8 @@ describe('welcome page', () => {
 		expect(body).toContain('<h1>Be nice</h1>');
 		expect(body).toContain('name="agree"');
 		expect(body).toContain("I've read the house rules and I'll stick to them.");
-		expect(body).toMatch(/<button[^>]*disabled[^>]*>\s*Accept &amp; enter Loki/);
+		// enabled in the server render, so the form also submits without JS (the server checks the box)
+		expect(body).toMatch(/<button(?![^>]*disabled)[^>]*>\s*Accept &amp; enter Loki/);
 		expect(body).toContain('action="/logout"');
 		expect(body).toContain('Sign out instead');
 		expect(body).not.toContain('The house rules changed.');
