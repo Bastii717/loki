@@ -1,10 +1,17 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
-import { auditLog } from './db/schema';
+import { auditLog, siteContent, users } from './db/schema';
+import { eq } from 'drizzle-orm';
 import { resetDb, setupDb, testUser } from './db/test-utils';
 import { timeOut } from './moderation-test-utils';
 import { TimeoutActiveError } from './moderation';
-import { ContentPermissionError, getContent, saveContent } from './content';
+import {
+	ContentPermissionError,
+	acceptRules,
+	getContent,
+	needsRulesAcceptance,
+	saveContent
+} from './content';
 import type { SessionUser } from './auth/session';
 
 beforeAll(setupDb);
@@ -118,5 +125,76 @@ describe('content', () => {
 		await expect(saveContent(admin, 'rules', 'x')).rejects.toBeInstanceOf(TimeoutActiveError);
 		expect((await getContent('rules')).markdown).toBe('');
 		expect(await db.select().from(auditLog)).toHaveLength(0);
+	});
+});
+
+const acceptedAt = async (id: number) =>
+	(await db.select().from(users).where(eq(users.id, id)))[0].rulesAcceptedAt;
+
+describe('saveContent no-op and self-acceptance', () => {
+	it('does not bump updatedAt or audit when the markdown is unchanged', async () => {
+		const admin = await userWithRole('admin');
+		await saveContent(admin, 'rules', 'Regeln');
+		const before = (await getContent('rules')).updatedAt;
+		await saveContent(admin, 'rules', 'Regeln');
+		expect((await getContent('rules')).updatedAt).toEqual(before);
+		expect(await db.select().from(auditLog)).toHaveLength(1);
+	});
+
+	it('records the saving admin as having accepted the new rules', async () => {
+		const admin = await userWithRole('admin');
+		const other = await userWithRole('admin');
+		await saveContent(admin, 'rules', 'Regeln');
+		const accepted = await acceptedAt(admin.id);
+		expect(accepted).toBeInstanceOf(Date);
+		expect(accepted).toEqual((await getContent('rules')).updatedAt);
+		expect(await acceptedAt(other.id)).toBeNull();
+		expect(await needsRulesAcceptance({ rulesAcceptedAt: accepted })).toBe(false);
+	});
+
+	it('does not touch the admin acceptance when saving the faq', async () => {
+		const admin = await userWithRole('admin');
+		await saveContent(admin, 'faq', 'Fragen');
+		expect(await acceptedAt(admin.id)).toBeNull();
+	});
+});
+
+describe('needsRulesAcceptance', () => {
+	const put = (markdown: string, updatedAt: Date) =>
+		db.insert(siteContent).values({ key: 'rules', markdown, updatedAt });
+
+	it('is false when there are no rules', async () => {
+		expect(await needsRulesAcceptance({ rulesAcceptedAt: null })).toBe(false);
+		await put('  \n ', new Date());
+		expect(await needsRulesAcceptance({ rulesAcceptedAt: null })).toBe(false);
+	});
+
+	it('is true for rules the member never accepted', async () => {
+		await put('Regeln', new Date());
+		expect(await needsRulesAcceptance({ rulesAcceptedAt: null })).toBe(true);
+	});
+
+	it('is false when accepted after the last change', async () => {
+		await put('Regeln', new Date('2026-01-01T00:00:00Z'));
+		expect(await needsRulesAcceptance({ rulesAcceptedAt: new Date('2026-01-02T00:00:00Z') })).toBe(
+			false
+		);
+	});
+
+	it('is true when accepted before the last change', async () => {
+		await put('Regeln', new Date('2026-01-02T00:00:00Z'));
+		expect(await needsRulesAcceptance({ rulesAcceptedAt: new Date('2026-01-01T00:00:00Z') })).toBe(
+			true
+		);
+	});
+});
+
+describe('acceptRules', () => {
+	it('sets the timestamp, also while timed out', async () => {
+		const member = await userWithRole('member');
+		const other = await userWithRole('admin');
+		await timeOut(member.id, other.id);
+		await acceptRules(member.id);
+		expect(await acceptedAt(member.id)).toBeInstanceOf(Date);
 	});
 });

@@ -120,6 +120,13 @@
       "when": 1794257886053,
       "tag": "0016_comment_edits",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794416269380,
+      "tag": "0017_rules_accepted",
+      "breakpoints": true
     }
   ]
 }

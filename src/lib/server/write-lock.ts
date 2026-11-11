@@ -5,13 +5,14 @@ const RETRY_AFTER = '60';
 const EXEMPT_PATHS = new Set([
 	'/logout',
 	'/login',
+	'/welcome',
 	'/auth/callback',
 	'/share',
 	'/notifications',
 	'/moderation/maintenance'
 ]);
 
-/** Paths that keep working while writes are locked: signing out and in, seen-tracking, the share target, the notifications page (opening a notice marks it read) and the switch itself. */
+/** Paths that keep working while writes are locked: signing out and in, seen-tracking, the house-rules accept action on /welcome (its only mutation; accepting is not a content write, and the rules gate sends everyone there), the share target, the notifications page (opening a notice marks it read) and the switch itself. */
 export function isWriteLockExempt(path: string): boolean {
 	return EXEMPT_PATHS.has(path) || isSeenPath(path);
 }

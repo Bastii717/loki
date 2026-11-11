@@ -573,19 +573,7 @@
 	</section>
 
 	<section class="comments" id="comments" aria-labelledby="comments-h">
-		<div class="comments-head">
-			<h2 id="comments-h">Comments ({liveCount})</h2>
-			{#if comments.length > 0}
-				<div class="sort" role="group" aria-label="Sort comments">
-					<button type="button" aria-pressed={sort === 'top'} onclick={() => setSort('top')}
-						>Top</button
-					>
-					<button type="button" aria-pressed={sort === 'new'} onclick={() => setSort('new')}
-						>New</button
-					>
-				</div>
-			{/if}
-		</div>
+		<h2 id="comments-h">Comments ({liveCount})</h2>
 		<CommentComposer
 			mediaId={item.id}
 			label="Write a comment"
@@ -597,6 +585,17 @@
 		{#if comments.length === 0}
 			<p class="empty">No comments yet — be the first!</p>
 		{:else}
+			<div class="list-bar">
+				<span class="list-count">{liveCount === 1 ? '1 comment' : `${liveCount} comments`}</span>
+				<div class="sort" role="group" aria-label="Sort comments">
+					<button type="button" aria-pressed={sort === 'top'} onclick={() => setSort('top')}
+						>Top</button
+					>
+					<button type="button" aria-pressed={sort === 'new'} onclick={() => setSort('new')}
+						>New</button
+					>
+				</div>
+			</div>
 			<ul class="list">
 				{#each tree as node (node.item.id)}
 					<CommentNode {node} {section} />
@@ -902,11 +901,18 @@
 		scroll-margin-top: calc(var(--banners-height, 0px) + 64px);
 	}
 
-	.comments-head {
+	.list-bar {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 8px;
+		margin: 14px 0 3px;
+	}
+
+	.list-count {
+		color: var(--text-muted);
+		font-size: 13px;
+		font-weight: 600;
 	}
 
 	h2 {

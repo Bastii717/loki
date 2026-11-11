@@ -151,7 +151,8 @@ describe('auth guard', () => {
 			publicId: user.publicId,
 			username: user.username,
 			displayName: null,
-			role: 'admin'
+			role: 'admin',
+			rulesAcceptedAt: null
 		});
 	});
 

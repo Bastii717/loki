@@ -81,8 +81,12 @@
 	// the toggle only lives on the feed page, the meta must follow the theme on every page
 	onMount(watchThemeColor);
 
-	// The upload screen is its own full-screen flow, so it has no tab bar.
-	const showTabs = $derived(data.user !== null && !page.url.pathname.startsWith('/upload'));
+	// The upload screen and the house-rules interstitial are their own full-screen flows, so they have no tab bar.
+	const showTabs = $derived(
+		data.user !== null &&
+			!page.url.pathname.startsWith('/upload') &&
+			page.url.pathname !== '/welcome'
+	);
 </script>
 
 <svelte:head>

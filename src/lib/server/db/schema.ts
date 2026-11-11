@@ -36,6 +36,8 @@ export const users = pgTable(
 		avatarKey: text('avatar_key'),
 		avatarThumbKey: text('avatar_thumb_key'),
 		motto: text('motto').notNull().default(''),
+		// when the member last accepted the house rules; null = never
+		rulesAcceptedAt: timestamp('rules_accepted_at', { withTimezone: true }),
 		createdAt: createdAt()
 	},
 	(t) => [

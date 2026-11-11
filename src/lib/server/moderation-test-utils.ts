@@ -53,7 +53,8 @@ export async function userWithSession(role: SessionUser['role'] = 'member') {
 		publicId: u.publicId,
 		username: u.username,
 		displayName: u.displayName,
-		role
+		role,
+		rulesAcceptedAt: u.rulesAcceptedAt
 	};
 	return { user, session: await createSession(u.id), publicId: u.publicId };
 }
