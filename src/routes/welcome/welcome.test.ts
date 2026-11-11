@@ -3,6 +3,7 @@ import { acceptRules, saveContent } from '../../lib/server/content';
 import { validateSession } from '../../lib/server/auth/session';
 import { resetDb, setupDb } from '../../lib/server/db/test-utils';
 import { timeOut, userWithSession } from '../../lib/server/moderation-test-utils';
+import { configureMaintenance, resetMaintenance } from '../../lib/server/maintenance';
 import { resetRateLimits } from '../../lib/server/rate-limit';
 import { callRoute } from '../../lib/server/test-request';
 import { actions, load } from './+page.server';
@@ -10,6 +11,7 @@ import { actions, load } from './+page.server';
 beforeAll(setupDb);
 beforeEach(async () => {
 	resetRateLimits();
+	resetMaintenance();
 	await resetDb();
 });
 
@@ -161,6 +163,17 @@ describe('/welcome accept action', () => {
 		expect(result).toMatchObject({ status: 400, data: { error: expect.any(String) } });
 		const get = await callRoute({ handler: page, path: '/', session: member.session });
 		expect(get.response.status).toBe(303);
+	});
+
+	it('works during maintenance, which only locks content writes', async () => {
+		const { member } = await world();
+		configureMaintenance({
+			load: async () => ({ enabled: true, message: '', startsAt: null, until: null })
+		});
+		expect((await vote(member.session)).response.status).toBe(403);
+		const res = await accept(member.session);
+		expect(res.response.status).toBe(303);
+		expect(res.response.headers.get('location')).toBe('/');
 	});
 
 	it('works while timed out', async () => {

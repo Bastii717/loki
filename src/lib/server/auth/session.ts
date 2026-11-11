@@ -16,7 +16,7 @@ export type SessionUser = {
 /** The session's user as `locals.user` carries it: the internal user plus the public id the client may see. */
 export type SignedInUser = SessionUser & {
 	publicId: string;
-	/** When the member last accepted the house rules; null = never. The hook and root layout gate on it. */
+	/** When the member last accepted the house rules; null = never. The hook gates on it (redirects pages to /welcome, refuses writes). */
 	rulesAcceptedAt: Date | null;
 };
 
