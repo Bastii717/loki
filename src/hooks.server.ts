@@ -10,6 +10,8 @@ import { outagePage } from './lib/server/outage-page';
 import { seasonForRequest } from './lib/server/season-request';
 import { rateLimitRetryMs } from './lib/server/rate-limit';
 import { isSeenPath } from './lib/public-id';
+import { needsRulesAcceptance } from './lib/server/content';
+import { isRulesGateExempt, rulesRequiredResponse } from './lib/server/rules-gate';
 import { isWriteLockExempt, writeLockResponse } from './lib/server/write-lock';
 
 /** Runs once at server start so misconfiguration fails at boot, not on the first request. */
@@ -72,6 +74,7 @@ const isModerationPath = (path: string) =>
 const FORBIDDEN_MESSAGE = 'This area is for moderators and admins only.';
 
 const WRITE_METHODS = new Set(['POST', 'PATCH', 'DELETE']);
+const SAFE_METHODS = new Set(['GET', 'HEAD']);
 const RATE_LIMITED_MESSAGE = 'Slow down, Lord! Too many requests.';
 
 /** Per-user limits for state-changing requests (in-memory, see rate-limit.ts). Returns the seconds to wait, or 0 when allowed. */
@@ -216,6 +219,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 				headers: { 'content-type': 'text/plain; charset=utf-8' }
 			})
 		);
+	}
+	// The house-rules gate: until the member accepts the current rules, pages redirect to /welcome
+	// and every mutation is refused (there, the accept action and sign-out are exempt).
+	if (
+		event.locals.user &&
+		!isPublic(path) &&
+		!isRulesGateExempt(path) &&
+		(await needsRulesAcceptance(event.locals.user))
+	) {
+		if (SAFE_METHODS.has(event.request.method)) {
+			return secure(new Response(null, { status: 303, headers: { location: '/welcome' } }));
+		}
+		return secure(rulesRequiredResponse(event, path));
 	}
 	if (event.locals.user && WRITE_METHODS.has(event.request.method) && !isWriteLockExempt(path)) {
 		const status = await currentStatus(event.locals.user);

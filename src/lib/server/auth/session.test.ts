@@ -23,7 +23,8 @@ describe('sessions', () => {
 			publicId: user.publicId,
 			username: user.username,
 			displayName: null,
-			role: 'moderator'
+			role: 'moderator',
+			rulesAcceptedAt: null
 		});
 		const [row] = await db.select().from(sessions);
 		expect(row.tokenHash).toBe(hash(token));

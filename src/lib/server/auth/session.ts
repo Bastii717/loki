@@ -14,7 +14,11 @@ export type SessionUser = {
 };
 
 /** The session's user as `locals.user` carries it: the internal user plus the public id the client may see. */
-export type SignedInUser = SessionUser & { publicId: string };
+export type SignedInUser = SessionUser & {
+	publicId: string;
+	/** When the member last accepted the house rules; null = never. The hook and root layout gate on it. */
+	rulesAcceptedAt: Date | null;
+};
 
 export const SESSION_COOKIE = 'loki_session';
 export const SESSION_COOKIE_OPTIONS = {
@@ -61,7 +65,8 @@ export async function resolveSession(
 			publicId: users.publicId,
 			username: users.username,
 			displayName: users.displayName,
-			role: users.role
+			role: users.role,
+			rulesAcceptedAt: users.rulesAcceptedAt
 		})
 		.from(sessions)
 		.innerJoin(users, eq(users.id, sessions.userId))
@@ -89,7 +94,8 @@ export async function resolveSession(
 			publicId: row.publicId,
 			username: row.username,
 			displayName: row.displayName,
-			role: row.role as SessionUser['role']
+			role: row.role as SessionUser['role'],
+			rulesAcceptedAt: row.rulesAcceptedAt
 		},
 		renewed
 	};
