@@ -37,7 +37,8 @@ export const AUDIT_ACTIONS = {
 	templateAdded: 'template_added',
 	templateRenamed: 'template_renamed',
 	templateRemoved: 'template_removed',
-	templateRestored: 'template_restored'
+	templateRestored: 'template_restored',
+	sessionsEnded: 'sessions_ended'
 } as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
 

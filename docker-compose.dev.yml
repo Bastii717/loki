@@ -1,4 +1,4 @@
-# Loki local development stack: Postgres, MinIO and a mock OIDC provider.
+# Loki local development stack: Postgres, MinIO, a mock OIDC provider and a mail catcher.
 # Only the backing services run here; the app itself runs on the host via `npm run dev`.
 #
 #   cp .env.dev.example .env
@@ -46,3 +46,12 @@ services:
         {"interactiveLogin": true, "tokenCallbacks": [{"issuerId": "loki", "requestMappings": [{"requestParam": "grant_type", "match": "*", "claims": {"groups": ["loki-members", "loki-mods", "loki-admins"], "preferred_username": "dev", "email": "dev@example.test"}}]}]}
     ports:
       - '8080:8080'
+
+  # ── mailpit ─────────────────────────────────────────────────────────────────
+  # Catch-all SMTP server for the feedback mails: SMTP on localhost:1025 (no auth, no TLS), web
+  # inbox on http://localhost:8025. Nothing leaves the machine.
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    ports:
+      - '1025:1025'
+      - '8025:8025'

@@ -36,6 +36,14 @@ Build the image yourself with `docker build -t ghcr.io/bastii717/loki:latest .`.
 | `AUTO_BLUR_SCORE` | no | Default -3 |
 | `SESSION_ABSOLUTE_MAX_DAYS` | no | Default 90 |
 | `REPORT_REVIEW_THRESHOLD` | no | Default 3 (integer >= 1). Content is hidden from members pending moderator review once MORE than this many distinct members (reporters with an active timeout do not count) have an open report on it; moderators and admins always see it. A moderator releasing a case makes the item permanently immune to auto-hiding. |
+| `SMTP_HOST` | with feedback | SMTP server for the feedback page. `SMTP_HOST`, `MAIL_FROM` and `FEEDBACK_TO` are set all three or none: with none the feedback page is off, with only some the app refuses to start. |
+| `SMTP_PORT` | no | Default 587. |
+| `SMTP_SECURE` | no | Default `false`. `true` for implicit TLS (usually port 465). |
+| `SMTP_REQUIRE_TLS` | no | Default `true`. With `SMTP_SECURE=false` the connection must upgrade via STARTTLS, otherwise nothing is sent (no cleartext fallback, so credentials never travel unencrypted). Set `false` only for local mail catchers such as Mailpit. |
+| `SMTP_USER` | no | SMTP login; empty (default) means no authentication. |
+| `SMTP_PASS` | no | SMTP password. |
+| `MAIL_FROM` | with feedback | From address of the feedback mails. |
+| `FEEDBACK_TO` | with feedback | Comma-separated recipients of the feedback mails (the admins). |
 | `BODY_SIZE_LIMIT` | yes in practice | adapter-node rejects larger request bodies (default 512K). Must be at least `MAX_UPLOAD_MB`, e.g. `60M`. |
 | `PROTOCOL_HEADER` | behind proxy | `x-forwarded-proto` |
 | `HOST_HEADER` | behind proxy | `x-forwarded-host` (not needed behind cloudflared, which keeps the public hostname in `Host`) |
@@ -218,6 +226,8 @@ To release, tag a commit on `main` and push the tag, or create a release with a 
 ```bash
 git tag v1.2.3 && git push origin v1.2.3
 ```
+
+Part of every release: add an entry for the new version to `src/lib/changelog.ts` (two or three short, plain-language lines). The feed shows the newest entry as a small "New in Loki" card until each member dismisses it.
 
 ### Image signatures
 
