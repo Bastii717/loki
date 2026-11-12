@@ -4,6 +4,9 @@ import { rateLimit } from '../../lib/server/rate-limit';
 import type { Actions, PageServerLoad } from './$types';
 
 const MAX_LENGTH = 2000;
+// everything below space except tab and newline, plus DEL; applied after CRLF is folded to LF
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/g;
 const LIMIT = 5;
 const WINDOW_MS = 60 * 60 * 1000;
 
@@ -24,7 +27,8 @@ export const actions: Actions = {
 		const anonymous = form.get('anonymous') === 'on';
 		// echoed back on every failure so the form keeps what was typed
 		const echo = { message, anonymous };
-		const text = message.trim();
+		// browsers send line breaks as CRLF; count them once, like the client does, and validate the final text
+		const text = message.replace(/\r\n?/g, '\n').replace(CONTROL, '').trim();
 		if (text === '') return fail(400, { error: 'Please write a message first.', ...echo });
 		if (text.length > MAX_LENGTH) {
 			return fail(400, { error: `Please keep it under ${MAX_LENGTH} characters.`, ...echo });

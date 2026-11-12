@@ -123,6 +123,7 @@ On a desktop browser the layout stays a centered column.
 - Every media file sits behind auth too. The storage bucket is never public, and there is no configuration option that makes it so.
 - Every meme, member, comment, quote and template is addressed by a random 12-character public id in links, API paths and page data, so nothing can be enumerated by counting up. Files uploaded before this release keep object keys that contain the uploader's internal id, and non-content row ids (notifications, reports, audit entries) and the moderators' case round-trip stay internal.
 - Backups of the database and media are encrypted and go to a separate bucket.
+- Roles are copied from the Authentik groups at sign-in; after changing someone's groups, an admin can end their sessions (Moderation → Users) so the change takes effect immediately.
 
 ## Tech stack
 

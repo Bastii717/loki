@@ -84,6 +84,26 @@ describe('feedback action', () => {
 		expect(mail.send).not.toHaveBeenCalled();
 	});
 
+	it('counts a CRLF line break once toward the limit', async () => {
+		const { user } = await userWithSession();
+		const message = 'a'.repeat(1990) + '\r\n'.repeat(5);
+		expect(await send(user, { message })).toEqual({ sent: true });
+		expect(mail.send).toHaveBeenCalledTimes(1);
+		mail.send.mockClear();
+		// breaks in the middle survive the trim: 2000 once folded, 2004 raw
+		const inner = 'a'.repeat(998) + '\r\n'.repeat(4) + 'a'.repeat(994);
+		expect(await send(user, { message: inner })).toEqual({ sent: true });
+		expect(mail.send).toHaveBeenCalledTimes(1);
+	});
+
+	it('rejects a message of only control characters as empty', async () => {
+		const { user } = await userWithSession();
+		const result = (await send(user, { message: '\u0000'.repeat(5) })) as Failure;
+		expect(result.status).toBe(400);
+		expect(result.data.error).toBe('Please write a message first.');
+		expect(mail.send).not.toHaveBeenCalled();
+	});
+
 	it('keeps the message and the anonymous choice when the transport fails', async () => {
 		mail.send.mockRejectedValue(new Error('smtp down'));
 		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});

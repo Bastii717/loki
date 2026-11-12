@@ -56,6 +56,7 @@
 		if (busy) return;
 		busy = true;
 		failure = null;
+		ended = null;
 		const result = await modRequest(`/api/moderation/users/${id}/profile`, 'POST', {
 			action,
 			displayName: action === 'rename' ? draft : undefined
@@ -315,7 +316,7 @@
 
 	.success {
 		margin: 0;
-		color: #7ee2a8;
+		color: var(--up);
 		font-size: 13.5px;
 		overflow-wrap: anywhere;
 	}
