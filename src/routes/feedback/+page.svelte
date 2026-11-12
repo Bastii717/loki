@@ -77,7 +77,9 @@
 
 		{#if form?.error}
 			<p class="error" role="alert">{form.error}</p>
-		{:else if sent || form?.sent}
+		{:else if hydrated ? sent : form?.sent}
+			<!-- hydrated: local state only, so typing the next message hides it; no JS: the action result -->
+
 			<p class="thanks" role="status">Thanks! Your feedback is on its way.</p>
 		{/if}
 

@@ -51,7 +51,7 @@ services:
   # Catch-all SMTP server for the feedback mails: SMTP on localhost:1025 (no auth, no TLS), web
   # inbox on http://localhost:8025. Nothing leaves the machine.
   mailpit:
-    image: axllent/mailpit
+    image: axllent/mailpit:v1.33.1
     ports:
       - '1025:1025'
       - '8025:8025'

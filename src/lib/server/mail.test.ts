@@ -4,12 +4,15 @@ const fakeEnv = vi.hoisted(() => ({
 	SMTP_HOST: 'smtp.example.test' as string | null,
 	SMTP_PORT: 587,
 	SMTP_SECURE: false,
+	SMTP_REQUIRE_TLS: true,
 	SMTP_USER: '',
 	SMTP_PASS: '',
 	MAIL_FROM: 'loki@example.test' as string | null,
 	FEEDBACK_TO: ['admin@example.test', 'second@example.test'] as string[]
 }));
 vi.mock('./env', () => ({ env: fakeEnv }));
+const createTransport = vi.hoisted(() => vi.fn(() => ({ sendMail: async () => ({}) })));
+vi.mock('nodemailer', () => ({ default: { createTransport } }));
 
 import { feedbackEnabled, sendFeedbackMail, setMailTransportForTests } from './mail';
 
@@ -94,5 +97,55 @@ describe('sendFeedbackMail', () => {
 			}
 		});
 		await expect(sendFeedbackMail('x', null)).rejects.toThrow('smtp down');
+	});
+});
+
+describe('real transport options', () => {
+	beforeEach(() => {
+		setMailTransportForTests(null);
+		createTransport.mockClear();
+		fakeEnv.SMTP_PORT = 587;
+		fakeEnv.SMTP_SECURE = false;
+		fakeEnv.SMTP_REQUIRE_TLS = true;
+		fakeEnv.SMTP_USER = '';
+		fakeEnv.SMTP_PASS = '';
+	});
+
+	const options = async () => {
+		await sendFeedbackMail('x', null);
+		return (createTransport.mock.calls[0] as unknown as [Record<string, unknown>])[0];
+	};
+
+	it('requires STARTTLS by default so credentials never go out in cleartext', async () => {
+		expect(await options()).toMatchObject({ secure: false, requireTLS: true });
+	});
+
+	it('lets local mail catchers opt out of STARTTLS', async () => {
+		fakeEnv.SMTP_REQUIRE_TLS = false;
+		expect(await options()).toMatchObject({ secure: false, requireTLS: false });
+	});
+
+	it('does not set requireTLS with implicit TLS', async () => {
+		fakeEnv.SMTP_SECURE = true;
+		const opts = await options();
+		expect(opts.secure).toBe(true);
+		expect(opts).not.toHaveProperty('requireTLS');
+	});
+
+	it('gives up on an unreachable host quickly', async () => {
+		expect(await options()).toMatchObject({
+			connectionTimeout: 10_000,
+			greetingTimeout: 10_000,
+			socketTimeout: 15_000
+		});
+	});
+
+	it('only sends credentials when a user is configured', async () => {
+		expect(await options()).toMatchObject({ auth: undefined });
+		createTransport.mockClear();
+		setMailTransportForTests(null);
+		fakeEnv.SMTP_USER = 'u';
+		fakeEnv.SMTP_PASS = 'p';
+		expect(await options()).toMatchObject({ auth: { user: 'u', pass: 'p' } });
 	});
 });

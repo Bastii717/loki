@@ -39,6 +39,7 @@ Build the image yourself with `docker build -t ghcr.io/bastii717/loki:latest .`.
 | `SMTP_HOST` | with feedback | SMTP server for the feedback page. `SMTP_HOST`, `MAIL_FROM` and `FEEDBACK_TO` are set all three or none: with none the feedback page is off, with only some the app refuses to start. |
 | `SMTP_PORT` | no | Default 587. |
 | `SMTP_SECURE` | no | Default `false`. `true` for implicit TLS (usually port 465). |
+| `SMTP_REQUIRE_TLS` | no | Default `true`. With `SMTP_SECURE=false` the connection must upgrade via STARTTLS, otherwise nothing is sent (no cleartext fallback, so credentials never travel unencrypted). Set `false` only for local mail catchers such as Mailpit. |
 | `SMTP_USER` | no | SMTP login; empty (default) means no authentication. |
 | `SMTP_PASS` | no | SMTP password. |
 | `MAIL_FROM` | with feedback | From address of the feedback mails. |

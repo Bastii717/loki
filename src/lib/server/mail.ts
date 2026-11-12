@@ -22,6 +22,12 @@ function getTransport(): Transport {
 		host: env.SMTP_HOST!,
 		port: env.SMTP_PORT,
 		secure: env.SMTP_SECURE,
+		// without this nodemailer silently falls back to cleartext when STARTTLS is not offered
+		...(env.SMTP_SECURE ? {} : { requireTLS: env.SMTP_REQUIRE_TLS }),
+		// an unreachable host must not hold the request for minutes
+		connectionTimeout: 10_000,
+		greetingTimeout: 10_000,
+		socketTimeout: 15_000,
 		auth: env.SMTP_USER === '' ? undefined : { user: env.SMTP_USER, pass: env.SMTP_PASS }
 	});
 	return transport;

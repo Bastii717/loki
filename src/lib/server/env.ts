@@ -23,6 +23,7 @@ export interface Env {
 	SMTP_HOST: string | null;
 	SMTP_PORT: number;
 	SMTP_SECURE: boolean;
+	SMTP_REQUIRE_TLS: boolean;
 	SMTP_USER: string;
 	SMTP_PASS: string;
 	MAIL_FROM: string | null;
@@ -118,6 +119,7 @@ export function loadEnv(): Env {
 		SMTP_HOST: smtpHost === '' ? null : smtpHost,
 		SMTP_PORT: number('SMTP_PORT', 587, { min: 1 }),
 		SMTP_SECURE: boolean('SMTP_SECURE', false),
+		SMTP_REQUIRE_TLS: boolean('SMTP_REQUIRE_TLS', true),
 		SMTP_USER: optional('SMTP_USER', ''),
 		SMTP_PASS: optional('SMTP_PASS', ''),
 		MAIL_FROM: mailFrom === '' ? null : mailFrom,

@@ -129,6 +129,7 @@ describe('loadEnv', () => {
 			expect(env.FEEDBACK_TO).toEqual([]);
 			expect(env.SMTP_PORT).toBe(587);
 			expect(env.SMTP_SECURE).toBe(false);
+			expect(env.SMTP_REQUIRE_TLS).toBe(true);
 			expect(env.SMTP_USER).toBe('');
 			expect(env.SMTP_PASS).toBe('');
 		});
@@ -149,6 +150,13 @@ describe('loadEnv', () => {
 			expect(env.SMTP_SECURE).toBe(true);
 			expect(env.SMTP_USER).toBe('user');
 			expect(env.SMTP_PASS).toBe('pass');
+		});
+
+		it('parses SMTP_REQUIRE_TLS and rejects junk', () => {
+			process.env.SMTP_REQUIRE_TLS = 'false';
+			expect(loadEnv().SMTP_REQUIRE_TLS).toBe(false);
+			process.env.SMTP_REQUIRE_TLS = 'maybe';
+			expect(() => loadEnv()).toThrow(/SMTP_REQUIRE_TLS/);
 		});
 
 		it.each([
