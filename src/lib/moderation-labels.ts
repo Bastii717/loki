@@ -42,7 +42,8 @@ export const AUDIT_LABELS: Record<string, string> = {
 	template_added: 'Template added',
 	template_renamed: 'Template renamed',
 	template_removed: 'Template removed',
-	template_restored: 'Template restored'
+	template_restored: 'Template restored',
+	sessions_ended: 'Sessions ended'
 };
 
 export const ROLE_LABELS: Record<string, string> = {

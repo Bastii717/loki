@@ -28,6 +28,30 @@
 		node.focus();
 	}
 
+	/** The card whose "end sessions" confirm box is open, and the card that just had them ended. */
+	let confirmingEnd = $state<string | null>(null);
+	let ended = $state<{ id: string; name: string } | null>(null);
+
+	function startEnd(id: string) {
+		confirmingEnd = id;
+		ended = null;
+		failure = null;
+	}
+
+	async function endSessions(id: string, name: string) {
+		if (busy) return;
+		busy = true;
+		failure = null;
+		const result = await modRequest(`/api/moderation/users/${id}/sessions`, 'DELETE');
+		busy = false;
+		if (result.ok) {
+			confirmingEnd = null;
+			ended = { id, name };
+		} else {
+			failure = { id, message: result.message };
+		}
+	}
+
 	async function run(id: string, action: ProfileAction) {
 		if (busy) return;
 		busy = true;
@@ -152,7 +176,41 @@
 						Clear motto
 					</button>
 				{/if}
+				<button type="button" class="btn" disabled={busy} onclick={() => startEnd(u.publicId)}>
+					End sessions
+				</button>
 			</div>
+			{#if confirmingEnd === u.publicId}
+				<div class="confirm" role="group" aria-label="Confirm ending sessions">
+					<p>
+						Sign <strong>{u.displayName ?? u.username}</strong> out everywhere? They'll go through Authentik
+						sign-in again and come back with their current groups.
+					</p>
+					<div class="actions">
+						<button
+							type="button"
+							class="btn danger"
+							disabled={busy}
+							onclick={() => endSessions(u.publicId, u.displayName ?? u.username)}
+						>
+							End sessions
+						</button>
+						<button
+							type="button"
+							class="btn"
+							disabled={busy}
+							onclick={() => (confirmingEnd = null)}
+						>
+							Cancel
+						</button>
+					</div>
+				</div>
+			{/if}
+			{#if ended?.id === u.publicId}
+				<p class="success" role="status">
+					Sessions ended — {ended.name} will sign in fresh on their next visit.
+				</p>
+			{/if}
 			{#if failure?.id === u.publicId}<p class="error" role="alert">{failure.message}</p>{/if}
 			{#if u.confirmedReports > 0}
 				<p class="muted">
@@ -231,6 +289,35 @@
 
 	.rename .field {
 		min-height: 44px;
+	}
+
+	.confirm {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		padding: 12px;
+		border: 1px solid rgba(237, 66, 69, 0.4);
+		border-radius: 10px;
+		background: rgba(237, 66, 69, 0.1);
+	}
+
+	.confirm p {
+		margin: 0;
+		font-size: 14px;
+		overflow-wrap: anywhere;
+	}
+
+	.btn.danger {
+		border-color: var(--down);
+		background: var(--down);
+		color: #fff;
+	}
+
+	.success {
+		margin: 0;
+		color: #7ee2a8;
+		font-size: 13.5px;
+		overflow-wrap: anywhere;
 	}
 
 	.sr-only {
