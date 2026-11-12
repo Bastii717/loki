@@ -9,6 +9,7 @@
 	import { untrack } from 'svelte';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import Avatar from '#lib/components/Avatar.svelte';
+	import ChangelogCard from '#lib/components/ChangelogCard.svelte';
 	import MemeCard from '#lib/components/MemeCard.svelte';
 	import SeasonIcon from '#lib/components/SeasonIcon.svelte';
 	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
@@ -128,6 +129,8 @@
 			>
 		{/each}
 	</nav>
+
+	<ChangelogCard />
 
 	{#if data.sort === 'hof'}
 		<a href={resolve('/awards')} class="awards-link"
