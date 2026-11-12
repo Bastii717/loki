@@ -19,6 +19,14 @@ export interface Env {
 	AUTO_BLUR_SCORE: number;
 	SESSION_ABSOLUTE_MAX_DAYS: number;
 	REPORT_REVIEW_THRESHOLD: number;
+	/** Feedback mail: SMTP_HOST, MAIL_FROM and FEEDBACK_TO are set all together or not at all. */
+	SMTP_HOST: string | null;
+	SMTP_PORT: number;
+	SMTP_SECURE: boolean;
+	SMTP_USER: string;
+	SMTP_PASS: string;
+	MAIL_FROM: string | null;
+	FEEDBACK_TO: string[];
 }
 
 type RequiredName =
@@ -73,6 +81,19 @@ export function loadEnv(): Env {
 		return fallback;
 	};
 
+	const smtpHost = optional('SMTP_HOST', '');
+	const mailFrom = optional('MAIL_FROM', '');
+	const feedbackTo = optional('FEEDBACK_TO', '')
+		.split(',')
+		.map((address) => address.trim())
+		.filter((address) => address !== '');
+	const mailSet = [smtpHost !== '', mailFrom !== '', feedbackTo.length > 0].filter(Boolean).length;
+	if (mailSet > 0 && mailSet < 3) {
+		problems.push(
+			'SMTP_HOST, MAIL_FROM and FEEDBACK_TO (set all three to enable feedback, or none)'
+		);
+	}
+
 	const env: Env = {
 		ORIGIN: required('ORIGIN'),
 		DATABASE_URL: required('DATABASE_URL'),
@@ -93,7 +114,14 @@ export function loadEnv(): Env {
 		AVATAR_MAX_MB: number('AVATAR_MAX_MB', 8, { min: 1 }),
 		AUTO_BLUR_SCORE: number('AUTO_BLUR_SCORE', -3),
 		SESSION_ABSOLUTE_MAX_DAYS: number('SESSION_ABSOLUTE_MAX_DAYS', 90, { min: 1 }),
-		REPORT_REVIEW_THRESHOLD: number('REPORT_REVIEW_THRESHOLD', 3, { min: 1 })
+		REPORT_REVIEW_THRESHOLD: number('REPORT_REVIEW_THRESHOLD', 3, { min: 1 }),
+		SMTP_HOST: smtpHost === '' ? null : smtpHost,
+		SMTP_PORT: number('SMTP_PORT', 587, { min: 1 }),
+		SMTP_SECURE: boolean('SMTP_SECURE', false),
+		SMTP_USER: optional('SMTP_USER', ''),
+		SMTP_PASS: optional('SMTP_PASS', ''),
+		MAIL_FROM: mailFrom === '' ? null : mailFrom,
+		FEEDBACK_TO: feedbackTo
 	};
 
 	if (problems.length > 0) {

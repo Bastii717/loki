@@ -2,6 +2,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { awardsOf } from '../../lib/server/awards';
 import { db } from '../../lib/server/db';
 import { comments, favorites, media } from '../../lib/server/db/schema';
+import { feedbackEnabled } from '../../lib/server/mail';
 import { getProfile } from '../../lib/server/profile';
 import type { PageServerLoad } from './$types';
 
@@ -29,6 +30,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			role: profile.role
 		},
 		counts: { memes: memes.n, favorites: favs.n, comments: comms.n },
-		awards
+		awards,
+		feedbackEnabled: feedbackEnabled()
 	};
 };

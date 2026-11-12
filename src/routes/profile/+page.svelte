@@ -7,6 +7,7 @@
 	import CircleQuestionMark from 'lucide-svelte/icons/circle-question-mark';
 	import Images from 'lucide-svelte/icons/images';
 	import LogOut from 'lucide-svelte/icons/log-out';
+	import MessageCircle from 'lucide-svelte/icons/message-circle';
 	import Shield from 'lucide-svelte/icons/shield';
 	import Star from 'lucide-svelte/icons/star';
 	import Trophy from 'lucide-svelte/icons/trophy';
@@ -25,16 +26,20 @@
 	};
 
 	// Personal lists first, then the reference pages; Moderation is appended below for moderators.
-	const links = [
+	// Feedback only appears when the admin mailbox is configured.
+	const links = $derived([
 		{ href: '/profile/edit', label: 'Edit profile', icon: UserPen },
 		{ href: '/profile/notifications', label: 'Notifications', icon: Bell },
 		{ href: '/profile/memes', label: 'My memes', icon: Images },
 		{ href: '/profile/favorites', label: 'Favorites', icon: Star },
 		{ href: '/profile/stats', label: 'Stats', icon: ChartColumn },
+		...(data.feedbackEnabled
+			? [{ href: '/feedback', label: 'Feedback', icon: MessageCircle }]
+			: []),
 		{ href: '/awards', label: 'Awards', icon: Trophy },
 		{ href: '/rules', label: 'Rules', icon: BookOpen },
 		{ href: '/faq', label: 'FAQ', icon: CircleQuestionMark }
-	] as const;
+	]);
 </script>
 
 <svelte:head>

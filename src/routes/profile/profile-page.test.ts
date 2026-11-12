@@ -1,5 +1,9 @@
 import { render } from 'svelte/server';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mail = vi.hoisted(() => ({ enabled: false }));
+vi.mock('../../lib/server/mail', () => ({ feedbackEnabled: () => mail.enabled }));
+
 import { db } from '../../lib/server/db';
 import { awards, comments } from '../../lib/server/db/schema';
 import { resetDb, setupDb } from '../../lib/server/db/test-utils';
@@ -9,7 +13,10 @@ import { load } from './+page.server';
 import Page from './+page.svelte';
 
 beforeAll(setupDb);
-beforeEach(resetDb);
+beforeEach(async () => {
+	mail.enabled = false;
+	await resetDb();
+});
 
 type LoadData = {
 	profile: Record<string, unknown>;
@@ -18,6 +25,13 @@ type LoadData = {
 };
 
 describe('profile load', () => {
+	it.each([true, false])('reports whether feedback is available (%s)', async (enabled) => {
+		mail.enabled = enabled;
+		const { user } = await userWithSession();
+		const data = (await load({ locals: { user } } as never)) as { feedbackEnabled: boolean };
+		expect(data.feedbackEnabled).toBe(enabled);
+	});
+
 	it('returns the display name, username, motto, avatar keys and cooldown', async () => {
 		const { user } = await userWithSession();
 		await setDisplayName(user, user.id, 'Lena K');
@@ -82,6 +96,7 @@ const pageData = (over: Record<string, unknown> = {}) => ({
 	counts: { memes: 0, favorites: 0, comments: 0 },
 	awards: [],
 	openCases: null,
+	feedbackEnabled: false,
 	...over
 });
 
@@ -117,5 +132,21 @@ describe('profile page', () => {
 		expect(body).toMatch(
 			/<a href="\/profile\/notifications"[^>]*>[\s\S]*?lucide-bell[\s\S]*?Notifications/
 		);
+	});
+
+	it('links to feedback right after Stats when it is enabled', () => {
+		const { body } = render(Page as never, {
+			props: { data: pageData({ feedbackEnabled: true }) } as never
+		});
+		const hrefs = [...body.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]);
+		expect(hrefs.indexOf('/feedback')).toBe(hrefs.indexOf('/profile/stats') + 1);
+		expect(body).toMatch(/<a href="\/feedback"[^>]*>[\s\S]*?lucide-message-circle[\s\S]*?Feedback/);
+	});
+
+	it('hides the feedback link when it is not configured', () => {
+		const { body } = render(Page as never, {
+			props: { data: pageData({ feedbackEnabled: false }) } as never
+		});
+		expect(body).not.toContain('/feedback');
 	});
 });

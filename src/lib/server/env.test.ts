@@ -120,4 +120,46 @@ describe('loadEnv', () => {
 		process.env.REPORT_REVIEW_THRESHOLD = '5';
 		expect(loadEnv().REPORT_REVIEW_THRESHOLD).toBe(5);
 	});
+
+	describe('feedback mail', () => {
+		it('defaults to disabled with SMTP defaults', () => {
+			const env = loadEnv();
+			expect(env.SMTP_HOST).toBeNull();
+			expect(env.MAIL_FROM).toBeNull();
+			expect(env.FEEDBACK_TO).toEqual([]);
+			expect(env.SMTP_PORT).toBe(587);
+			expect(env.SMTP_SECURE).toBe(false);
+			expect(env.SMTP_USER).toBe('');
+			expect(env.SMTP_PASS).toBe('');
+		});
+
+		it('parses all three core variables, trimming the recipient list', () => {
+			process.env.SMTP_HOST = 'smtp.example.test';
+			process.env.MAIL_FROM = 'loki@example.test';
+			process.env.FEEDBACK_TO = ' a@example.test, ,b@example.test ,';
+			process.env.SMTP_PORT = '465';
+			process.env.SMTP_SECURE = 'true';
+			process.env.SMTP_USER = 'user';
+			process.env.SMTP_PASS = 'pass';
+			const env = loadEnv();
+			expect(env.SMTP_HOST).toBe('smtp.example.test');
+			expect(env.MAIL_FROM).toBe('loki@example.test');
+			expect(env.FEEDBACK_TO).toEqual(['a@example.test', 'b@example.test']);
+			expect(env.SMTP_PORT).toBe(465);
+			expect(env.SMTP_SECURE).toBe(true);
+			expect(env.SMTP_USER).toBe('user');
+			expect(env.SMTP_PASS).toBe('pass');
+		});
+
+		it.each([
+			{ SMTP_HOST: 'smtp.example.test' },
+			{ MAIL_FROM: 'loki@example.test' },
+			{ FEEDBACK_TO: 'a@example.test' },
+			{ SMTP_HOST: 'smtp.example.test', MAIL_FROM: 'loki@example.test' },
+			{ FEEDBACK_TO: ' , ', MAIL_FROM: 'loki@example.test', SMTP_HOST: 'smtp.example.test' }
+		])('rejects a partial setup %j', (partial) => {
+			Object.assign(process.env, partial);
+			expect(() => loadEnv()).toThrow(/SMTP_HOST.*MAIL_FROM.*FEEDBACK_TO.*all three.*or none/s);
+		});
+	});
 });

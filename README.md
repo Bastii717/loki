@@ -15,6 +15,7 @@ Planned and being built. The whole app is English: UI, code and docs.
 - **NSFW and spoiler blur**, set at upload or by moderators.
 - **Statistics**: uploads over time, top uploaders and voters, tag distribution.
 - **Reports and moderation**: members report memes, comments and quotes. Content with too many open reports is hidden until a moderator decides in the moderation area (queue, timeouts, audit log).
+- **Feedback**: members send the admins a note from their profile (optionally anonymous); it arrives as a plain-text email over SMTP. Off unless the mail variables are set.
 - **Rules and FAQ**, editable by admins in the app. Every member must read and accept the house rules on a welcome page before using the board — and again whenever an admin changes them; until then the server redirects reads and refuses writes.
 - **Maintenance mode**: admins pause posting with a message; the app reports its own readiness and shows a designed page during outages.
 - **Seasonal themes**: Halloween, Advent and Carnival switch on by date; admins can force an event theme or turn seasons off.
