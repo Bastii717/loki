@@ -227,6 +227,8 @@ To release, tag a commit on `main` and push the tag, or create a release with a 
 git tag v1.2.3 && git push origin v1.2.3
 ```
 
+Part of every release: add an entry for the new version to `src/lib/changelog.ts` (two or three short, plain-language lines). The feed shows the newest entry as a small "New in Loki" card until each member dismisses it.
+
 ### Image signatures
 
 Every published image is signed with [cosign](https://docs.sigstore.dev/) (keyless: the signing identity is this repo's `Docker` workflow via GitHub OIDC, recorded in the Rekor transparency log). Images published before v1.1.0 are unsigned. Verify a pulled image with:
