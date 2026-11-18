@@ -624,7 +624,7 @@ async function seedThreads(byName: UserMap) {
 	await voteComment(byName.get('lena')!.id, jonas.id, -1);
 	await voteComment(byName.get('tobi')!.id, jonas.id, -1);
 	const f1 = await post(friday.id, 'noah', 'Cake budget aproved.', anke, { up: ['anke'] });
-	// noah fixed his typo, so the "(edited)" marker shows. Written directly: the comment is
+	// Noah fixed his typo, so the "(edited)" marker shows. Written directly: the comment is
 	// backdated past the five-minute window, so editComment would refuse it.
 	await db
 		.update(comments)

@@ -85,7 +85,7 @@ describe('comments', () => {
 		});
 		const plain = await testUser();
 		const id = await addMedia(named.id);
-		const added = await addComment(named.id, id, 'von Ronja');
+		const added = await addComment(named.id, id, 'from Ronja');
 		expect(added).toMatchObject({ author: 'Ronja', authorRole: 'admin' });
 		await addComment(plain.id, id, 'von ohne');
 		const list = await listComments(id, named.id);

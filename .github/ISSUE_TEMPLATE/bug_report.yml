@@ -1,0 +1,69 @@
+name: Bug report
+description: Something does not work the way it should.
+title: '[Bug] '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please report **security problems privately** through GitHub's "Report a vulnerability" (Security tab), not as an issue. See SECURITY.md.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did Loki do, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Tap ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Loki version
+      description: The release tag or image tag you run (for example v1.10.1), or the commit if you build yourself.
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it happen?
+      multiple: true
+      options:
+        - Phone browser
+        - Installed PWA (home screen)
+        - Desktop browser
+        - Server / container (startup, logs, backups)
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Your role when it happened
+      options:
+        - Member
+        - Moderator
+        - Admin
+        - Operator
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Container logs (`docker compose logs app`) or a screenshot. Remove anything personal or internal before pasting.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched the existing issues and did not find this bug.
+          required: true
+        - label: This is not a security problem (those go through the Security tab).
+          required: true

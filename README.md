@@ -1,10 +1,12 @@
 # Loki
 
-Loki is a meme board for one team and nobody else. It is built for 25–50 people who want to post, vote on and argue about work-and-industry memes from their phones, without any of it ever being publicly reachable. It is a ground-up rewrite of MemeLord, a Django fork the team outgrew, and is named after the god of mischief.
+**A private meme board for your team.** Post, vote on and argue about memes from your phone — behind your own single sign-on, on your own server, with nothing ever reachable from the outside.
+
+Loki is built for a group of roughly 25 to 50 people who share an office sense of humour and do not want it on a public platform. It is mobile-first, installs as a PWA, and ships as a single container image next to Postgres.
+
+Loki started as the in-house board of one team, a ground-up rewrite of the Django-based MemeLord they had outgrown, and is maintained by a single person. It is published in the hope that it is useful to other teams. Feature requests and bug reports are welcome; see [Contributing](#contributing).
 
 ## Features
-
-Planned and being built. The whole app is English: UI, code and docs.
 
 - **Card feed** with in-feed voting, comment counts and hashtag chips. Views for New, Hot and Hall of Fame.
 - **Discover**: fullscreen swipe through memes you have not seen yet, then random old gems.
@@ -17,7 +19,7 @@ Planned and being built. The whole app is English: UI, code and docs.
 - **Reports and moderation**: members report memes, comments and quotes. Content with too many open reports is hidden until a moderator decides in the moderation area (queue, timeouts, audit log).
 - **Feedback**: members send the admins a note from their profile (optionally anonymous); it arrives as a plain-text email over SMTP. Off unless the mail variables are set.
 - **What's new**: after an update, a small dismissible card at the top of the feed tells members what changed.
-- **Rules and FAQ**, editable by admins in the app. Every member must read and accept the house rules on a welcome page before using the board — and again whenever an admin changes them; until then the server redirects reads and refuses writes.
+- **Rules and FAQ**, editable by admins in the app. Every member must read and accept the house rules on a welcome page before using the board, and again whenever an admin changes them.
 - **Maintenance mode**: admins pause posting with a message; the app reports its own readiness and shows a designed page during outages.
 - **Seasonal themes**: Halloween, Advent and Carnival switch on by date; admins can force an event theme or turn seasons off.
 - **Profiles**: pick a display name (once every 30 days), an avatar and a motto; moderators and admins carry a badge.
@@ -26,6 +28,8 @@ Planned and being built. The whole app is English: UI, code and docs.
 - **Meme of the Month**: the top-scored meme of each month gets a trophy automatically; every winner stays on the awards page.
 - **Meme generator**: pick a library template or remix any meme, type top and bottom text, post. Rendered in the browser, uploaded like any other meme.
 - **PWA** with a share target, so memes can be sent straight from the share sheet.
+
+The whole app is English: UI, code and docs.
 
 ## Screenshots
 
@@ -118,38 +122,66 @@ On a desktop browser the layout stays a centered column.
 
 ## Security model
 
-- Sign-in is Authentik OIDC only. Access is gated on group membership; a valid Authentik login alone is not enough. Member, moderator and admin roles come from groups.
-- Every route requires a session, except login and health checks.
+- Sign-in is OpenID Connect through [Authentik](https://goauthentik.io/) only. Access is gated on group membership; a valid login alone is not enough. Member, moderator and admin roles come from groups.
+- Every route requires a session, except login and health checks. One central request guard enforces this; there is no second, per-page layer to forget.
 - Every media file sits behind auth too. The storage bucket is never public, and there is no configuration option that makes it so.
-- Every meme, member, comment, quote and template is addressed by a random 12-character public id in links, API paths and page data, so nothing can be enumerated by counting up. Files uploaded before this release keep object keys that contain the uploader's internal id, and non-content row ids (notifications, reports, audit entries) and the moderators' case round-trip stay internal.
-- Backups of the database and media are encrypted and go to a separate bucket.
-- Roles are copied from the Authentik groups at sign-in; after changing someone's groups, an admin can end their sessions (Moderation → Users) so the change takes effect immediately.
+- Every meme, member, comment, quote and template is addressed by a random 12-character public id in links, API paths and page data, so nothing can be enumerated by counting up.
+- Roles are copied from the identity provider's groups at sign-in; after changing someone's groups, an admin can end their sessions (Moderation > Users) so the change takes effect immediately.
+- Backups of the database and media are encrypted client-side and go to a separate bucket with separate credentials.
+- Published container images are signed with cosign (keyless); the verification command is in the deployment guide.
+
+See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
 
 ## Tech stack
 
-- SvelteKit 3 (Svelte 5) with TypeScript
-- PostgreSQL via Drizzle ORM
+- [SvelteKit](https://svelte.dev/docs/kit) 3 (Svelte 5) with TypeScript, served by adapter-node
+- PostgreSQL via [Drizzle ORM](https://orm.drizzle.team/), migrations applied at start
 - S3-compatible storage: Cloudflare R2 in production, MinIO in development
-- Docker (Compose), self-hosted
-- GitHub Actions building images to GHCR
+- Docker Compose for the self-hosted stack, GitHub Actions building signed images to GHCR
+- Tests with Vitest against a real Postgres and MinIO
 
-## Status
+## Getting started
 
-> ⚠️ **Early development.** Scaffold and dev environment are done (Task 1 of 20). Nothing is deployable yet.
+### Run it for your team
 
-The roadmap is the task list in [`docs/superpowers/plans/2026-10-20-loki.md`](docs/superpowers/plans/2026-10-20-loki.md).
+You need Docker, a Postgres (the compose file brings one), an S3-compatible bucket and an Authentik instance with three groups. The [deployment guide](docs/deployment.md) walks through every environment variable, the Authentik and R2 setup, publishing through a Cloudflare Tunnel or nginx, backups and updates. In short:
 
-## Development quickstart
+```sh
+cp .env.example .env     # fill in the values described in docs/deployment.md
+docker compose pull && docker compose up -d
+```
 
-Requires Node and Docker.
+Images are published as `ghcr.io/bastii717/loki` (`latest`, `1.2.3`, `1.2`, `v1`). Each release on the [Releases page](https://github.com/Bastii717/loki/releases) lists what changed and whether an update needs anything from the operator.
+
+### Develop
+
+Requires Node 24 and Docker.
 
 ```sh
 cp .env.dev.example .env
-docker compose -f docker-compose.dev.yml up -d   # Postgres, MinIO, mock OIDC provider
+docker compose -f docker-compose.dev.yml up -d   # Postgres, MinIO, mock OIDC provider, Mailpit
 npm install
 npm run dev
 ```
 
-Run the tests with `npm test`. `.env.dev.example` is the development template; `.env.example` is the production one (see [`docs/deployment.md`](docs/deployment.md)).
+Sign in through the mock provider with any username and a claims JSON such as `{"preferred_username":"you","groups":["loki-members","loki-admins"]}`. `npx tsx --env-file=.env scripts/seed-demo.ts` fills the board with demo content. Run the tests with `npm test` (they use the same dev database and truncate it), `npm run lint` and `npm run check` before opening a pull request.
 
-For the full design (goals, non-goals, decisions, security, operations), see [`docs/superpowers/specs/`](docs/superpowers/specs/).
+## Project status and maintenance
+
+Loki is in daily use and considered stable. It was created for one team's needs and is currently maintained by one person in their spare time, so:
+
+- Issues and pull requests are read, but answers can take a few days.
+- Features that fit a private, team-internal board have the best chance; anything that would make content publicly reachable is out of scope by design.
+- Only the latest release receives fixes. Updates are usually a `docker compose pull`; release notes say when a migration or a new variable is involved.
+
+## Contributing
+
+Ideas and reports are welcome. Please use the issue templates: a [feature request](https://github.com/Bastii717/loki/issues/new?template=feature_request.yml) describes the problem you want solved and who benefits, a [bug report](https://github.com/Bastii717/loki/issues/new?template=bug_report.yml) brings steps and your version. For code contributions, [CONTRIBUTING.md](CONTRIBUTING.md) explains the layout of the repository, the conventions and how a change gets from a branch to a release.
+
+## Acknowledgements
+
+Loki took its feature set from [MemeLord](https://github.com/l4rm4nd/MemeLord), the Django meme board it replaced, and is named after the god of mischief.
+
+## License
+
+See [LICENSE](LICENSE).
