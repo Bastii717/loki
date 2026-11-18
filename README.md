@@ -184,4 +184,4 @@ Loki took its feature set from [MemeLord](https://github.com/l4rm4nd/MemeLord), 
 
 ## License
 
-See [LICENSE](LICENSE).
+Loki is released under the [MIT License](LICENSE).
