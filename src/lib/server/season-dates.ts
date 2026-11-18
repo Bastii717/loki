@@ -64,14 +64,14 @@ function within(date: CalendarDate, from: CalendarDate, to: CalendarDate): boole
 
 /**
  * The season that is switched on by the calendar at the instant (Berlin date), or null.
- * Halloween: Oct 25 - Nov 1. Advent: Dec 1 - Dec 26. Carnival: Weiberfastnacht (Easter - 52 days)
+ * Halloween: Oct 25 - Nov 1. Advent: Nov 22 - Dec 26. Carnival: Weiberfastnacht (Easter - 52 days)
  * through Ash Wednesday (Easter - 46 days). `party` is never date-driven; admins force it.
  */
 export function seasonForDate(instant: Date): SeasonId | null {
 	const date = berlinDate(instant);
 	const { year } = date;
 	if (within(date, { year, month: 10, day: 25 }, { year, month: 11, day: 1 })) return 'halloween';
-	if (within(date, { year, month: 12, day: 1 }, { year, month: 12, day: 26 })) return 'advent';
+	if (within(date, { year, month: 11, day: 22 }, { year, month: 12, day: 26 })) return 'advent';
 	if (within(date, easterOffset(year, -52), easterOffset(year, -46))) return 'carnival';
 	return null;
 }

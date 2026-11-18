@@ -186,7 +186,7 @@ When the container itself does not answer, nginx can still show the outage page:
 
 ### Seasonal themes
 
-Three event themes switch on by date in Berlin time, without any environment variable or deployment step: Halloween (October 25 to November 1), Advent (December 1 to December 26) and Carnival (Weiberfastnacht to Ash Wednesday). Admins can force any theme, including the `party` theme, or switch seasons off on the page **Moderation > Theme** (`/moderation/theme`). To preview a theme without changing it for anyone else, an admin adds `?season=<id>` to any URL (for example `/?season=halloween`); the preview applies to pages loaded with that parameter, is not stored, and ends with the next navigation without it.
+Three event themes switch on by date in Berlin time, without any environment variable or deployment step: Halloween (October 25 to November 1), Advent (November 22 to December 26) and Carnival (Weiberfastnacht to Ash Wednesday). Admins can force any theme, including the `party` theme, or switch seasons off on the page **Moderation > Theme** (`/moderation/theme`). To preview a theme without changing it for anyone else, an admin adds `?season=<id>` to any URL (for example `/?season=halloween`); the preview applies to pages loaded with that parameter, is not stored, and ends with the next navigation without it.
 
 ### Profiles
 
