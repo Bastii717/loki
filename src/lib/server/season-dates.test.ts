@@ -29,9 +29,9 @@ describe('seasonForDate', () => {
 		expect(seasonForDate(at('2026-11-01T23:00:00Z'))).toBeNull();
 	});
 
-	it('runs Advent from Dec 1 to Dec 26', () => {
-		expect(seasonForDate(at('2026-11-30T22:59:59Z'))).toBeNull();
-		expect(seasonForDate(at('2026-11-30T23:00:00Z'))).toBe('advent');
+	it('runs Advent from Nov 22 to Dec 26', () => {
+		expect(seasonForDate(at('2026-11-21T22:59:59Z'))).toBeNull();
+		expect(seasonForDate(at('2026-11-21T23:00:00Z'))).toBe('advent');
 		expect(seasonForDate(at('2026-12-26T22:59:59Z'))).toBe('advent');
 		expect(seasonForDate(at('2026-12-26T23:00:00Z'))).toBeNull();
 	});
