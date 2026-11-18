@@ -43,8 +43,8 @@ async function noticesOf(userId: number) {
 
 describe('display name format', () => {
 	const accepted: [string, string][] = [
-		['ba sti', 'ba sti'],
-		['ba  sti', 'ba sti'],
+		['ro nja', 'ro nja'],
+		['ro  nja', 'ro nja'],
 		[' ronja ', 'ronja'],
 		['Rönja', 'Rönja'],
 		['Ba\u0308sti', 'B\u00e4sti'],
@@ -60,8 +60,8 @@ describe('display name format', () => {
 	const rejected: [string, string][] = [
 		['b', 'too short'],
 		['x'.repeat(25), 'too long'],
-		['b@sti', 'at sign'],
-		['ba.sti', 'dot'],
+		['r@nja', 'at sign'],
+		['ro.nja', 'dot'],
 		['-ronja', 'leading dash'],
 		['ronja_', 'trailing underscore'],
 		['', 'empty'],
@@ -77,7 +77,7 @@ describe('display name format', () => {
 	});
 
 	it('rejects a double space when validating directly', () => {
-		expect(() => validateDisplayName('ba  sti')).toThrow(new ProfileInputError(FORMAT_MESSAGE));
+		expect(() => validateDisplayName('ro  nja')).toThrow(new ProfileInputError(FORMAT_MESSAGE));
 	});
 
 	it('accepts exactly 24 characters and counts code points, not UTF-16 units', () => {
@@ -156,7 +156,7 @@ describe('setDisplayName: uniqueness', () => {
 
 	it('rejects an invalid format before touching the database', async () => {
 		const a = await make();
-		await expect(setDisplayName(a, a.id, 'ba.sti', NOW)).rejects.toThrow(
+		await expect(setDisplayName(a, a.id, 'ro.nja', NOW)).rejects.toThrow(
 			new ProfileInputError(FORMAT_MESSAGE)
 		);
 		expect(await auditRows()).toHaveLength(0);

@@ -1,7 +1,8 @@
 {
 	"name": "loki",
 	"private": true,
-	"version": "1.8.1",
+	"version": "1.10.1",
+	"license": "MIT",
 	"type": "module",
 	"engines": {
 		"node": ">=24"

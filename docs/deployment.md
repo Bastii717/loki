@@ -219,7 +219,7 @@ The `Docker` workflow builds the image for every pull request (without pushing) 
 - push to `main`: `ghcr.io/bastii717/loki:main`
 - tag `v1.2.3`: `ghcr.io/bastii717/loki:1.2.3`, `:1.2`, `:v1` and `:latest`
 
-Where the jobs run: the `CI` workflow and the pull request builds of `Docker` run on the self-hosted runner whose label the repository variable `RUNNER` holds (`self-hosted`); without the variable they fall back to GitHub's `ubuntu-26.04` (`gh variable delete RUNNER`, no commit needed). Publishing on `main` and on tags always runs on GitHub's runner: the self-hosted runner's Docker keeps images and build cache between jobs, so a pull request's dependencies could otherwise leave something behind that ends up in a published, signed image.
+All workflow jobs run on GitHub-hosted runners (`ubuntu-26.04`); nothing in the pipeline depends on infrastructure outside GitHub.
 
 To release, tag a commit on `main` and push the tag, or create a release with a new `v*.*.*` tag in the GitHub UI:
 

@@ -223,8 +223,8 @@ describe('notificationText', () => {
 	});
 
 	it('name_changed', () => {
-		expect(notificationText(item({ kind: 'name_changed', detail: 'Ronja' }))).toEqual({
-			text: 'An admin renamed you to “Ronja”.',
+		expect(notificationText(item({ kind: 'name_changed', detail: 'Mira' }))).toEqual({
+			text: 'An admin renamed you to “Mira”.',
 			excerpt: null
 		});
 	});

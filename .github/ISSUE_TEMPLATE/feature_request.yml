@@ -1,0 +1,55 @@
+name: Feature request
+description: Suggest something Loki should do, or do differently.
+title: '[Feature] '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Loki is maintained by one person next to a day job, so the more concrete the request, the sooner it can be judged and built. Keep in mind what Loki is: a **private** meme board for one team behind single sign-on, nothing of it ever public.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is missing or annoying today?
+      description: Describe the situation from the user's point of view. What were you trying to do, and where did Loki get in the way or fall short?
+      placeholder: 'When I ... I expected ... but ...'
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What should Loki do instead?
+      description: The behaviour you would like to see. If you have a picture in your head of how it looks on a phone, describe it.
+    validations:
+      required: true
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Who benefits?
+      multiple: true
+      options:
+        - Members (everyone on the board)
+        - Moderators
+        - Admins
+        - Operators (whoever runs the server)
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Other ways to solve it, or why the existing features do not cover it.
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Screenshots, sketches, links to similar features elsewhere. Please do not paste internal content from your own board.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched the existing issues and did not find this request.
+          required: true
+        - label: The request fits a private, team-internal board (no public pages, no external sharing of media).
+          required: true
