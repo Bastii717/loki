@@ -18,6 +18,10 @@ updates:
       # engines, .nvmrc, Dockerfile and CI); bump them together by hand.
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
+      # TypeScript majors wait for svelte-check and typescript-eslint to
+      # declare support (TypeScript 7 is outside their peer ranges).
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: 'docker'
     directories:
