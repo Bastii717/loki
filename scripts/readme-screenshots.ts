@@ -14,6 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, type Browser, type Page, type Route } from 'playwright';
 import sharp from 'sharp';
+import { CHANGELOG } from '../src/lib/changelog';
 
 const BASE_URL = process.env.SCREENSHOT_BASE_URL ?? 'http://localhost:5173';
 const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'screenshots');
@@ -65,8 +66,10 @@ const THROWAWAY: Account = { sub: DEMO_USERNAME, username: DEMO_USERNAME, groups
 // The moderation area needs a moderator or admin; every other shot is taken as a plain member.
 const ADMIN: Account = { ...THROWAWAY, groups: [...MEMBERS, 'loki-admins'] };
 // The maintenance shot needs an admin and a plain member at the same time. The role is rewritten
-// from the groups on every login, so the viewer must be a different user than ADMIN.
-const MEMBER_VIEWER: Account = { sub: 'noah', username: 'noah', groups: MEMBERS };
+// from the groups on every login, so the viewer must be a different user than ADMIN. The seeded
+// `noah` (sub `demo-noah`) is reused: a fresh sub with the same username would add a second
+// `noah` to the user list.
+const MEMBER_VIEWER: Account = { sub: 'demo-noah', username: 'noah', groups: MEMBERS };
 // Profile pages need a user with memes, favorites and comments: the seeded `lena`.
 const OWNER: Account = { sub: 'demo-lena', username: 'lena', groups: MEMBERS };
 
@@ -85,6 +88,12 @@ async function login(page: Page, account: Account): Promise<void> {
 	await page.locator('input[type="submit"]').click();
 
 	await page.waitForURL(`${BASE_URL}/**`);
+	// First sign-in: the house-rules interstitial has no navigation; accept once and move on.
+	if (new URL(page.url()).pathname === '/welcome') {
+		await page.getByLabel("I've read the house rules and I'll stick to them.").check();
+		await page.getByRole('button', { name: /^Accept/ }).click();
+		await page.waitForURL((url) => url.pathname !== '/welcome');
+	}
 	await page.getByRole('navigation', { name: 'Main navigation' }).waitFor();
 }
 
@@ -142,6 +151,11 @@ async function withContext(
 		colorScheme
 	});
 	await context.route('**/*', routeRequest);
+	// Hide the "What's new" card: its text names a release and would date the README.
+	await context.addInitScript(([key, id]) => localStorage.setItem(key, id), [
+		'loki.changelog.dismissed',
+		CHANGELOG[0].id
+	] as const);
 	try {
 		const page = await context.newPage();
 		if (process.env.SCREENSHOT_DEBUG) {

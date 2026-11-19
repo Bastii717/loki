@@ -44,7 +44,7 @@ You refresh the Loki README screenshots (`docs/screenshots/*.png`) from a seeded
    npx tsx --env-file=.env scripts/readme-screenshots.ts
    ```
 
-   It signs in through the mock OIDC provider (a throwaway member, an admin for the moderation shots, the seeded `lena` for the profile pages) and writes 19 shots. Mobile is 390x844 @2x and dark unless the name says light, desktop is 1440x900 @2x:
+   It signs in through the mock OIDC provider (a throwaway member, an admin for the moderation shots, the seeded `lena` for the profile pages) and writes 26 shots (the "What's new" card is dismissed through localStorage before each page loads, and the house-rules interstitial on /welcome is accepted after sign-in). Mobile is 390x844 @2x and dark unless the name says light, desktop is 1440x900 @2x:
 
    | Mobile                       | Desktop                    |
    | ---------------------------- | -------------------------- |
